@@ -1,97 +1,100 @@
-This is a new [**React Native**](https://reactnative.dev) project, bootstrapped using [`@react-native-community/cli`](https://github.com/react-native-community/cli).
+# BlueDate — Mobil Uygulama (React Native CLI)
 
-# Getting Started
+Sosyal / tanışma uygulaması **BlueDate**’in mobil istemcisi. Proje **bare React Native CLI** ile kurulmuştur (**Expo kullanılmaz**), hem **Android** hem **iOS** hedefler.
 
-> **Note**: Make sure you have completed the [Set Up Your Environment](https://reactnative.dev/docs/set-up-your-environment) guide before proceeding.
+> **Aşama 1 — UI/UX & Projelendirme.** Bu sürümde yalnızca **frontend ekranları** vardır. Backend, API, authentication ve veri işlemleri **henüz bağlanmamıştır**; ekranlar `src/utils/mockData.ts` içindeki statik veriden beslenir. Mimari, ileride backend’in sorunsuz bağlanabilmesi için katmanlı kurulmuştur.
 
-## Step 1: Start Metro
+## Öne çıkanlar
 
-First, you will need to run **Metro**, the JavaScript build tool for React Native.
+- 🎮 **PlayStation / gaming hissiyatı**: akıcı animasyonlu, gradient “pill” seçimli özel bottom tab bar.
+- 🌗 **Light / Dark / Sistem** tema modu + **3 değiştirilebilir renk teması** (Cosmic, Aurora, Sunset) → Ayarlar ekranından canlı değişir.
+- 🧩 **Component bazlı temiz mimari**, tamamen yeniden kullanılabilir UI kütüphanesi.
+- 📐 Merkezî **renk / typography / spacing / radii / shadow** tasarım sistemi.
+- 📱 **Responsive** ölçekleme yardımcıları (`src/utils/responsive.ts`).
+- 🖼️ İkonlar **SVG** ile çizilir (font-linking gerektirmez, her iki platformda nettir).
 
-To start the Metro dev server, run the following command from the root of your React Native project:
+## Teknoloji
 
-```sh
-# Using npm
+- React Native `0.86` (New Architecture) + React `19` + TypeScript
+- React Navigation 7 (native-stack + bottom-tabs)
+- react-native-reanimated 4 (+ worklets), react-native-gesture-handler
+- react-native-svg, react-native-linear-gradient, react-native-safe-area-context
+
+## Klasör yapısı
+
+```
+src/
+├── assets/        # Görsel/font kayıt noktası (ikonlar SVG component'tir)
+├── components/    # Yeniden kullanılabilir UI (Button, Input, Card, Avatar, ...)
+├── hooks/         # useThemedStyles, useDebouncedValue, tema hook'ları
+├── navigation/    # RootNavigator, Auth/Main stack'leri, özel tab bar, AuthContext
+├── screens/       # Ekranlar (auth, home, nearby, friends, premium, profile, settings)
+├── theme/         # Tema sistemi: palette, typography, spacing, ThemeProvider
+└── utils/         # responsive, layout sabitleri, mockData
+```
+
+### Ekranlar
+- **Auth**: `SplashScreen`, `LoginScreen`, `RegisterScreen`
+- **Ana**: `HomeScreen`, `NearbyScreen`, `FriendsScreen` + `SearchUsersScreen`, `PremiumScreen`
+- **Profil**: `ProfileScreen`, `EditProfileScreen`, `FriendsListScreen`
+- **Ayarlar**: `SettingsScreen` (tema modu + renk teması seçici, bildirimler, gizlilik, çıkış)
+
+## Tema sistemi
+
+Tüm renk/spacing/typography değerleri `src/theme` altından gelir. Ekranlar sabit renk/ölçü yazmaz.
+
+```tsx
+import { useTheme } from '../theme';
+
+const theme = useTheme();
+theme.colors.primary;      // aktif renk temasının ana rengi
+theme.spacing.lg;          // 20
+theme.gradients.primary;   // gaming gradient
+```
+
+Tema modunu/rengini değiştirmek:
+
+```tsx
+import { useThemeController } from '../theme';
+
+const { preference, setPreference, accentKey, setAccent } = useThemeController();
+setPreference('dark');     // 'light' | 'dark' | 'system'
+setAccent('aurora');       // 'cosmic' | 'aurora' | 'sunset'
+```
+
+> Tercihler şu an bellekte tutulur. Kalıcılık için ileride `@react-native-async-storage/async-storage` ekleyip `ThemeProvider`’a okuma/yazma bağlanabilir.
+
+## Kurulum & Çalıştırma
+
+Ön koşullar: Node ≥ 18, JDK 17, Android Studio / Xcode, CocoaPods. Resmi [React Native ortam kurulumu](https://reactnative.dev/docs/set-up-your-environment).
+
+```bash
+# Bağımlılıklar
+npm install
+
+# iOS pod'ları (yalnızca ilk kez ve native değişiklikten sonra)
+cd ios && bundle install && bundle exec pod install && cd ..
+
+# Metro
 npm start
 
-# OR using Yarn
-yarn start
-```
-
-## Step 2: Build and run your app
-
-With Metro running, open a new terminal window/pane from the root of your React Native project, and use one of the following commands to build and run your Android or iOS app:
-
-### Android
-
-```sh
-# Using npm
+# Android
 npm run android
 
-# OR using Yarn
-yarn android
-```
-
-### iOS
-
-For iOS, remember to install CocoaPods dependencies (this only needs to be run on first clone or after updating native deps).
-
-The first time you create a new project, run the Ruby bundler to install CocoaPods itself:
-
-```sh
-bundle install
-```
-
-Then, and every time you update your native dependencies, run:
-
-```sh
-bundle exec pod install
-```
-
-For more information, please visit [CocoaPods Getting Started guide](https://guides.cocoapods.org/using/getting-started.html).
-
-```sh
-# Using npm
+# iOS
 npm run ios
-
-# OR using Yarn
-yarn ios
 ```
 
-If everything is set up correctly, you should see your new app running in the Android Emulator, iOS Simulator, or your connected device.
+Testler ve statik kontrol:
 
-This is one way to run your app — you can also build it directly from Android Studio or Xcode.
+```bash
+npm test          # Jest (tema birim testi)
+npm run lint      # ESLint
+npx tsc --noEmit  # TypeScript tip kontrolü
+```
 
-## Step 3: Modify your app
+## Sonraki aşama (backend entegrasyonu) için notlar
 
-Now that you have successfully run the app, let's make changes!
-
-Open `App.tsx` in your text editor of choice and make some changes. When you save, your app will automatically update and reflect these changes — this is powered by [Fast Refresh](https://reactnative.dev/docs/fast-refresh).
-
-When you want to forcefully reload, for example to reset the state of your app, you can perform a full reload:
-
-- **Android**: Press the <kbd>R</kbd> key twice or select **"Reload"** from the **Dev Menu**, accessed via <kbd>Ctrl</kbd> + <kbd>M</kbd> (Windows/Linux) or <kbd>Cmd ⌘</kbd> + <kbd>M</kbd> (macOS).
-- **iOS**: Press <kbd>R</kbd> in iOS Simulator.
-
-## Congratulations! :tada:
-
-You've successfully run and modified your React Native App. :partying_face:
-
-### Now what?
-
-- If you want to add this new React Native code to an existing application, check out the [Integration guide](https://reactnative.dev/docs/integration-with-existing-apps).
-- If you're curious to learn more about React Native, check out the [docs](https://reactnative.dev/docs/getting-started).
-
-# Troubleshooting
-
-If you're having issues getting the above steps to work, see the [Troubleshooting](https://reactnative.dev/docs/troubleshooting) page.
-
-# Learn More
-
-To learn more about React Native, take a look at the following resources:
-
-- [React Native Website](https://reactnative.dev) - learn more about React Native.
-- [Getting Started](https://reactnative.dev/docs/environment-setup) - an **overview** of React Native and how setup your environment.
-- [Learn the Basics](https://reactnative.dev/docs/getting-started) - a **guided tour** of the React Native **basics**.
-- [Blog](https://reactnative.dev/blog) - read the latest official React Native **Blog** posts.
-- [`@facebook/react-native`](https://github.com/facebook/react-native) - the Open Source; GitHub **repository** for React Native.
+- `src/utils/mockData.ts` → gerçek API yanıtlarıyla değiştirin; ekranlar dokunmadan çalışır.
+- `src/navigation/AuthContext.tsx` → mock `signIn/signOut`’u gerçek auth akışına bağlayın.
+- Tipler (`Friend`, `UserProfile`, `NearbyUser`, ...) DTO sözleşmesi için başlangıç noktasıdır.
