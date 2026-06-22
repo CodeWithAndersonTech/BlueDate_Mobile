@@ -1,14 +1,6 @@
 import React, { useState } from 'react';
-import { ScrollView, StyleSheet, View } from 'react-native';
-import {
-  Chip,
-  Header,
-  IconButton,
-  NearbyCard,
-  Screen,
-  Typography,
-} from '../../components';
-import { useTheme } from '../../theme';
+import { ScrollView, StyleSheet } from 'react-native';
+import { Chip, Header, NearbyCard, Screen } from '../../components';
 import { TAB_BAR_SPACE, nearbyUsers, screen } from '../../utils';
 
 const FILTERS = [
@@ -23,7 +15,6 @@ const H_PADDING = 20;
 const CARD_WIDTH = (screen.width - H_PADDING * 2 - GAP) / 2;
 
 export function NearbyScreen() {
-  const theme = useTheme();
   const [filter, setFilter] = useState('all');
   const [added, setAdded] = useState<Record<string, boolean>>({});
 
@@ -44,13 +35,6 @@ export function NearbyScreen() {
         title="Yakındakiler"
         actions={[{ icon: 'sliders', onPress: () => {} }]}
       />
-
-      <View style={styles.locationRow}>
-        <Typography variant="callout" color="textMuted">
-          📍 İstanbul, Kadıköy çevresi
-        </Typography>
-        <IconButton name="globe" size={18} variant="plain" color={theme.colors.primary} />
-      </View>
 
       <ScrollView
         horizontal
@@ -87,13 +71,6 @@ export function NearbyScreen() {
 }
 
 const styles = StyleSheet.create({
-  locationRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: H_PADDING,
-    marginBottom: 8,
-  },
   filters: { maxHeight: 52, flexGrow: 0 },
   filtersContent: { paddingHorizontal: H_PADDING, gap: 10, alignItems: 'center' },
   grid: {

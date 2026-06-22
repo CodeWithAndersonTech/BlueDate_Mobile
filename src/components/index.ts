@@ -13,6 +13,7 @@ export * from './Divider';
 export * from './SectionHeader';
 export * from './ListRow';
 export * from './SegmentedControl';
+export * from './RangeSlider';
 export * from './Chip';
 export * from './EmptyState';
 export * from './StatItem';

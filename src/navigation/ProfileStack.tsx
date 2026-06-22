@@ -3,6 +3,7 @@ import React from 'react';
 import { EditProfileScreen } from '../screens/profile/EditProfileScreen';
 import { FriendsListScreen } from '../screens/profile/FriendsListScreen';
 import { ProfileScreen } from '../screens/profile/ProfileScreen';
+import { FilterScreen } from '../screens/settings/FilterScreen';
 import { SettingsScreen } from '../screens/settings/SettingsScreen';
 import { ProfileStackParamList } from './types';
 
@@ -15,6 +16,7 @@ export function ProfileStack() {
       <Stack.Screen name="EditProfile" component={EditProfileScreen} />
       <Stack.Screen name="Settings" component={SettingsScreen} />
       <Stack.Screen name="FriendsList" component={FriendsListScreen} />
+      <Stack.Screen name="Filter" component={FilterScreen} />
     </Stack.Navigator>
   );
 }

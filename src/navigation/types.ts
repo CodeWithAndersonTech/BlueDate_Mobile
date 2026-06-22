@@ -9,6 +9,7 @@ export type AuthStackParamList = {
 export type HomeStackParamList = {
   HomeFeed: undefined;
   Settings: undefined;
+  Filter: undefined;
 };
 
 export type ProfileStackParamList = {
@@ -16,6 +17,7 @@ export type ProfileStackParamList = {
   EditProfile: undefined;
   Settings: undefined;
   FriendsList: undefined;
+  Filter: undefined;
 };
 
 export type FriendsStackParamList = {

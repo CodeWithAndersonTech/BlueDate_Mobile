@@ -1,4 +1,5 @@
 import { useNavigation } from '@react-navigation/native';
+import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import React, { useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import LinearGradient from 'react-native-linear-gradient';
@@ -14,6 +15,7 @@ import {
   Typography,
 } from '../../components';
 import { useAuth } from '../../navigation/AuthContext';
+import { ProfileStackParamList } from '../../navigation/types';
 import {
   AccentKey,
   ThemePreference,
@@ -24,7 +26,8 @@ import {
 } from '../../theme';
 
 export function SettingsScreen() {
-  const navigation = useNavigation();
+  const navigation =
+    useNavigation<NativeStackNavigationProp<ProfileStackParamList>>();
   const theme = useTheme();
   const { preference, setPreference, accentKey, setAccent } = useThemeController();
   const { signOut } = useAuth();
@@ -79,6 +82,19 @@ export function SettingsScreen() {
                 />
               ))}
             </View>
+          </Card>
+        </View>
+
+        {/* Discovery / Filters */}
+        <View style={styles.section}>
+          <SectionHeader title="Keşfet" />
+          <Card variant="surface" padding="sm">
+            <ListRow
+              icon="sliders"
+              title="Filtreleme"
+              subtitle="Yaş aralığı, kimleri görmek istediğin ve görünürlük"
+              onPress={() => navigation.navigate('Filter')}
+            />
           </Card>
         </View>
 
