@@ -31,8 +31,9 @@ function initials(name?: string) {
   return name
     .trim()
     .split(/\s+/)
+    .filter(Boolean)
     .slice(0, 2)
-    .map(p => p[0]?.toUpperCase())
+    .map(part => part.charAt(0).toLocaleUpperCase('tr-TR'))
     .join('');
 }
 
@@ -48,6 +49,7 @@ export function Avatar({
   const dim = SIZE_MAP[size];
   const ring = Math.max(2, dim * 0.04);
   const dotSize = Math.max(10, dim * 0.26);
+  const initialSize = Math.round(dim * 0.38);
 
   const inner = (
     <View
@@ -65,8 +67,14 @@ export function Avatar({
       ) : (
         <Typography
           variant="title"
-          tint={theme.colors.textSecondary}
-          style={{ fontSize: dim * 0.36 }}>
+          tint={theme.colors.text}
+          align="center"
+          weight="700"
+          style={{
+            fontSize: initialSize,
+            lineHeight: initialSize,
+            includeFontPadding: false,
+          }}>
           {initials(name)}
         </Typography>
       )}

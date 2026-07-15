@@ -43,16 +43,18 @@ export function Badge({ label, tone = 'neutral', size = 'sm', icon, style }: Bad
 
   if (tone === 'premium') {
     return (
-      <LinearGradient
-        colors={theme.gradients.premium}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 0 }}
-        style={[containerBase, style]}>
+      <View style={[containerBase, styles.premiumWrap, style]}>
+        <LinearGradient
+          colors={theme.gradients.premium}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 0 }}
+          style={StyleSheet.absoluteFillObject}
+        />
         <Icon name={icon ?? 'crown'} size={iconSize} color="#3A2A00" filled />
         <Typography variant="overline" tint="#3A2A00" style={styles.text}>
           {label}
         </Typography>
-      </LinearGradient>
+      </View>
     );
   }
 
@@ -68,7 +70,8 @@ export function Badge({ label, tone = 'neutral', size = 'sm', icon, style }: Bad
 }
 
 const styles = StyleSheet.create({
-  text: { letterSpacing: 0.6 },
+  text: { letterSpacing: 0.6, flexShrink: 0 },
+  premiumWrap: { overflow: 'hidden', position: 'relative' },
 });
 
 export default Badge;

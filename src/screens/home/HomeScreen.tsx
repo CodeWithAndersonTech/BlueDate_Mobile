@@ -5,7 +5,6 @@ import LinearGradient from 'react-native-linear-gradient';
 import {
   Avatar,
   Badge,
-  Button,
   Card,
   Icon,
   IconButton,
@@ -66,28 +65,44 @@ export function HomeScreen({ navigation }: Props) {
           </View>
         </View>
 
-        <Card variant="surface" padding="none" style={styles.hero}>
-          <LinearGradient
-            colors={theme.gradients.primary}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-            style={styles.heroGradient}>
-            <View style={styles.heroText}>
-              <Badge label="Premium" tone="premium" />
-              <Typography variant="h2" tint={theme.colors.onPrimary}>
-                Bugün 12 yeni{'\n'}kişi seni beğendi
-              </Typography>
-              <Button
-                label="Kim olduğunu gör"
-                variant="secondary"
-                size="sm"
-                fullWidth={false}
-                rightIcon="chevron-right"
-                onPress={() => goToTab('Premium')}
-              />
+        <Card
+          variant="surface"
+          padding="none"
+          style={[styles.hero, { shadowColor: theme.accent.glow }]}>
+          <View style={styles.heroInner}>
+            <LinearGradient
+              colors={['#B44CFF', '#6B5CFF', '#2BB8FF', '#1EE0C8']}
+              locations={[0, 0.35, 0.72, 1]}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={StyleSheet.absoluteFillObject}
+            />
+            <View style={[styles.heroOrb, styles.heroOrbPink]} />
+            <View style={[styles.heroOrb, styles.heroOrbCyan]} />
+            <View style={styles.heroIcon} pointerEvents="none">
+              <Icon name="heart" size={96} color="rgba(255,255,255,0.22)" filled />
             </View>
-            <Icon name="zap" size={120} color="rgba(255,255,255,0.18)" filled />
-          </LinearGradient>
+            <View style={styles.heroBadge}>
+              <Icon name="crown" size={13} color="#4A3200" filled />
+              <Typography variant="overline" tint="#4A3200" style={styles.heroBadgeText}>
+                Premium
+              </Typography>
+            </View>
+            <Typography variant="h3" tint="#FFFFFF" style={styles.heroTitle}>
+              Bugün 12 yeni{'\n'}kişi seni beğendi
+            </Typography>
+            <Pressable
+              onPress={() => goToTab('Premium')}
+              style={({ pressed }) => [
+                styles.heroCta,
+                { opacity: pressed ? 0.88 : 1, transform: [{ scale: pressed ? 0.97 : 1 }] },
+              ]}>
+              <Typography variant="callout" tint="#1A1230" weight="700">
+                Kim olduğunu gör
+              </Typography>
+              <Icon name="chevron-right" size={16} color="#1A1230" />
+            </Pressable>
+          </View>
         </Card>
 
         <View style={styles.quickRow}>
@@ -196,15 +211,75 @@ const styles = StyleSheet.create({
   },
   greeting: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   topActions: { flexDirection: 'row', gap: 8 },
-  hero: { overflow: 'hidden' },
-  heroGradient: {
+  hero: {
+    overflow: 'hidden',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.45,
+    shadowRadius: 20,
+    elevation: 10,
+  },
+  heroInner: {
+    paddingTop: 18,
+    paddingBottom: 18,
+    paddingLeft: 18,
+    paddingRight: 18,
+    gap: 14,
+    alignItems: 'flex-start',
+  },
+  heroOrb: {
+    position: 'absolute',
+    borderRadius: 999,
+  },
+  heroOrbPink: {
+    width: 140,
+    height: 140,
+    top: -48,
+    left: -36,
+    backgroundColor: 'rgba(255, 90, 180, 0.35)',
+  },
+  heroOrbCyan: {
+    width: 160,
+    height: 160,
+    right: -40,
+    bottom: -50,
+    backgroundColor: 'rgba(40, 230, 210, 0.3)',
+  },
+  heroIcon: {
+    position: 'absolute',
+    right: 10,
+    bottom: 14,
+  },
+  heroBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    padding: 20,
-    overflow: 'hidden',
+    alignSelf: 'flex-start',
+    gap: 5,
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: 999,
+    backgroundColor: '#FFD200',
+    borderWidth: 1,
+    borderColor: '#FFE566',
   },
-  heroText: { flex: 1, gap: 12, alignItems: 'flex-start' },
+  heroBadgeText: {
+    letterSpacing: 0.6,
+    flexShrink: 0,
+  },
+  heroTitle: {
+    paddingRight: 56,
+    textShadowColor: 'rgba(0,0,0,0.25)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 6,
+  },
+  heroCta: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: '#FFFFFF',
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    borderRadius: 14,
+  },
   quickRow: { flexDirection: 'row', justifyContent: 'space-between' },
   quickItem: { alignItems: 'center', gap: 8, flex: 1 },
   quickIcon: {

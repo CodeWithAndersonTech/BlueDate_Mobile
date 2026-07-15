@@ -1,9 +1,10 @@
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
-import React, { useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
+  ActivityIndicator,
+  Alert,
   KeyboardAvoidingView,
   Platform,
-  Pressable,
   ScrollView,
   StyleSheet,
   View,
@@ -11,119 +12,225 @@ import {
 import {
   Avatar,
   Button,
-  Chip,
   Header,
-  Icon,
   Input,
   Screen,
   SectionHeader,
   Typography,
 } from '../../components';
+import {
+  getInterestTypes,
+  getUserProfile,
+  InterestTypeItem,
+  saveUserInterest,
+} from '../../api';
+import { useAuth } from '../../navigation/AuthContext';
 import { ProfileStackParamList } from '../../navigation/types';
 import { useTheme } from '../../theme';
-import { currentUser } from '../../utils';
 
 type Props = NativeStackScreenProps<ProfileStackParamList, 'EditProfile'>;
 
-const ALL_INTERESTS = [
-  'Oyun', 'Müzik', 'Seyahat', 'Fotoğraf', 'Kahve', 'Spor',
-  'Sinema', 'Yemek', 'Sanat', 'Teknoloji', 'Doğa', 'Dans',
-];
-
 export function EditProfileScreen({ navigation }: Props) {
   const theme = useTheme();
-  const [form, setForm] = useState({
-    name: currentUser.name,
-    username: currentUser.username.replace('@', ''),
-    bio: currentUser.bio,
-    location: currentUser.location,
-    phone: '+90 555 123 45 67',
-    email: 'samet@bluedate.app',
-  });
-  const [interests, setInterests] = useState<string[]>(currentUser.interests);
+  const { userId, accessToken } = useAuth();
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [firstName, setFirstName] = useState('');
+  const [lastName, setLastName] = useState('');
+  const [username, setUsername] = useState('');
+  const [email, setEmail] = useState('');
+  const [phone, setPhone] = useState('');
+  const [profileImage, setProfileImage] = useState<string | undefined>();
+  const [interestTypes, setInterestTypes] = useState<InterestTypeItem[]>([]);
+  const [answers, setAnswers] = useState<Record<number, string>>({});
 
-  const update = (key: keyof typeof form) => (value: string) =>
-    setForm(prev => ({ ...prev, [key]: value }));
+  const fullName = `${firstName} ${lastName}`.trim();
 
-  const toggleInterest = (i: string) =>
-    setInterests(prev => (prev.includes(i) ? prev.filter(x => x !== i) : [...prev, i]));
+  const load = useCallback(async () => {
+    if (!userId) {
+      setLoading(false);
+      Alert.alert('Profil', 'Oturum bilgisi bulunamadı.');
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const [profile, typesResponse] = await Promise.all([
+        getUserProfile(userId, accessToken),
+        getInterestTypes(accessToken),
+      ]);
+
+      setFirstName(profile.FirstName ?? '');
+      setLastName(profile.LastName ?? '');
+      setUsername(profile.Username ?? '');
+      setEmail(profile.Email ?? '');
+      setPhone(profile.Phone?.trim() ?? '');
+      setProfileImage(profile.ProfileImage ?? undefined);
+
+      const types = [...(typesResponse.GetAllInterestTypeQueryCommonObject ?? [])].sort(
+        (a, b) => a.SortOrder - b.SortOrder,
+      );
+      setInterestTypes(types);
+
+      const nextAnswers: Record<number, string> = {};
+      types.forEach(type => {
+        const existing = profile.Interests?.find(
+          item => Number(item.InterestTypeId) === Number(type.Id),
+        );
+        nextAnswers[type.Id] = existing?.Value?.trim() ?? '';
+      });
+      setAnswers(nextAnswers);
+    } catch (err) {
+      Alert.alert(
+        'Profil',
+        err instanceof Error ? err.message : 'Profil yüklenemedi.',
+      );
+    } finally {
+      setLoading(false);
+    }
+  }, [userId, accessToken]);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  const onSave = async () => {
+    if (!userId) {
+      Alert.alert('Profil', 'Oturum bilgisi bulunamadı.');
+      return;
+    }
+
+    const filled = interestTypes
+      .map(type => ({
+        type,
+        value: (answers[type.Id] ?? '').trim(),
+      }))
+      .filter(item => item.value.length > 0);
+
+    if (filled.length === 0) {
+      Alert.alert('İlgi alanları', 'En az bir ilgi alanı cevabı gir.');
+      return;
+    }
+
+    setSaving(true);
+    try {
+      await Promise.all(
+        filled.map(item =>
+          saveUserInterest(
+            {
+              UserId: userId,
+              InterestTypeId: item.type.Id,
+              Value: item.value,
+            },
+            accessToken,
+          ),
+        ),
+      );
+      navigation.goBack();
+    } catch (err) {
+      Alert.alert(
+        'İlgi alanları',
+        err instanceof Error ? err.message : 'Kayıt başarısız.',
+      );
+    } finally {
+      setSaving(false);
+    }
+  };
 
   return (
     <Screen edges={['top']}>
       <Header
         onBack={() => navigation.goBack()}
         title="Profili Düzenle"
-        actions={[{ icon: 'check', onPress: () => navigation.goBack() }]}
+        actions={[
+          {
+            icon: 'check',
+            onPress: () => {
+              if (!saving) {
+                onSave();
+              }
+            },
+          },
+        ]}
       />
       <KeyboardAvoidingView
         style={styles.flex}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-        <ScrollView
-          showsVerticalScrollIndicator={false}
-          keyboardShouldPersistTaps="handled"
-          contentContainerStyle={styles.content}>
-          <View style={styles.photoWrap}>
-            <Avatar uri={currentUser.avatar} name={currentUser.name} size="xxl" premium />
-            <Pressable
-              style={[styles.cameraBtn, { backgroundColor: theme.colors.primary, borderColor: theme.colors.background }]}>
-              <Icon name="camera" size={18} color={theme.colors.onPrimary} />
-            </Pressable>
-            <Typography variant="caption" color="textMuted" style={styles.photoHint}>
-              Profil fotoğrafını değiştir
-            </Typography>
+        {loading ? (
+          <View style={styles.center}>
+            <ActivityIndicator color={theme.colors.primary} />
           </View>
-
-          <View style={styles.form}>
-            <Input label="Ad Soyad" leftIcon="user" value={form.name} onChangeText={update('name')} />
-            <Input
-              label="Kullanıcı adı"
-              leftIcon="sparkles"
-              autoCapitalize="none"
-              value={form.username}
-              onChangeText={update('username')}
-            />
-            <Input
-              label="Hakkında"
-              leftIcon="edit"
-              multiline
-              value={form.bio}
-              onChangeText={update('bio')}
-              containerStyle={styles.bio}
-            />
-            <Input label="Konum" leftIcon="map-pin" value={form.location} onChangeText={update('location')} />
-            <Input
-              label="Telefon"
-              leftIcon="phone"
-              keyboardType="phone-pad"
-              value={form.phone}
-              onChangeText={update('phone')}
-            />
-            <Input
-              label="E-posta"
-              leftIcon="mail"
-              autoCapitalize="none"
-              keyboardType="email-address"
-              value={form.email}
-              onChangeText={update('email')}
-            />
-          </View>
-
-          <View style={styles.section}>
-            <SectionHeader title="İlgi alanları" />
-            <View style={styles.interests}>
-              {ALL_INTERESTS.map(i => (
-                <Chip
-                  key={i}
-                  label={i}
-                  selected={interests.includes(i)}
-                  onPress={() => toggleInterest(i)}
-                />
-              ))}
+        ) : (
+          <ScrollView
+            showsVerticalScrollIndicator={false}
+            keyboardShouldPersistTaps="handled"
+            contentContainerStyle={styles.content}>
+            <View style={styles.photoWrap}>
+              <Avatar
+                uri={profileImage}
+                name={fullName || username}
+                size="xxl"
+              />
+              <Typography variant="caption" color="textMuted" style={styles.photoHint}>
+                {fullName || username}
+              </Typography>
             </View>
-          </View>
 
-          <Button label="Değişiklikleri Kaydet" onPress={() => navigation.goBack()} style={styles.save} />
-        </ScrollView>
+            <View style={styles.form}>
+              <Input label="Ad" leftIcon="user" value={firstName} editable={false} />
+              <Input label="Soyad" leftIcon="user" value={lastName} editable={false} />
+              <Input
+                label="Kullanıcı adı"
+                leftIcon="sparkles"
+                value={username ? `@${username.replace(/^@/, '')}` : ''}
+                editable={false}
+              />
+              <Input
+                label="E-posta"
+                leftIcon="mail"
+                value={email}
+                editable={false}
+                autoCapitalize="none"
+              />
+              {phone.length > 0 && (
+                <Input
+                  label="Telefon"
+                  leftIcon="phone"
+                  value={phone}
+                  editable={false}
+                  keyboardType="phone-pad"
+                />
+              )}
+            </View>
+
+            <View style={styles.section}>
+              <SectionHeader title="İlgi alanları" />
+              <Typography variant="caption" color="textMuted">
+                Favorilerini yaz. Boş bıraktıkların kaydedilmez; mevcut cevaplar güncellenir.
+              </Typography>
+              <View style={styles.interestFields}>
+                {interestTypes.map(type => (
+                  <Input
+                    key={type.Id}
+                    label={type.Name || type.Code}
+                    placeholder={`${type.Name || type.Code} cevabın...`}
+                    value={answers[type.Id] ?? ''}
+                    onChangeText={text =>
+                      setAnswers(prev => ({ ...prev, [type.Id]: text }))
+                    }
+                  />
+                ))}
+              </View>
+            </View>
+
+            <Button
+              label={saving ? 'Kaydediliyor...' : 'Kaydet'}
+              loading={saving}
+              onPress={onSave}
+              style={styles.save}
+            />
+          </ScrollView>
+        )}
       </KeyboardAvoidingView>
     </Screen>
   );
@@ -131,24 +238,13 @@ export function EditProfileScreen({ navigation }: Props) {
 
 const styles = StyleSheet.create({
   flex: { flex: 1 },
+  center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   content: { paddingHorizontal: 20, paddingBottom: 40, gap: 24 },
-  photoWrap: { alignItems: 'center', marginTop: 8 },
-  cameraBtn: {
-    position: 'absolute',
-    bottom: 24,
-    right: '34%',
-    width: 38,
-    height: 38,
-    borderRadius: 19,
-    borderWidth: 3,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  photoHint: { marginTop: 10 },
-  form: { gap: 16 },
-  bio: { minHeight: 54 },
-  section: { gap: 14 },
-  interests: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  photoWrap: { alignItems: 'center', marginTop: 8, gap: 8 },
+  photoHint: { marginTop: 2 },
+  form: { gap: 14 },
+  section: { gap: 12 },
+  interestFields: { gap: 14, marginTop: 4 },
   save: { marginTop: 8 },
 });
 

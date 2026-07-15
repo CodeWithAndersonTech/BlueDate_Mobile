@@ -86,6 +86,7 @@ export function Button({
     gap: theme.spacing.sm,
     alignSelf: fullWidth ? 'stretch' : 'flex-start',
     opacity: isDisabled ? 0.55 : 1,
+    overflow: 'hidden',
   };
 
   const inner = (
@@ -95,7 +96,10 @@ export function Button({
       ) : (
         <>
           {leftIcon && <Icon name={leftIcon} size={dims.icon} color={contentColor} />}
-          <Typography variant="button" tint={contentColor} style={{ fontSize: dims.fontSize }}>
+          <Typography
+            variant="button"
+            tint={contentColor}
+            style={{ fontSize: dims.fontSize, lineHeight: dims.fontSize + 2 }}>
             {label}
           </Typography>
           {rightIcon && <Icon name={rightIcon} size={dims.icon} color={contentColor} />}

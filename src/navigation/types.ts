@@ -4,6 +4,11 @@ export type AuthStackParamList = {
   Splash: undefined;
   Login: undefined;
   Register: undefined;
+  EmailVerification: {
+    email: string;
+    password: string;
+    userId: number;
+  };
 };
 
 export type HomeStackParamList = {
