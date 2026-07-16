@@ -1,4 +1,6 @@
 export * from './Icon';
+export * from './CountryFlag';
+export * from './Loading';
 export * from './Typography';
 export * from './Screen';
 export * from './Button';

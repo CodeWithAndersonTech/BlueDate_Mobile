@@ -7,7 +7,6 @@ const FILTERS = [
   { key: 'all', label: 'Tümü', icon: 'sliders' as const },
   { key: 'online', label: 'Çevrimiçi', icon: 'globe' as const },
   { key: 'near', label: '< 2 km', icon: 'map-pin' as const },
-  { key: 'premium', label: 'Premium', icon: 'crown' as const },
 ];
 
 const GAP = 14;
@@ -23,7 +22,6 @@ export function NearbyScreen() {
   const filtered = nearbyUsers.filter(u => {
     if (filter === 'online') return u.online;
     if (filter === 'near') return u.distanceKm < 2;
-    if (filter === 'premium') return u.premium;
     return true;
   });
 

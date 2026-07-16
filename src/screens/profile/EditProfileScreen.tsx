@@ -1,7 +1,6 @@
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import React, { useCallback, useEffect, useState } from 'react';
 import {
-  ActivityIndicator,
   Alert,
   KeyboardAvoidingView,
   Platform,
@@ -14,6 +13,7 @@ import {
   Button,
   Header,
   Input,
+  Loading,
   Screen,
   SectionHeader,
   Typography,
@@ -24,15 +24,16 @@ import {
   InterestTypeItem,
   saveUserInterest,
 } from '../../api';
+import { useLocale } from '../../i18n';
 import { useAuth } from '../../navigation/AuthContext';
 import { ProfileStackParamList } from '../../navigation/types';
-import { useTheme } from '../../theme';
+import { TAB_BAR_SPACE } from '../../utils';
 
 type Props = NativeStackScreenProps<ProfileStackParamList, 'EditProfile'>;
 
 export function EditProfileScreen({ navigation }: Props) {
-  const theme = useTheme();
   const { userId, accessToken } = useAuth();
+  const { t } = useLocale();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [firstName, setFirstName] = useState('');
@@ -49,7 +50,7 @@ export function EditProfileScreen({ navigation }: Props) {
   const load = useCallback(async () => {
     if (!userId) {
       setLoading(false);
-      Alert.alert('Profil', 'Oturum bilgisi bulunamadı.');
+      Alert.alert(t('edit.profile'), t('edit.session_missing'));
       return;
     }
 
@@ -82,13 +83,13 @@ export function EditProfileScreen({ navigation }: Props) {
       setAnswers(nextAnswers);
     } catch (err) {
       Alert.alert(
-        'Profil',
-        err instanceof Error ? err.message : 'Profil yüklenemedi.',
+        t('edit.profile'),
+        err instanceof Error ? err.message : t('edit.load_failed'),
       );
     } finally {
       setLoading(false);
     }
-  }, [userId, accessToken]);
+  }, [userId, accessToken, t]);
 
   useEffect(() => {
     load();
@@ -96,7 +97,7 @@ export function EditProfileScreen({ navigation }: Props) {
 
   const onSave = async () => {
     if (!userId) {
-      Alert.alert('Profil', 'Oturum bilgisi bulunamadı.');
+      Alert.alert(t('edit.profile'), t('edit.session_missing'));
       return;
     }
 
@@ -108,7 +109,7 @@ export function EditProfileScreen({ navigation }: Props) {
       .filter(item => item.value.length > 0);
 
     if (filled.length === 0) {
-      Alert.alert('İlgi alanları', 'En az bir ilgi alanı cevabı gir.');
+      Alert.alert(t('edit.interests_alert'), t('edit.min_one_interest'));
       return;
     }
 
@@ -129,8 +130,8 @@ export function EditProfileScreen({ navigation }: Props) {
       navigation.goBack();
     } catch (err) {
       Alert.alert(
-        'İlgi alanları',
-        err instanceof Error ? err.message : 'Kayıt başarısız.',
+        t('edit.interests_alert'),
+        err instanceof Error ? err.message : t('edit.save_failed'),
       );
     } finally {
       setSaving(false);
@@ -141,7 +142,7 @@ export function EditProfileScreen({ navigation }: Props) {
     <Screen edges={['top']}>
       <Header
         onBack={() => navigation.goBack()}
-        title="Profili Düzenle"
+        title={t('edit.title')}
         actions={[
           {
             icon: 'check',
@@ -157,9 +158,7 @@ export function EditProfileScreen({ navigation }: Props) {
         style={styles.flex}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         {loading ? (
-          <View style={styles.center}>
-            <ActivityIndicator color={theme.colors.primary} />
-          </View>
+          <Loading message={t('edit.loading')} />
         ) : (
           <ScrollView
             showsVerticalScrollIndicator={false}
@@ -177,16 +176,16 @@ export function EditProfileScreen({ navigation }: Props) {
             </View>
 
             <View style={styles.form}>
-              <Input label="Ad" leftIcon="user" value={firstName} editable={false} />
-              <Input label="Soyad" leftIcon="user" value={lastName} editable={false} />
+              <Input label={t('edit.first_name')} leftIcon="user" value={firstName} editable={false} />
+              <Input label={t('edit.last_name')} leftIcon="user" value={lastName} editable={false} />
               <Input
-                label="Kullanıcı adı"
+                label={t('edit.username')}
                 leftIcon="sparkles"
                 value={username ? `@${username.replace(/^@/, '')}` : ''}
                 editable={false}
               />
               <Input
-                label="E-posta"
+                label={t('edit.email')}
                 leftIcon="mail"
                 value={email}
                 editable={false}
@@ -194,7 +193,7 @@ export function EditProfileScreen({ navigation }: Props) {
               />
               {phone.length > 0 && (
                 <Input
-                  label="Telefon"
+                  label={t('edit.phone')}
                   leftIcon="phone"
                   value={phone}
                   editable={false}
@@ -204,16 +203,19 @@ export function EditProfileScreen({ navigation }: Props) {
             </View>
 
             <View style={styles.section}>
-              <SectionHeader title="İlgi alanları" />
+              <SectionHeader title={t('edit.interests')} />
               <Typography variant="caption" color="textMuted">
-                Favorilerini yaz. Boş bıraktıkların kaydedilmez; mevcut cevaplar güncellenir.
+                {t('edit.interests_hint')}
               </Typography>
               <View style={styles.interestFields}>
                 {interestTypes.map(type => (
                   <Input
                     key={type.Id}
                     label={type.Name || type.Code}
-                    placeholder={`${type.Name || type.Code} cevabın...`}
+                    placeholder={t('edit.answer_placeholder').replace(
+                      '{name}',
+                      type.Name || type.Code,
+                    )}
                     value={answers[type.Id] ?? ''}
                     onChangeText={text =>
                       setAnswers(prev => ({ ...prev, [type.Id]: text }))
@@ -224,7 +226,7 @@ export function EditProfileScreen({ navigation }: Props) {
             </View>
 
             <Button
-              label={saving ? 'Kaydediliyor...' : 'Kaydet'}
+              label={saving ? t('edit.saving') : t('edit.save')}
               loading={saving}
               onPress={onSave}
               style={styles.save}
@@ -238,8 +240,7 @@ export function EditProfileScreen({ navigation }: Props) {
 
 const styles = StyleSheet.create({
   flex: { flex: 1 },
-  center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  content: { paddingHorizontal: 20, paddingBottom: 40, gap: 24 },
+  content: { paddingHorizontal: 20, paddingBottom: TAB_BAR_SPACE, gap: 24 },
   photoWrap: { alignItems: 'center', marginTop: 8, gap: 8 },
   photoHint: { marginTop: 2 },
   form: { gap: 14 },

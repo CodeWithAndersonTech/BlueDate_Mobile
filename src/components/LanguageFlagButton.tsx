@@ -1,19 +1,9 @@
 import React, { useMemo, useState } from 'react';
-import {
-  Modal,
-  Pressable,
-  StyleSheet,
-  Text,
-  View,
-} from 'react-native';
+import { Modal, Pressable, StyleSheet, View } from 'react-native';
 import { LanguageDto } from '../api';
 import { useTheme } from '../theme';
+import { CountryFlag } from './CountryFlag';
 import { Typography } from './Typography';
-
-const FLAG_BY_CODE: Record<string, string> = {
-  tr: '🇹🇷',
-  en: '🇬🇧',
-};
 
 export const FALLBACK_LANGUAGES: LanguageDto[] = [
   {
@@ -39,10 +29,6 @@ type Props = {
   selectedCode: string;
   onSelect: (code: string) => void;
 };
-
-function flagFor(code: string): string {
-  return FLAG_BY_CODE[code.toLowerCase()] ?? '🏳️';
-}
 
 export function LanguageFlagButton({
   languages,
@@ -76,7 +62,7 @@ export function LanguageFlagButton({
             borderColor: theme.colors.primary,
           },
         ]}>
-        <Text style={styles.flag}>{flagFor(selected.Code)}</Text>
+        <CountryFlag code={selected.Code} size={30} />
       </Pressable>
 
       <Modal
@@ -111,7 +97,7 @@ export function LanguageFlagButton({
                       backgroundColor: theme.colors.primarySoft,
                     },
                   ]}>
-                  <Text style={styles.flag}>{flagFor(language.Code)}</Text>
+                  <CountryFlag code={language.Code} size={28} />
                   <Typography
                     variant="bodyStrong"
                     tint={isSelected ? theme.colors.primary : theme.colors.text}>
@@ -135,10 +121,6 @@ const styles = StyleSheet.create({
     borderWidth: 1.5,
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  flag: {
-    fontSize: 26,
-    lineHeight: 32,
   },
   backdrop: {
     flex: 1,

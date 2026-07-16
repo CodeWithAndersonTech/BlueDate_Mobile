@@ -8,6 +8,7 @@ import {
   Screen,
   UserListItem,
 } from '../../components';
+import { useLocale } from '../../i18n';
 import { ProfileStackParamList } from '../../navigation/types';
 import { useTheme } from '../../theme';
 import { friends } from '../../utils';
@@ -16,6 +17,7 @@ type Props = NativeStackScreenProps<ProfileStackParamList, 'FriendsList'>;
 
 export function FriendsListScreen({ navigation }: Props) {
   const theme = useTheme();
+  const { t } = useLocale();
   const [query, setQuery] = useState('');
 
   const list = useMemo(() => {
@@ -28,10 +30,14 @@ export function FriendsListScreen({ navigation }: Props) {
 
   return (
     <Screen edges={['top']}>
-      <Header onBack={() => navigation.goBack()} title="Arkadaşlar" subtitle={`${friends.length} kişi`} />
+      <Header
+        onBack={() => navigation.goBack()}
+        title={t('profile.friends')}
+        subtitle={`${friends.length} ${t('friends.people')}`}
+      />
       <View style={styles.searchWrap}>
         <Input
-          placeholder="Arkadaşlarında ara"
+          placeholder={t('friends.search')}
           leftIcon="search"
           autoCapitalize="none"
           value={query}
@@ -46,7 +52,11 @@ export function FriendsListScreen({ navigation }: Props) {
           <UserListItem
             key={f.id}
             name={f.name}
-            subtitle={f.online ? 'Çevrimiçi' : `${f.lastActive ?? 'çevrimdışı'} · ${f.mutualFriends ?? 0} ortak`}
+            subtitle={
+              f.online
+                ? t('profile.online')
+                : `${f.lastActive ?? t('profile.offline')} · ${f.mutualFriends ?? 0} ${t('friends.mutual')}`
+            }
             avatarUri={f.avatar}
             online={f.online}
             premium={f.premium}

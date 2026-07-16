@@ -5,7 +5,7 @@ import { Platform } from 'react-native';
  * Backend launch profile binds to localhost — iOS Simulator must use localhost.
  * Android emulator reaches the host machine via 10.0.2.2.
  */
-const DEV_HOST = Platform.OS === 'android' ? '10.0.2.2' : 'localhost';
+const DEV_HOST = Platform.OS === 'android' ? '10.42.7.32' : 'localhost';
 
 export const API_BASE_URL = `http://${DEV_HOST}:5135`;
 

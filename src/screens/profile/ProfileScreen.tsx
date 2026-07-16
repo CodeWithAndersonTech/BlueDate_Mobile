@@ -1,7 +1,6 @@
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import React, { useCallback, useState } from 'react';
 import {
-  ActivityIndicator,
   Alert,
   Pressable,
   RefreshControl,
@@ -19,6 +18,7 @@ import {
   Chip,
   Icon,
   IconButton,
+  Loading,
   SectionHeader,
   StatItem,
   Typography,
@@ -31,6 +31,7 @@ import {
   updateUserBio,
   UserProfileResponse,
 } from '../../api';
+import { useLocale } from '../../i18n';
 import { useAuth } from '../../navigation/AuthContext';
 import { ProfileStackParamList } from '../../navigation/types';
 import { useTheme } from '../../theme';
@@ -40,6 +41,7 @@ type Props = NativeStackScreenProps<ProfileStackParamList, 'ProfileMain'>;
 
 export function ProfileScreen({ navigation }: Props) {
   const theme = useTheme();
+  const { t } = useLocale();
   const { userId, accessToken } = useAuth();
   const [profile, setProfile] = useState<UserProfileResponse | null>(null);
   const [interestTypeCount, setInterestTypeCount] = useState(0);
@@ -54,7 +56,7 @@ export function ProfileScreen({ navigation }: Props) {
   const loadProfile = useCallback(
     async (isRefresh = false) => {
       if (!userId) {
-        setError('Oturum bilgisi bulunamadı.');
+        setError(t('profile.session_missing'));
         setLoading(false);
         return;
       }
@@ -77,13 +79,13 @@ export function ProfileScreen({ navigation }: Props) {
           interestTypesResponse?.GetAllInterestTypeQueryCommonObject?.length ?? 0,
         );
       } catch (err) {
-        setError(err instanceof Error ? err.message : 'Profil yüklenemedi.');
+        setError(err instanceof Error ? err.message : t('profile.load_failed'));
       } finally {
         setLoading(false);
         setRefreshing(false);
       }
     },
-    [userId, accessToken],
+    [userId, accessToken, t],
   );
 
   useFocusEffect(
@@ -102,7 +104,7 @@ export function ProfileScreen({ navigation }: Props) {
 
   const onSaveBio = async (nextBio: string) => {
     if (!userId) {
-      Alert.alert('Biyografi', 'Oturum bilgisi bulunamadı.');
+      Alert.alert(t('profile.bio'), t('profile.session_missing'));
       return;
     }
 
@@ -123,13 +125,43 @@ export function ProfileScreen({ navigation }: Props) {
       setBioModalOpen(false);
     } catch (err) {
       Alert.alert(
-        'Biyografi',
-        err instanceof Error ? err.message : 'Biyografi kaydedilemedi.',
+        t('profile.bio'),
+        err instanceof Error ? err.message : t('profile.bio_save_failed'),
       );
     } finally {
       setSavingBio(false);
     }
   };
+
+  if (loading && !profile) {
+    return (
+      <Screen edges={['top']}>
+        <Loading message={t('profile.loading')} />
+      </Screen>
+    );
+  }
+
+  if (error && !profile) {
+    return (
+      <Screen edges={['top']}>
+        <View style={styles.centerState}>
+          <Typography variant="body" color="danger" align="center">
+            {error}
+          </Typography>
+          <Button
+            label={t('profile.retry')}
+            size="sm"
+            fullWidth={false}
+            onPress={() => loadProfile()}
+          />
+        </View>
+      </Screen>
+    );
+  }
+
+  if (!profile) {
+    return <Screen edges={['top']} />;
+  }
 
   return (
     <Screen edges={['top']}>
@@ -161,25 +193,7 @@ export function ProfileScreen({ navigation }: Props) {
         </View>
 
         <View style={styles.body}>
-          {loading && !profile ? (
-            <View style={styles.centerState}>
-              <ActivityIndicator color={theme.colors.primary} />
-            </View>
-          ) : error && !profile ? (
-            <View style={styles.centerState}>
-              <Typography variant="body" color="danger" align="center">
-                {error}
-              </Typography>
-              <Button
-                label="Tekrar dene"
-                size="sm"
-                fullWidth={false}
-                onPress={() => loadProfile()}
-              />
-            </View>
-          ) : profile ? (
-            <>
-              <View style={styles.avatarRow}>
+          <View style={styles.avatarRow}>
                 <Avatar
                   uri={profile.ProfileImage ?? undefined}
                   name={fullName}
@@ -188,7 +202,7 @@ export function ProfileScreen({ navigation }: Props) {
                 />
                 <View style={styles.editBtn}>
                   <Button
-                    label="Profili Düzenle"
+                    label={t('profile.edit')}
                     size="sm"
                     variant="secondary"
                     leftIcon="edit"
@@ -218,7 +232,7 @@ export function ProfileScreen({ navigation }: Props) {
                   <View style={styles.bioEditRow}>
                     <Icon name="edit" size={14} color={theme.colors.primary} />
                     <Typography variant="caption" tint={theme.colors.primary}>
-                      Düzenle
+                      {t('profile.edit_action')}
                     </Typography>
                   </View>
                 </Pressable>
@@ -235,10 +249,10 @@ export function ProfileScreen({ navigation }: Props) {
                   <Icon name="edit" size={18} color={theme.colors.primary} />
                   <View style={styles.promptText}>
                     <Typography variant="bodyStrong" tint={theme.colors.primary}>
-                      Biyografi ekle
+                      {t('profile.add_bio')}
                     </Typography>
                     <Typography variant="caption" color="textMuted">
-                      Kendini kısaca tanıt, profilin daha dikkat çeksin.
+                      {t('profile.add_bio_desc')}
                     </Typography>
                   </View>
                   <Icon name="chevron-right" size={18} color={theme.colors.primary} />
@@ -246,17 +260,17 @@ export function ProfileScreen({ navigation }: Props) {
               )}
 
               <Card variant="surface" style={styles.statsCard}>
-                <StatItem value={0} label="Arkadaş" />
+                <StatItem value={0} label={t('profile.stat_friends')} />
                 <View style={[styles.statSep, { backgroundColor: theme.colors.border }]} />
-                <StatItem value={0} label="Beğeni" />
+                <StatItem value={0} label={t('profile.stat_likes')} />
                 <View style={[styles.statSep, { backgroundColor: theme.colors.border }]} />
-                <StatItem value={0} label="Ziyaret" />
+                <StatItem value={0} label={t('profile.stat_visits')} />
               </Card>
 
               <View style={styles.section}>
                 <SectionHeader
-                  title="İlgi alanları"
-                  actionLabel={hasInterests ? 'Düzenle' : undefined}
+                  title={t('profile.interests')}
+                  actionLabel={hasInterests ? t('profile.edit_action') : undefined}
                   onAction={
                     hasInterests ? () => navigation.navigate('EditProfile') : undefined
                   }
@@ -287,12 +301,12 @@ export function ProfileScreen({ navigation }: Props) {
                     <Icon name="sparkles" size={18} color={theme.colors.primary} />
                     <View style={styles.promptText}>
                       <Typography variant="bodyStrong">
-                        İlgi alanlarını ekle
+                        {t('profile.add_interests')}
                       </Typography>
                       <Typography variant="caption" color="textMuted">
                         {interestTypeCount > 0
-                          ? `${interestTypeCount} kategori hazır. Favorilerini yaz.`
-                          : 'Favorilerini yazarak profilini tamamla.'}
+                          ? `${interestTypeCount} ${t('profile.categories_ready')}`
+                          : t('profile.interests_empty')}
                       </Typography>
                     </View>
                     <Icon name="chevron-right" size={18} color={theme.colors.textMuted} />
@@ -302,8 +316,8 @@ export function ProfileScreen({ navigation }: Props) {
 
               <View style={styles.section}>
                 <SectionHeader
-                  title="Arkadaşlar"
-                  actionLabel="Tümünü gör"
+                  title={t('profile.friends')}
+                  actionLabel={t('profile.see_all')}
                   onAction={() => navigation.navigate('FriendsList')}
                 />
                 <Card variant="surface" padding="sm">
@@ -311,7 +325,11 @@ export function ProfileScreen({ navigation }: Props) {
                     <View key={f.id}>
                       <UserListItem
                         name={f.name}
-                        subtitle={f.online ? 'Çevrimiçi' : (f.lastActive ?? 'çevrimdışı')}
+                        subtitle={
+                          f.online
+                            ? t('profile.online')
+                            : (f.lastActive ?? t('profile.offline'))
+                        }
                         avatarUri={f.avatar}
                         online={f.online}
                         premium={f.premium}
@@ -327,8 +345,6 @@ export function ProfileScreen({ navigation }: Props) {
                   ))}
                 </Card>
               </View>
-            </>
-          ) : null}
         </View>
       </ScrollView>
 

@@ -136,7 +136,10 @@ export function LoginScreen({ navigation }: Props) {
             value={password}
             onChangeText={setPassword}
           />
-          <Pressable style={styles.forgot} hitSlop={8}>
+          <Pressable
+            style={styles.forgot}
+            hitSlop={8}
+            onPress={() => navigation.navigate('ForgotPassword')}>
             <Typography variant="callout" tint={theme.colors.primary}>
               {t('auth.forgot_password')}
             </Typography>
