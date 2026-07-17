@@ -13,6 +13,7 @@ import {
   Typography,
 } from '../../components';
 import { useTheme } from '../../theme';
+import { TAB_BAR_SPACE } from '../../utils';
 
 const AGE_MIN = 18;
 const AGE_MAX = 65;
@@ -168,7 +169,12 @@ export function FilterScreen() {
 }
 
 const styles = StyleSheet.create({
-  content: { paddingHorizontal: 20, paddingBottom: 40, gap: 24, paddingTop: 8 },
+  content: {
+    paddingHorizontal: 20,
+    paddingBottom: TAB_BAR_SPACE + 24,
+    gap: 24,
+    paddingTop: 8,
+  },
   section: { gap: 14 },
   rowBetween: {
     flexDirection: 'row',

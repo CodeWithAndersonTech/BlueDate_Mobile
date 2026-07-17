@@ -125,6 +125,7 @@ export const premiumPerks: PremiumPerk[] = [
 
 export interface ActivityItem {
   id: string;
+  userId: string;
   type: 'like' | 'visit' | 'match' | 'request';
   name: string;
   avatar?: string;
@@ -132,11 +133,81 @@ export interface ActivityItem {
 }
 
 export const recentActivity: ActivityItem[] = [
-  { id: 'a1', type: 'match', name: 'Elif', avatar: avatar(45), time: 'şimdi' },
-  { id: 'a2', type: 'like', name: 'Kerem', avatar: avatar(13), time: '5 dk' },
-  { id: 'a3', type: 'visit', name: 'Deniz', avatar: avatar(32), time: '1 sa' },
-  { id: 'a4', type: 'request', name: 'Cansu', avatar: avatar(16), time: '2 sa' },
-  { id: 'a5', type: 'like', name: 'Ada', avatar: avatar(47), time: '3 sa' },
+  { id: 'a1', userId: 'n1', type: 'match', name: 'Elif', avatar: avatar(45), time: 'şimdi' },
+  { id: 'a2', userId: 'n2', type: 'like', name: 'Kerem', avatar: avatar(13), time: '5 dk' },
+  { id: 'a3', userId: 'n3', type: 'visit', name: 'Deniz', avatar: avatar(32), time: '1 sa' },
+  { id: 'a4', userId: 'r1', type: 'request', name: 'Cansu', avatar: avatar(16), time: '2 sa' },
+  { id: 'a5', userId: 'n4', type: 'like', name: 'Ada', avatar: avatar(47), time: '3 sa' },
 ];
 
 export const suggestedUsers = nearbyUsers.slice(0, 4);
+
+/** Unified public profile used when opening another user's page from lists. */
+export interface PublicUser {
+  id: string;
+  name: string;
+  username: string;
+  avatar?: string;
+  online?: boolean;
+  premium?: boolean;
+  bio?: string;
+  age?: number;
+  distanceKm?: number;
+  mutualFriends?: number;
+}
+
+export function findPublicUser(userId: string): PublicUser | undefined {
+  const friend = friends.find(f => f.id === userId);
+  if (friend) {
+    return {
+      id: friend.id,
+      name: friend.name,
+      username: friend.username,
+      avatar: friend.avatar,
+      online: friend.online,
+      premium: friend.premium,
+      mutualFriends: friend.mutualFriends,
+    };
+  }
+
+  const nearby = nearbyUsers.find(n => n.id === userId);
+  if (nearby) {
+    return {
+      id: nearby.id,
+      name: nearby.name,
+      username: `@${nearby.name.toLowerCase()}`,
+      avatar: nearby.photo,
+      online: nearby.online,
+      premium: nearby.premium,
+      bio: nearby.bio,
+      age: nearby.age,
+      distanceKm: nearby.distanceKm,
+    };
+  }
+
+  const incoming = incomingRequests.find(r => r.id === userId);
+  if (incoming) {
+    return {
+      id: incoming.id,
+      name: incoming.name,
+      username: incoming.username,
+      avatar: incoming.avatar,
+      premium: incoming.premium,
+      mutualFriends: incoming.mutualFriends,
+    };
+  }
+
+  const sent = sentRequests.find(r => r.id === userId);
+  if (sent) {
+    return {
+      id: sent.id,
+      name: sent.name,
+      username: sent.username,
+      avatar: sent.avatar,
+      premium: sent.premium,
+      mutualFriends: sent.mutualFriends,
+    };
+  }
+
+  return undefined;
+}

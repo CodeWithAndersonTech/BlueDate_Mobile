@@ -36,6 +36,7 @@ export interface ButtonProps {
   disabled?: boolean;
   loading?: boolean;
   fullWidth?: boolean;
+  minWidth?: number;
   style?: StyleProp<ViewStyle>;
 }
 
@@ -43,7 +44,7 @@ const SIZES: Record<
   ButtonSize,
   { height: number; paddingH: number; fontSize: number; icon: number }
 > = {
-  sm: { height: 42, paddingH: 18, fontSize: 14, icon: 16 },
+  sm: { height: 42, paddingH: 16, fontSize: 13, icon: 16 },
   md: { height: 54, paddingH: 22, fontSize: 16, icon: 18 },
   lg: { height: 58, paddingH: 26, fontSize: 17, icon: 20 },
 };
@@ -58,6 +59,7 @@ export function Button({
   disabled = false,
   loading = false,
   fullWidth = true,
+  minWidth,
   style,
 }: ButtonProps) {
   const theme = useTheme();
@@ -94,8 +96,6 @@ export function Button({
       ? theme.colors.primary
       : theme.colors.text;
 
-  // Gentle, evenly-spread colored shadow for the hero action (not a harsh
-  // glow), a soft neutral drop shadow for filled variants, nothing for flat.
   const softGlow: ViewStyle = {
     shadowColor: theme.colors.primary,
     shadowOffset: { width: 0, height: 6 },
@@ -110,83 +110,35 @@ export function Button({
       ? theme.shadows.none
       : theme.shadows.sm;
 
-  const surface: ViewStyle = {
+  const shell: ViewStyle = {
+    width: fullWidth ? '100%' : undefined,
+    minWidth,
     height: dims.height,
-    paddingHorizontal: dims.paddingH,
     borderRadius: radius,
-    flexDirection: 'row',
+    overflow: 'hidden',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: theme.spacing.sm,
-    overflow: 'hidden',
+    paddingHorizontal: dims.paddingH,
   };
 
-  const inner = loading ? (
-    <ActivityIndicator color={contentColor} />
-  ) : (
-    <>
-      {leftIcon && <Icon name={leftIcon} size={dims.icon} color={contentColor} />}
-      <Typography
-        variant="button"
-        tint={contentColor}
-        align="center"
-        numberOfLines={1}
-        style={{
-          fontSize: dims.fontSize,
-          lineHeight: dims.fontSize + 2,
-          flexShrink: 1,
-        }}>
-        {label}
-      </Typography>
-      {rightIcon && <Icon name={rightIcon} size={dims.icon} color={contentColor} />}
-    </>
-  );
-
-  // Pressed-state darkening overlay (only meaningful on solid surfaces).
-  const pressOverlay = isSolid ? (
-    <Animated.View
-      style={[styles.fill, { backgroundColor: theme.colors.black }, overlayStyle]}
-    />
-  ) : null;
-
-  const renderSurface = () => {
-    if (variant === 'primary') {
-      return (
-        <LinearGradient
-          colors={theme.gradients.primary}
-          start={{ x: 0, y: 0.5 }}
-          end={{ x: 1, y: 0.5 }}
-          style={surface}>
-          {pressOverlay}
-          {inner}
-        </LinearGradient>
-      );
-    }
-
-    const variantStyle: ViewStyle =
-      variant === 'secondary'
-        ? {
-            backgroundColor: theme.colors.surfaceAlt,
-            borderWidth: 1,
-            borderColor: theme.colors.border,
-          }
-        : variant === 'outline'
-        ? {
-            backgroundColor: theme.colors.primarySoft,
-            borderWidth: 1.5,
-            borderColor: theme.colors.primary,
-          }
-        : variant === 'danger'
-        ? { backgroundColor: theme.colors.danger }
-        : { backgroundColor: 'transparent' };
-
-    return (
-      <View style={[surface, variantStyle]}>
-        {pressOverlay}
-        {inner}
-      </View>
-    );
-  };
+  const fillStyle =
+    variant === 'secondary'
+      ? {
+          backgroundColor: theme.colors.surfaceAlt,
+          borderWidth: 1,
+          borderColor: theme.colors.border,
+        }
+      : variant === 'outline'
+      ? {
+          backgroundColor: theme.colors.primarySoft,
+          borderWidth: 1.5,
+          borderColor: theme.colors.primary,
+        }
+      : variant === 'danger'
+      ? { backgroundColor: theme.colors.danger }
+      : variant === 'ghost'
+      ? { backgroundColor: 'transparent' }
+      : null;
 
   return (
     <Pressable
@@ -207,7 +159,52 @@ export function Button({
           !isDisabled && shadow,
           animatedStyle,
         ]}>
-        {renderSurface()}
+        <View style={shell}>
+          {variant === 'primary' ? (
+            <LinearGradient
+              colors={theme.gradients.primary}
+              start={{ x: 0, y: 0.5 }}
+              end={{ x: 1, y: 0.5 }}
+              style={styles.fill}
+            />
+          ) : (
+            <View style={[styles.fill, fillStyle]} />
+          )}
+
+          {isSolid && (
+            <Animated.View
+              style={[
+                styles.fill,
+                { backgroundColor: theme.colors.black },
+                overlayStyle,
+              ]}
+            />
+          )}
+
+          {loading ? (
+            <ActivityIndicator color={contentColor} />
+          ) : (
+            <View style={styles.labelRow}>
+              {leftIcon && (
+                <Icon name={leftIcon} size={dims.icon} color={contentColor} />
+              )}
+              <Typography
+                variant="button"
+                tint={contentColor}
+                align="center"
+                numberOfLines={1}
+                style={{
+                  fontSize: dims.fontSize,
+                  lineHeight: dims.fontSize + 2,
+                }}>
+                {label}
+              </Typography>
+              {rightIcon && (
+                <Icon name={rightIcon} size={dims.icon} color={contentColor} />
+              )}
+            </View>
+          )}
+        </View>
       </Animated.View>
     </Pressable>
   );
@@ -215,8 +212,18 @@ export function Button({
 
 const styles = StyleSheet.create({
   fullWidth: { alignSelf: 'stretch' },
+  labelRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+  },
   fill: {
-    ...StyleSheet.absoluteFillObject,
+    position: 'absolute',
+    top: 0,
+    right: 0,
+    bottom: 0,
+    left: 0,
     pointerEvents: 'none',
   },
 });

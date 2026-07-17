@@ -1,7 +1,11 @@
+import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import React, { useState } from 'react';
 import { ScrollView, StyleSheet } from 'react-native';
 import { Chip, Header, NearbyCard, Screen } from '../../components';
+import { NearbyStackParamList } from '../../navigation/types';
 import { TAB_BAR_SPACE, nearbyUsers, screen } from '../../utils';
+
+type Props = NativeStackScreenProps<NearbyStackParamList, 'NearbyMain'>;
 
 const FILTERS = [
   { key: 'all', label: 'Tümü', icon: 'sliders' as const },
@@ -13,7 +17,7 @@ const GAP = 14;
 const H_PADDING = 20;
 const CARD_WIDTH = (screen.width - H_PADDING * 2 - GAP) / 2;
 
-export function NearbyScreen() {
+export function NearbyScreen({ navigation }: Props) {
   const [filter, setFilter] = useState('all');
   const [added, setAdded] = useState<Record<string, boolean>>({});
 
@@ -60,7 +64,7 @@ export function NearbyScreen() {
             style={{ width: CARD_WIDTH }}
             added={!!added[user.id]}
             onAdd={() => toggleAdd(user.id)}
-            onPress={() => {}}
+            onPress={() => navigation.navigate('UserProfile', { userId: user.id })}
           />
         ))}
       </ScrollView>

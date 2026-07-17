@@ -16,6 +16,7 @@ export type HomeStackParamList = {
   HomeFeed: undefined;
   Settings: undefined;
   Filter: undefined;
+  UserProfile: { userId: string };
 };
 
 export type ProfileStackParamList = {
@@ -24,16 +25,23 @@ export type ProfileStackParamList = {
   Settings: undefined;
   FriendsList: undefined;
   Filter: undefined;
+  UserProfile: { userId: string };
 };
 
 export type FriendsStackParamList = {
   FriendsMain: undefined;
   SearchUsers: undefined;
+  UserProfile: { userId: string };
+};
+
+export type NearbyStackParamList = {
+  NearbyMain: undefined;
+  UserProfile: { userId: string };
 };
 
 export type MainTabParamList = {
   Home: NavigatorScreenParams<HomeStackParamList>;
-  Nearby: undefined;
+  Nearby: NavigatorScreenParams<NearbyStackParamList>;
   Friends: NavigatorScreenParams<FriendsStackParamList>;
   Premium: undefined;
   Profile: NavigatorScreenParams<ProfileStackParamList>;

@@ -71,7 +71,7 @@ export function FriendsScreen({ navigation }: Props) {
                 avatarUri={f.avatar}
                 online={f.online}
                 premium={f.premium}
-                onPress={() => {}}
+                onPress={() => navigation.navigate('UserProfile', { userId: f.id })}
                 right={
                   <View style={styles.rowActions}>
                     <IconButton name="message" size={18} onPress={() => {}} />
@@ -93,9 +93,16 @@ export function FriendsScreen({ navigation }: Props) {
                 subtitle={`${r.mutualFriends} ortak arkadaş · ${r.sentAt}`}
                 avatarUri={r.avatar}
                 premium={r.premium}
+                onPress={() => navigation.navigate('UserProfile', { userId: r.id })}
                 right={
                   <View style={styles.rowActions}>
-                    <Button label="Kabul" size="sm" fullWidth={false} onPress={() => {}} />
+                    <Button
+                      label="Kabul et"
+                      size="sm"
+                      minWidth={108}
+                      fullWidth={false}
+                      onPress={() => {}}
+                    />
                     <IconButton name="close" size={18} variant="surface" onPress={() => {}} />
                   </View>
                 }
@@ -113,6 +120,7 @@ export function FriendsScreen({ navigation }: Props) {
                 name={r.name}
                 subtitle={`Gönderildi · ${r.sentAt}`}
                 avatarUri={r.avatar}
+                onPress={() => navigation.navigate('UserProfile', { userId: r.id })}
                 right={
                   <Button
                     label="İptal"

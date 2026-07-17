@@ -52,7 +52,7 @@ export function PremiumScreen() {
         showsVerticalScrollIndicator={false}
         contentContainerStyle={[
           styles.content,
-          { paddingBottom: TAB_BAR_SPACE + 150 },
+          { paddingBottom: TAB_BAR_SPACE + 210 },
         ]}>
         {/* ---------------------------------------------------------------- HERO */}
         <View style={[styles.heroWrap, goldGlow]}>
@@ -262,7 +262,8 @@ export function PremiumScreen() {
         style={[
           styles.purchaseBar,
           {
-            paddingBottom: TAB_BAR_SPACE - 24,
+            bottom: TAB_BAR_SPACE - 26,
+            paddingBottom: 28,
             backgroundColor: theme.colors.background,
             borderTopColor: theme.colors.border,
           },
@@ -314,7 +315,11 @@ export function PremiumScreen() {
           </Animated.View>
         </Pressable>
 
-        <Typography variant="caption" color="textMuted" align="center">
+        <Typography
+          variant="caption"
+          color="textMuted"
+          align="center"
+          style={styles.cancelNote}>
           İstediğin zaman iptal et · Otomatik yenilenir
         </Typography>
       </View>
@@ -474,6 +479,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: 8,
+  },
+  cancelNote: {
+    marginBottom: 6,
   },
 });
 

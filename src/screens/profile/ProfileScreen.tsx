@@ -336,7 +336,9 @@ export function ProfileScreen({ navigation }: Props) {
                         right={
                           <Icon name="chevron-right" size={20} color={theme.colors.textMuted} />
                         }
-                        onPress={() => {}}
+                        onPress={() =>
+                          navigation.navigate('UserProfile', { userId: f.id })
+                        }
                       />
                       {i < onlineFriends.length - 1 && (
                         <View style={[styles.sep, { backgroundColor: theme.colors.border }]} />

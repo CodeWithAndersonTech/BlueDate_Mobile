@@ -60,7 +60,7 @@ export function FriendsListScreen({ navigation }: Props) {
             avatarUri={f.avatar}
             online={f.online}
             premium={f.premium}
-            onPress={() => {}}
+            onPress={() => navigation.navigate('UserProfile', { userId: f.id })}
             right={<IconButton name="message" size={18} color={theme.colors.primary} onPress={() => {}} />}
           />
         ))}

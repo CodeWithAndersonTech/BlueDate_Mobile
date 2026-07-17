@@ -133,7 +133,11 @@ export function HomeScreen({ navigation }: Props) {
             showsHorizontalScrollIndicator={false}
             contentContainerStyle={styles.suggestRow}>
             {suggestedUsers.map(u => (
-              <Pressable key={u.id} onPress={() => goToTab('Nearby')}>
+              <Pressable
+                key={u.id}
+                onPress={() =>
+                  navigation.navigate('UserProfile', { userId: u.id })
+                }>
                 <Card variant="elevated" padding="none" style={styles.suggestCard}>
                   <Image source={{ uri: u.photo }} style={styles.suggestImage} />
                   <LinearGradient
@@ -169,7 +173,11 @@ export function HomeScreen({ navigation }: Props) {
               const meta = ACTIVITY_META[item.type];
               return (
                 <View key={item.id}>
-                  <View style={styles.activityRow}>
+                  <Pressable
+                    style={styles.activityRow}
+                    onPress={() =>
+                      navigation.navigate('UserProfile', { userId: item.userId })
+                    }>
                     <Avatar uri={item.avatar} name={item.name} size="sm" />
                     <View style={styles.activityText}>
                       <Typography variant="body">
@@ -187,7 +195,7 @@ export function HomeScreen({ navigation }: Props) {
                       ]}>
                       <Icon name={meta.icon} size={16} color={meta.color(theme)} filled />
                     </View>
-                  </View>
+                  </Pressable>
                   {i < recentActivity.length - 1 && (
                     <View style={[styles.sep, { backgroundColor: theme.colors.border }]} />
                   )}

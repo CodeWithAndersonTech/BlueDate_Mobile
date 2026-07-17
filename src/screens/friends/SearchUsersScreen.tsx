@@ -61,6 +61,7 @@ export function SearchUsersScreen({ navigation }: Props) {
                 avatarUri={u.avatar}
                 online={u.online}
                 premium={u.premium}
+                onPress={() => navigation.navigate('UserProfile', { userId: u.id })}
                 right={<Button label="Ekle" size="sm" fullWidth={false} leftIcon="user-plus" onPress={() => {}} />}
               />
             ))}
@@ -80,6 +81,7 @@ export function SearchUsersScreen({ navigation }: Props) {
               avatarUri={u.avatar}
               online={u.online}
               premium={u.premium}
+              onPress={() => navigation.navigate('UserProfile', { userId: u.id })}
               right={<Button label="Ekle" size="sm" fullWidth={false} leftIcon="user-plus" onPress={() => {}} />}
             />
           ))

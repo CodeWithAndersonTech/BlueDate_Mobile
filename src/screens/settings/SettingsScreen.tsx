@@ -24,6 +24,7 @@ import {
   useTheme,
   useThemeController,
 } from '../../theme';
+import { TAB_BAR_SPACE } from '../../utils';
 
 export function SettingsScreen() {
   const navigation =
@@ -210,7 +211,12 @@ function Sep() {
 }
 
 const styles = StyleSheet.create({
-  content: { paddingHorizontal: 20, paddingBottom: 40, gap: 24, paddingTop: 8 },
+  content: {
+    paddingHorizontal: 20,
+    paddingBottom: TAB_BAR_SPACE + 24,
+    gap: 24,
+    paddingTop: 8,
+  },
   section: { gap: 14 },
   blockRow: {
     flexDirection: 'row',

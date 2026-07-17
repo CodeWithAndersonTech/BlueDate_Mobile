@@ -3,11 +3,11 @@ import {
   createBottomTabNavigator,
 } from '@react-navigation/bottom-tabs';
 import React from 'react';
-import { NearbyScreen } from '../screens/nearby/NearbyScreen';
 import { PremiumScreen } from '../screens/premium/PremiumScreen';
 import { CustomTabBar } from './CustomTabBar';
 import { FriendsStack } from './FriendsStack';
 import { HomeStack } from './HomeStack';
+import { NearbyStack } from './NearbyStack';
 import { ProfileStack } from './ProfileStack';
 import { MainTabParamList } from './types';
 
@@ -28,7 +28,7 @@ export function MainTabs() {
       tabBar={renderTabBar}
       screenOptions={{ headerShown: false }}>
       <Tab.Screen name="Home" component={HomeStack} />
-      <Tab.Screen name="Nearby" component={NearbyScreen} />
+      <Tab.Screen name="Nearby" component={NearbyStack} />
       <Tab.Screen name="Friends" component={FriendsStack} />
       <Tab.Screen name="Premium" component={PremiumScreen} />
       <Tab.Screen name="Profile" component={ProfileStack} />
