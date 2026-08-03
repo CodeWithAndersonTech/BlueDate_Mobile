@@ -16,11 +16,9 @@ import {
   Typography,
 } from '../../components';
 import { useTheme } from '../../theme';
-import {
-  PublicInterestKey,
-  TAB_BAR_SPACE,
-  findPublicUser,
-} from '../../utils';
+import { useLockTabSwipe } from '../../navigation/useLockTabSwipe';
+import { PublicInterestKey, findPublicUser } from '../../utils';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 type UserProfileParams = { UserProfile: { userId: string } };
 type Props = NativeStackScreenProps<UserProfileParams, 'UserProfile'>;
@@ -33,7 +31,9 @@ const INTEREST_ICONS: Record<PublicInterestKey, IconName> = {
 };
 
 export function UserProfileScreen({ navigation, route }: Props) {
+  useLockTabSwipe();
   const theme = useTheme();
+  const insets = useSafeAreaInsets();
   const user = useMemo(
     () => findPublicUser(route.params.userId),
     [route.params.userId],
@@ -64,7 +64,9 @@ export function UserProfileScreen({ navigation, route }: Props) {
       <Header onBack={() => navigation.goBack()} title={user.name} />
       <ScrollView
         showsVerticalScrollIndicator={false}
-        contentContainerStyle={{ paddingBottom: TAB_BAR_SPACE }}>
+        contentContainerStyle={{
+          paddingBottom: Math.max(insets.bottom, 16) + 24,
+        }}>
         <View style={styles.coverWrap}>
           <LinearGradient
             colors={theme.gradients.primary}

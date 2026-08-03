@@ -1,22 +1,19 @@
-import { BottomTabBarProps } from '@react-navigation/bottom-tabs';
-import React, { useEffect } from 'react';
+import type { MaterialTopTabBarProps } from '@react-navigation/material-top-tabs';
+import React, { useEffect, useMemo } from 'react';
 import {
+  Animated as RNAnimated,
   Pressable,
   StyleSheet,
   useWindowDimensions,
   View,
 } from 'react-native';
-import LinearGradient from 'react-native-linear-gradient';
 import Animated, {
-  interpolate,
   useAnimatedStyle,
   useSharedValue,
   withSpring,
-  withTiming,
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import Svg, { Path } from 'react-native-svg';
-import { Icon, IconName, Typography } from '../components';
+import { Icon, IconName } from '../components';
 import { useTheme } from '../theme';
 
 const TAB_ICONS: Record<string, IconName> = {
@@ -27,7 +24,7 @@ const TAB_ICONS: Record<string, IconName> = {
   Profile: 'user',
 };
 
-const TAB_LABELS: Record<string, string> = {
+const TAB_A11Y_LABELS: Record<string, string> = {
   Home: 'Ana Sayfa',
   Nearby: 'Yakındakiler',
   Friends: 'Arkadaşlar',
@@ -36,76 +33,175 @@ const TAB_LABELS: Record<string, string> = {
 };
 
 const SPRING = { damping: 18, stiffness: 200, mass: 0.7 };
-/** How high the bar's top edge peaks in the centre (PS5 "card bottom" curve). */
-const CURVE_DEPTH = 24;
-/** Height of the icon row area (excluding safe-area + curve). */
-const BAR_HEIGHT = 64;
+const BAR_HEIGHT = 56;
+const PILL_MARGIN_H = 20;
+const PILL_RADIUS = 34;
+const PILL_PADDING_H = 6;
+const INDICATOR_INSET = 5;
 
 /**
- * PlayStation 5 dashboard inspired tab bar: a full-width dark bar with a gently
- * curved top edge, minimalist white icons and an active item that glows with a
- * vertical light beam plus a revealed label — mirroring the PS5 control center.
+ * Bottom padding so scroll content clears the floating pill tab bar.
+ * Only for tab-root screens — nested stack screens hide the tab bar.
  */
-export function CustomTabBar({ state, navigation }: BottomTabBarProps) {
+export function useTabBarClearance(extra = 16) {
+  const insets = useSafeAreaInsets();
+  return BAR_HEIGHT + Math.max(insets.bottom, 12) + extra;
+}
+
+/** Root screens of each tab stack — tab bar stays visible only on these. */
+const TAB_ROOT_SCREENS = new Set([
+  'HomeFeed',
+  'NearbyMain',
+  'FriendsMain',
+  'ProfileMain',
+  'Premium',
+]);
+
+function shouldHideTabBar(state: MaterialTopTabBarProps['state']): boolean {
+  const route = state.routes[state.index];
+  const nested = route.state as
+    | { index?: number; routes?: { name: string }[] }
+    | undefined;
+
+  // Stack has pushed a nested screen (EditProfile, Settings, …) — always hide.
+  if (nested?.routes?.length && (nested.index ?? 0) > 0) {
+    return true;
+  }
+
+  if (!nested?.routes?.length) {
+    return false;
+  }
+
+  const nestedRoute = nested.routes[nested.index ?? 0];
+  if (!nestedRoute) {
+    return false;
+  }
+  return !TAB_ROOT_SCREENS.has(nestedRoute.name);
+}
+
+/**
+ * Floating pill tab bar with a sliding active highlight. Screens swipe via
+ * Material Top Tabs pager; the highlight follows the swipe position.
+ */
+export function CustomTabBar({
+  state,
+  navigation,
+  position,
+  layout,
+}: MaterialTopTabBarProps) {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
-  const { width } = useWindowDimensions();
+  const { width: windowWidth } = useWindowDimensions();
+  const hide = shouldHideTabBar(state);
 
   const bottomInset = Math.max(insets.bottom, 12);
-  const totalHeight = BAR_HEIGHT + bottomInset + CURVE_DEPTH;
+  const totalHeight = BAR_HEIGHT + bottomInset;
+  const barWidth = layout.width || windowWidth;
+  const pillWidth = barWidth - PILL_MARGIN_H * 2;
+  const tabCount = state.routes.length;
+  const innerWidth = pillWidth - PILL_PADDING_H * 2;
+  const tabWidth = innerWidth / tabCount;
+  const indicatorWidth = Math.max(tabWidth - INDICATOR_INSET * 2, 44);
 
-  // Concave-up corners with a raised centre (∩) — the PS5 focused-card curve.
-  const path = `M0,${CURVE_DEPTH} Q${width / 2},0 ${width},${CURVE_DEPTH} L${width},${totalHeight} L0,${totalHeight} Z`;
+  // Must run unconditionally — early return before this caused "fewer hooks".
+  const indicatorTranslateX = useMemo(() => {
+    if (!position || tabCount <= 1) {
+      return null;
+    }
+
+    const inputRange = state.routes.map((_, i) => i);
+    const outputRange = state.routes.map(
+      (_, i) =>
+        PILL_PADDING_H + i * tabWidth + (tabWidth - indicatorWidth) / 2,
+    );
+
+    return position.interpolate({
+      inputRange,
+      outputRange,
+      extrapolate: 'clamp',
+    });
+  }, [position, state.routes, tabCount, tabWidth, indicatorWidth]);
+
+  if (hide) {
+    return null;
+  }
+
+  const staticIndicatorOffset =
+    PILL_PADDING_H +
+    state.index * tabWidth +
+    (tabWidth - indicatorWidth) / 2;
+
+  const pillBackground = theme.isDark
+    ? 'rgba(22, 22, 30, 0.92)'
+    : 'rgba(255, 255, 255, 0.94)';
+  const pillBorder = theme.isDark
+    ? 'rgba(255, 255, 255, 0.08)'
+    : 'rgba(0, 0, 0, 0.06)';
+  const indicatorBackground = theme.isDark
+    ? 'rgba(255, 255, 255, 0.12)'
+    : theme.colors.primarySoft;
 
   return (
     <View style={styles.wrapper} pointerEvents="box-none">
-      <View style={{ width, height: totalHeight }}>
-        <Svg
-          width={width}
-          height={totalHeight}
-          style={StyleSheet.absoluteFill}
-          pointerEvents="none">
-          <Path
-            d={path}
-            fill={theme.colors.tabBar}
-            stroke={theme.colors.border}
-            strokeWidth={1}
-          />
-        </Svg>
-
+      <View
+        style={[
+          styles.bar,
+          { width: barWidth, height: totalHeight, paddingBottom: bottomInset },
+        ]}>
         <View
           style={[
-            styles.row,
+            styles.pill,
+            theme.shadows.md,
             {
-              height: BAR_HEIGHT + bottomInset,
-              marginTop: CURVE_DEPTH,
-              paddingBottom: bottomInset,
+              width: pillWidth,
+              backgroundColor: pillBackground,
+              borderColor: pillBorder,
             },
           ]}>
-          {state.routes.map((route, index) => {
-            const focused = state.index === index;
+          <RNAnimated.View
+            pointerEvents="none"
+            style={[
+              styles.indicator,
+              {
+                width: indicatorWidth,
+                backgroundColor: indicatorBackground,
+                transform: [
+                  {
+                    translateX: indicatorTranslateX ?? staticIndicatorOffset,
+                  },
+                ],
+              },
+            ]}
+          />
 
-            const onPress = () => {
-              const event = navigation.emit({
-                type: 'tabPress',
-                target: route.key,
-                canPreventDefault: true,
-              });
-              if (!focused && !event.defaultPrevented) {
-                navigation.navigate(route.name as never);
-              }
-            };
+          <View style={styles.row}>
+            {state.routes.map((route, index) => {
+              const focused = state.index === index;
 
-            return (
-              <TabItem
-                key={route.key}
-                focused={focused}
-                icon={TAB_ICONS[route.name] ?? 'home'}
-                label={TAB_LABELS[route.name] ?? route.name}
-                onPress={onPress}
-              />
-            );
-          })}
+              const onPress = () => {
+                const event = navigation.emit({
+                  type: 'tabPress',
+                  target: route.key,
+                  canPreventDefault: true,
+                });
+                if (!focused && !event.defaultPrevented) {
+                  navigation.navigate(route.name as never);
+                }
+              };
+
+              return (
+                <TabItem
+                  key={route.key}
+                  focused={focused}
+                  icon={TAB_ICONS[route.name] ?? 'home'}
+                  accessibilityLabel={
+                    TAB_A11Y_LABELS[route.name] ?? route.name
+                  }
+                  onPress={onPress}
+                />
+              );
+            })}
+          </View>
         </View>
       </View>
     </View>
@@ -115,11 +211,11 @@ export function CustomTabBar({ state, navigation }: BottomTabBarProps) {
 interface TabItemProps {
   focused: boolean;
   icon: IconName;
-  label: string;
+  accessibilityLabel: string;
   onPress: () => void;
 }
 
-function TabItem({ focused, icon, label, onPress }: TabItemProps) {
+function TabItem({ focused, icon, accessibilityLabel, onPress }: TabItemProps) {
   const theme = useTheme();
   const progress = useSharedValue(focused ? 1 : 0);
   const press = useSharedValue(1);
@@ -129,23 +225,8 @@ function TabItem({ focused, icon, label, onPress }: TabItemProps) {
   }, [focused, progress]);
 
   const iconStyle = useAnimatedStyle(() => ({
-    transform: [{ scale: press.value * (1 + 0.12 * progress.value) }],
+    transform: [{ scale: press.value * (1 + 0.1 * progress.value) }],
     opacity: 0.5 + 0.5 * progress.value,
-  }));
-
-  const beamStyle = useAnimatedStyle(() => ({
-    opacity: progress.value,
-    transform: [{ scaleY: interpolate(progress.value, [0, 1], [0.4, 1]) }],
-  }));
-
-  const glowStyle = useAnimatedStyle(() => ({
-    opacity: progress.value * 0.9,
-    transform: [{ scale: interpolate(progress.value, [0, 1], [0.6, 1]) }],
-  }));
-
-  const labelStyle = useAnimatedStyle(() => ({
-    opacity: withTiming(focused ? 1 : 0, { duration: 160 }),
-    transform: [{ translateY: (1 - progress.value) * 4 }],
   }));
 
   const iconColor = focused ? theme.colors.text : theme.colors.textMuted;
@@ -153,44 +234,14 @@ function TabItem({ focused, icon, label, onPress }: TabItemProps) {
   return (
     <Pressable
       onPress={onPress}
-      onPressIn={() => (press.value = withSpring(0.88, SPRING))}
+      onPressIn={() => (press.value = withSpring(0.9, SPRING))}
       onPressOut={() => (press.value = withSpring(1, SPRING))}
       accessibilityRole="button"
+      accessibilityLabel={accessibilityLabel}
       accessibilityState={{ selected: focused }}
       style={styles.item}>
-      {/* Vertical light beam rising behind the active icon */}
-      <Animated.View style={[styles.beam, beamStyle]} pointerEvents="none">
-        <LinearGradient
-          colors={['transparent', theme.colors.primary]}
-          start={{ x: 0.5, y: 0 }}
-          end={{ x: 0.5, y: 1 }}
-          style={styles.beamGradient}
-        />
-      </Animated.View>
-
-      {/* Soft radial-style glow puck under the icon */}
-      <Animated.View
-        style={[
-          styles.glow,
-          glowStyle,
-          { backgroundColor: theme.colors.primarySoft },
-          theme.shadows.glow,
-        ]}
-        pointerEvents="none"
-      />
-
       <Animated.View style={iconStyle}>
         <Icon name={icon} size={26} color={iconColor} filled={focused} />
-      </Animated.View>
-
-      <Animated.View style={[styles.labelWrap, labelStyle]} pointerEvents="none">
-        <Typography
-          variant="overline"
-          tint={theme.colors.text}
-          numberOfLines={1}
-          style={styles.label}>
-          {label}
-        </Typography>
       </Animated.View>
     </Pressable>
   );
@@ -203,48 +254,38 @@ const styles = StyleSheet.create({
     right: 0,
     bottom: 0,
     alignItems: 'center',
+    backgroundColor: 'transparent',
+  },
+  bar: {
+    backgroundColor: 'transparent',
+    justifyContent: 'flex-end',
+    alignItems: 'center',
+    paddingHorizontal: PILL_MARGIN_H,
+  },
+  pill: {
+    height: BAR_HEIGHT,
+    borderRadius: PILL_RADIUS,
+    borderWidth: StyleSheet.hairlineWidth,
+    overflow: 'hidden',
+    justifyContent: 'center',
+  },
+  indicator: {
+    position: 'absolute',
+    top: INDICATOR_INSET,
+    bottom: INDICATOR_INSET,
+    borderRadius: PILL_RADIUS - INDICATOR_INSET,
   },
   row: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-around',
-    paddingHorizontal: 8,
+    paddingHorizontal: PILL_PADDING_H,
   },
   item: {
     flex: 1,
     height: '100%',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 5,
-  },
-  beam: {
-    position: 'absolute',
-    top: 0,
-    width: 30,
-    height: '78%',
-    alignItems: 'center',
-  },
-  beamGradient: {
-    flex: 1,
-    width: 4,
-    borderRadius: 2,
-    opacity: 0.5,
-  },
-  glow: {
-    position: 'absolute',
-    top: '14%',
-    width: 46,
-    height: 46,
-    borderRadius: 23,
-  },
-  labelWrap: {
-    position: 'absolute',
-    bottom: -2,
-    alignItems: 'center',
-  },
-  label: {
-    fontSize: 9,
-    letterSpacing: 0.4,
   },
 });
 

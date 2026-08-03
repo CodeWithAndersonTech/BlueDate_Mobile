@@ -1,4 +1,4 @@
-import { API_BASE_URL } from '../config/api';
+import { getApiBaseUrl } from '../config/api';
 import { getApiLanguageCode } from './languageHeader';
 
 export type ApiEnvelope = {
@@ -25,16 +25,18 @@ type RequestOptions = {
   token?: string | null;
 };
 
-function buildUrl(path: string, query?: RequestOptions['query']): string {
-  const url = new URL(path.startsWith('http') ? path : `${API_BASE_URL}${path}`);
-  if (query) {
-    Object.entries(query).forEach(([key, value]) => {
-      if (value !== undefined && value !== null && value !== '') {
-        url.searchParams.set(key, String(value));
-      }
-    });
-  }
-  return url.toString();
+function buildUrl(path: string, query?: RequestOptions['query']): Promise<string> {
+  return getApiBaseUrl().then(baseUrl => {
+    const url = new URL(path.startsWith('http') ? path : `${baseUrl}${path}`);
+    if (query) {
+      Object.entries(query).forEach(([key, value]) => {
+        if (value !== undefined && value !== null && value !== '') {
+          url.searchParams.set(key, String(value));
+        }
+      });
+    }
+    return url.toString();
+  });
 }
 
 export async function apiRequest<T>(
@@ -55,11 +57,25 @@ export async function apiRequest<T>(
     headers.Authorization = `Bearer ${token}`;
   }
 
-  const response = await fetch(buildUrl(path, query), {
-    method,
-    headers,
-    body: body === undefined ? undefined : JSON.stringify(body),
-  });
+  let response: Response;
+  try {
+    const url = await buildUrl(path, query);
+    if (__DEV__) {
+      console.log(`[API] ${method} ${url}`);
+    }
+    response = await fetch(url, {
+      method,
+      headers,
+      body: body === undefined ? undefined : JSON.stringify(body),
+    });
+  } catch (error) {
+    const baseUrl = await getApiBaseUrl();
+    const message =
+      error instanceof Error ? error.message : 'Network request failed';
+    throw new ApiError(0, [
+      `Backend'e ulaşılamadı (${baseUrl}). API çalışıyor mu? Mac IP doğru mu? ${message}`,
+    ]);
+  }
 
   let payload: (T & ApiEnvelope) | null = null;
   try {

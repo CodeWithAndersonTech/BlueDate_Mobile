@@ -19,6 +19,8 @@ export type UserProfileResponse = ApiEnvelope & {
   ProfileImage?: string | null;
   Phone?: string | null;
   IsEmailVerified: boolean;
+  /** Onaylı hesap — tüm interest type'lar doldurulmuş. */
+  IsVerified: boolean;
   Interests: UserProfileInterest[];
 };
 
@@ -102,6 +104,14 @@ export function saveUserInterest(
   return apiRequest<SaveUserInterestResponse>(API_PATHS.userInterest, {
     method: 'POST',
     body: payload,
+    token,
+  });
+}
+
+export function deleteUserInterest(id: number, token?: string | null) {
+  return apiRequest<ApiEnvelope>(`${API_PATHS.userInterest}/id`, {
+    method: 'DELETE',
+    query: { id },
     token,
   });
 }

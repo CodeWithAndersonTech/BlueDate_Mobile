@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import { ActivityIndicator, StyleSheet, View } from 'react-native';
+import { Image, StyleSheet, View } from 'react-native';
 import LinearGradient from 'react-native-linear-gradient';
 import Animated, {
   useAnimatedStyle,
@@ -8,7 +8,8 @@ import Animated, {
   withSpring,
   withTiming,
 } from 'react-native-reanimated';
-import { Icon, Typography } from '../../components';
+import { images } from '../../assets';
+import { Typography } from '../../components';
 import { useTheme } from '../../theme';
 
 export function SplashScreen() {
@@ -36,28 +37,18 @@ export function SplashScreen() {
         style={StyleSheet.absoluteFill}
       />
       <View style={styles.center}>
-        <Animated.View style={logoStyle}>
-          <LinearGradient
-            colors={theme.gradients.primary}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-            style={[styles.logo, theme.shadows.glow]}>
-            <Icon name="heart" size={56} color={theme.colors.onPrimary} filled />
-          </LinearGradient>
+        <Animated.View style={[logoStyle, theme.shadows.glow]}>
+          <Image source={images.appLogo} style={styles.logo} />
         </Animated.View>
 
         <Animated.View style={[styles.titleWrap, textStyle]}>
           <Typography variant="display" align="center">
-            BlueDate
+            Meerk
           </Typography>
           <Typography variant="callout" color="textMuted" align="center">
             Yeni bağlantılar burada başlar
           </Typography>
         </Animated.View>
-      </View>
-
-      <View style={styles.footer}>
-        <ActivityIndicator color={theme.colors.primary} />
       </View>
     </View>
   );
@@ -69,12 +60,9 @@ const styles = StyleSheet.create({
   logo: {
     width: 120,
     height: 120,
-    borderRadius: 36,
-    alignItems: 'center',
-    justifyContent: 'center',
+    borderRadius: 28,
   },
   titleWrap: { alignItems: 'center', gap: 6 },
-  footer: { position: 'absolute', bottom: 64 },
 });
 
 export default SplashScreen;

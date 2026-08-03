@@ -16,6 +16,8 @@ export interface IconButtonProps {
   /** Render a circular surface behind the icon. */
   variant?: 'plain' | 'surface' | 'outline';
   disabled?: boolean;
+  /** Screen-reader description — required for icon-only affordances. */
+  accessibilityLabel?: string;
   style?: StyleProp<ViewStyle>;
 }
 
@@ -26,6 +28,7 @@ export function IconButton({
   color,
   variant = 'surface',
   disabled = false,
+  accessibilityLabel,
   style,
 }: IconButtonProps) {
   const theme = useTheme();
@@ -50,7 +53,9 @@ export function IconButton({
       onPressIn={() => (scale.value = withSpring(0.9, { damping: 14, stiffness: 320 }))}
       onPressOut={() => (scale.value = withSpring(1, { damping: 11, stiffness: 260 }))}
       hitSlop={6}
-      accessibilityRole="button">
+      accessibilityRole="button"
+      accessibilityLabel={accessibilityLabel}
+      accessibilityState={{ disabled }}>
       <Animated.View
         style={[
           {

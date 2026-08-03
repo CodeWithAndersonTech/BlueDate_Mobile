@@ -1,7 +1,7 @@
 import {
-  BottomTabBarProps,
-  createBottomTabNavigator,
-} from '@react-navigation/bottom-tabs';
+  createMaterialTopTabNavigator,
+  MaterialTopTabBarProps,
+} from '@react-navigation/material-top-tabs';
 import React from 'react';
 import { PremiumScreen } from '../screens/premium/PremiumScreen';
 import { CustomTabBar } from './CustomTabBar';
@@ -11,25 +11,28 @@ import { NearbyStack } from './NearbyStack';
 import { ProfileStack } from './ProfileStack';
 import { MainTabParamList } from './types';
 
-const Tab = createBottomTabNavigator<MainTabParamList>();
+const Tab = createMaterialTopTabNavigator<MainTabParamList>();
 
-/**
- * React Navigation invokes `tabBar` as a render function (`tabBar(props)`), not
- * as `<TabBar />`. Returning JSX here lets React mount CustomTabBar properly so
- * hooks inside it (useTheme, reanimated, etc.) are valid.
- */
-function renderTabBar(props: BottomTabBarProps) {
+function renderTabBar(props: MaterialTopTabBarProps) {
   return <CustomTabBar {...props} />;
 }
 
 export function MainTabs() {
   return (
     <Tab.Navigator
+      tabBarPosition="bottom"
       tabBar={renderTabBar}
-      screenOptions={{ headerShown: false }}>
+      screenOptions={{
+        // Nested stack screens call useLockTabSwipe() to turn this off,
+        // so edge-swipe pops the stack instead of switching to Premium.
+        swipeEnabled: true,
+        animationEnabled: true,
+        lazy: true,
+        sceneStyle: { backgroundColor: 'transparent' },
+      }}>
       <Tab.Screen name="Home" component={HomeStack} />
-      <Tab.Screen name="Nearby" component={NearbyStack} />
       <Tab.Screen name="Friends" component={FriendsStack} />
+      <Tab.Screen name="Nearby" component={NearbyStack} />
       <Tab.Screen name="Premium" component={PremiumScreen} />
       <Tab.Screen name="Profile" component={ProfileStack} />
     </Tab.Navigator>

@@ -28,7 +28,7 @@ export function EmptyState({
       <View
         style={[
           styles.iconWrap,
-          { backgroundColor: theme.colors.primarySoft, borderRadius: theme.radii.xxl },
+          { backgroundColor: theme.colors.primarySoft, borderRadius: 28 },
         ]}>
         <Icon name={icon} size={34} color={theme.colors.primary} />
       </View>

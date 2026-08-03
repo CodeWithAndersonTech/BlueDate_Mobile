@@ -67,7 +67,9 @@ export function Button({
   const pressed = useSharedValue(0);
   const dims = SIZES[size];
   const isDisabled = disabled || loading;
-  const radius = theme.radii.pill;
+  /** Blocks presses vs. *looks* unavailable — loading is busy, not inactive. */
+  const isInactive = disabled && !loading;
+  const radius = 999;
 
   const animatedStyle = useAnimatedStyle(() => ({
     transform: [{ scale: scale.value }],
@@ -87,14 +89,21 @@ export function Button({
   };
 
   const isSolid = variant === 'primary' || variant === 'danger';
-  const contentColor =
-    variant === 'primary'
-      ? theme.colors.onPrimary
-      : variant === 'danger'
-      ? theme.colors.white
-      : variant === 'outline' || variant === 'ghost'
-      ? theme.colors.primary
-      : theme.colors.text;
+  /**
+   * Disabled buttons get their own muted surface rather than a faded accent.
+   * Dimming the gradient alone made the CTA read as invisible on dark
+   * backgrounds while still looking tappable. A button that is merely busy
+   * keeps its normal look so the loading state stays recognisable.
+   */
+  const contentColor = isInactive
+    ? theme.colors.textMuted
+    : variant === 'primary'
+    ? theme.colors.onPrimary
+    : variant === 'danger'
+    ? theme.colors.white
+    : variant === 'outline' || variant === 'ghost'
+    ? theme.colors.primary
+    : theme.colors.text;
 
   const softGlow: ViewStyle = {
     shadowColor: theme.colors.primary,
@@ -111,9 +120,7 @@ export function Button({
       : theme.shadows.sm;
 
   const shell: ViewStyle = {
-    width: fullWidth ? '100%' : undefined,
     minWidth,
-    height: dims.height,
     borderRadius: radius,
     overflow: 'hidden',
     alignItems: 'center',
@@ -121,8 +128,15 @@ export function Button({
     paddingHorizontal: dims.paddingH,
   };
 
-  const fillStyle =
-    variant === 'secondary'
+  const disabledFill: ViewStyle = {
+    backgroundColor: theme.colors.surfaceAlt,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+  };
+
+  const fillStyle = isInactive
+    ? disabledFill
+    : variant === 'secondary'
       ? {
           backgroundColor: theme.colors.surfaceAlt,
           borderWidth: 1,
@@ -147,20 +161,22 @@ export function Button({
       onPressOut={onPressOut}
       disabled={isDisabled}
       accessibilityRole="button"
-      accessibilityState={{ disabled: isDisabled }}
-      style={[fullWidth && styles.fullWidth, style]}>
+      accessibilityState={{ disabled: isDisabled, busy: loading }}
+      // Height lives on Pressable so flex parents never collapse the CTA to 0.
+      style={[
+        { height: dims.height },
+        fullWidth ? styles.fullWidth : styles.intrinsic,
+        style,
+      ]}>
       <Animated.View
         style={[
-          {
-            borderRadius: radius,
-            alignSelf: fullWidth ? 'stretch' : 'flex-start',
-            opacity: isDisabled ? 0.5 : 1,
-          },
-          !isDisabled && shadow,
+          styles.surface,
+          { borderRadius: radius },
+          !isInactive && shadow,
           animatedStyle,
         ]}>
-        <View style={shell}>
-          {variant === 'primary' ? (
+        <View style={[shell, styles.shellFill]}>
+          {variant === 'primary' && !isInactive ? (
             <LinearGradient
               colors={theme.gradients.primary}
               start={{ x: 0, y: 0.5 }}
@@ -171,7 +187,7 @@ export function Button({
             <View style={[styles.fill, fillStyle]} />
           )}
 
-          {isSolid && (
+          {isSolid && !isInactive && (
             <Animated.View
               style={[
                 styles.fill,
@@ -211,7 +227,16 @@ export function Button({
 }
 
 const styles = StyleSheet.create({
-  fullWidth: { alignSelf: 'stretch' },
+  fullWidth: { alignSelf: 'stretch', width: '100%' },
+  intrinsic: { alignSelf: 'flex-start' },
+  surface: {
+    flex: 1,
+    alignSelf: 'stretch',
+  },
+  shellFill: {
+    flex: 1,
+    width: '100%',
+  },
   labelRow: {
     flexDirection: 'row',
     alignItems: 'center',

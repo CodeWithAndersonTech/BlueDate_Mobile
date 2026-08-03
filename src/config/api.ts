@@ -1,13 +1,74 @@
 import { Platform } from 'react-native';
+import { isEmulator } from 'react-native-device-info';
 
 /**
- * Dev API host.
- * Backend launch profile binds to localhost — iOS Simulator must use localhost.
- * Android emulator reaches the host machine via 10.0.2.2.
+ * true  = Cloudflare HTTPS (TestFlight / gerçek cihaz)
+ * false = lokal debug (simulator / aynı Wi‑Fi)
+ *
+ * TestFlight öncesi: quick-tunnel.sh çalıştır → USE_PRODUCTION = true yap.
  */
-const DEV_HOST = Platform.OS === 'android' ? '10.42.7.32' : 'localhost';
+const USE_PRODUCTION = false;
 
-export const API_BASE_URL = `http://${DEV_HOST}:5135`;
+/**
+ * Cloudflare QUICK tunnel URL — her tunnel açılışında değişir.
+ * Terminal: AD_BlueDateApp/deploy/quick-tunnel.sh  (bu satırı otomatik günceller)
+ */
+const PROD_API_URL = 'https://intensive-hardly-win-sectors.trycloudflare.com';
+
+/** Lokal debug (USE_PRODUCTION = false) */
+const DEV_PORT = 5135;
+
+/**
+ * Mac'in Wi‑Fi IP'si — fiziksel telefon/tablet için gerekli.
+ * Terminal: ipconfig getifaddr en0
+ */
+const DEV_MAC_HOST = '10.40.7.54';
+
+let resolvedDevUrl: string | null = null;
+
+function resolveDevHost(emulator: boolean): string {
+  if (Platform.OS === 'android') {
+    return emulator ? '10.0.2.2' : DEV_MAC_HOST;
+  }
+
+  if (Platform.OS === 'ios') {
+    return emulator ? '127.0.0.1' : DEV_MAC_HOST;
+  }
+
+  return DEV_MAC_HOST;
+}
+
+/**
+ * Simulator/emülatör ve fiziksel cihaz için doğru host'u seçer.
+ * Backend'in tüm arayüzlerde dinlemesi gerekir:
+ *   dotnet run --urls "http://0.0.0.0:5135"
+ */
+export async function getApiBaseUrl(): Promise<string> {
+  if (USE_PRODUCTION) {
+    return PROD_API_URL;
+  }
+
+  if (resolvedDevUrl) {
+    return resolvedDevUrl;
+  }
+
+  const emulator = await isEmulator();
+  const host = resolveDevHost(emulator);
+  resolvedDevUrl = `http://${host}:${DEV_PORT}`;
+
+  if (__DEV__) {
+    console.log(
+      `[API] ${emulator ? 'simulator/emulator' : 'physical device'} → ${resolvedDevUrl}`,
+    );
+  }
+
+  return resolvedDevUrl;
+}
+
+/** @deprecated Use getApiBaseUrl() — kept for quick imports in dev tools */
+export const API_BASE_URL = USE_PRODUCTION
+  ? PROD_API_URL
+  : `http://${Platform.OS === 'android' ? '10.0.2.2' : '127.0.0.1'}:${DEV_PORT}`;
 
 export const API_PATHS = {
   bootstrapDevice: '/api/UserDevice/bootstrap',

@@ -19,10 +19,8 @@ describe('theme system', () => {
     });
   });
 
-  it('exposes spacing, radii and typography tokens', () => {
+  it('exposes typography tokens', () => {
     const theme = buildTheme('dark', 'cosmic');
-    expect(theme.spacing.base).toBe(16);
-    expect(theme.radii.pill).toBeGreaterThan(100);
     expect(theme.typography.variants.h1.fontSize).toBeGreaterThan(0);
   });
 });

@@ -10,41 +10,27 @@ import {
   Icon,
   IconName,
   Screen,
-  SectionHeader,
   Typography,
 } from '../../components';
+import { useTabBarClearance } from '../../navigation/CustomTabBar';
 import { useTheme } from '../../theme';
-import { TAB_BAR_SPACE, premiumPerks, premiumPlans } from '../../utils';
+import { premiumPerks, premiumPlans } from '../../utils';
 
-const GOLD: [string, string] = ['#FFD200', '#F7971E'];
-const ON_GOLD = '#3A2A00';
-
-const HERO_HIGHLIGHTS: { icon: IconName; label: string }[] = [
-  { icon: 'zap', label: 'Sınırsız\nbeğeni' },
-  { icon: 'eye', label: 'Seni kim\ngördü' },
-  { icon: 'sparkles', label: 'Reklamsız\ndeneyim' },
-];
+const GOLD: [string, string] = ['#F5D76E', '#E8A838'];
+const ON_GOLD = '#2C2100';
 
 export function PremiumScreen() {
   const theme = useTheme();
+  const tabClearance = useTabBarClearance(24);
   const [plan, setPlan] = useState(
     premiumPlans.find(p => p.popular)?.id ?? premiumPlans[0].id,
   );
+  const active = premiumPlans.find(p => p.id === plan) ?? premiumPlans[0];
 
-  const activePlan = premiumPlans.find(p => p.id === plan) ?? premiumPlans[0];
-
-  const ctaScale = useSharedValue(1);
+  const scale = useSharedValue(1);
   const ctaStyle = useAnimatedStyle(() => ({
-    transform: [{ scale: ctaScale.value }],
+    transform: [{ scale: scale.value }],
   }));
-
-  const goldGlow = {
-    shadowColor: '#F7971E',
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: theme.isDark ? 0.4 : 0.28,
-    shadowRadius: 14,
-    elevation: 8,
-  };
 
   return (
     <Screen edges={['top']}>
@@ -52,81 +38,50 @@ export function PremiumScreen() {
         showsVerticalScrollIndicator={false}
         contentContainerStyle={[
           styles.content,
-          { paddingBottom: TAB_BAR_SPACE + 210 },
+          { paddingBottom: tabClearance + 88 },
         ]}>
-        {/* ---------------------------------------------------------------- HERO */}
-        <View style={[styles.heroWrap, goldGlow]}>
-          <View style={styles.hero}>
-            <LinearGradient
-              colors={GOLD}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 1 }}
-              style={StyleSheet.absoluteFill}
-            />
-            {/* decorative translucent blobs */}
-            <View style={[styles.blob, styles.blobOne]} />
-            <View style={[styles.blob, styles.blobTwo]} />
-
-            <View style={styles.crown}>
-              <Icon name="crown" size={26} color={ON_GOLD} filled />
+        {/* Hero */}
+        <View style={[styles.hero, theme.shadows.md]}>
+          <LinearGradient colors={GOLD} style={StyleSheet.absoluteFill} />
+          <View style={styles.heroInner}>
+            <View style={styles.crownWrap}>
+              <Icon name="crown" size={28} color={ON_GOLD} filled />
             </View>
-
-            <Typography variant="h1" tint={ON_GOLD} style={styles.heroTitle}>
-              BlueDate{'\n'}Premium
+            <Typography variant="h1" tint={ON_GOLD}>
+              Meerk Premium
             </Typography>
-            <Typography variant="callout" tint={ON_GOLD} style={styles.heroDesc}>
-              Sınırları kaldır, seni kimlerin beğendiğini gör ve
-              yakındakilerde öne çık.
+            <Typography variant="callout" tint="rgba(44,33,0,0.72)">
+              Sınırsız beğeni, kimler gördü ve öne çıkma.
             </Typography>
-
-            <View style={styles.freePill}>
-              <Icon name="sparkles" size={13} color={ON_GOLD} />
+            <View style={styles.trialPill}>
+              <Icon name="sparkles" size={12} color={ON_GOLD} />
               <Typography variant="caption" tint={ON_GOLD} weight="700">
-                İlk 7 gün ücretsiz dene
+                İlk 7 gün ücretsiz
               </Typography>
             </View>
           </View>
         </View>
 
-        {/* -------------------------------------------------------- HIGHLIGHTS */}
-        <View style={styles.highlights}>
-          {HERO_HIGHLIGHTS.map(h => (
-            <View
-              key={h.label}
-              style={[
-                styles.highlightChip,
-                {
-                  backgroundColor: theme.colors.card,
-                  borderColor: theme.colors.border,
-                  borderRadius: theme.radii.lg,
-                },
-              ]}>
-              <View style={styles.highlightIcon}>
-                <Icon name={h.icon} size={16} color="#F7971E" filled />
-              </View>
-              <Typography variant="caption" weight="600" align="center">
-                {h.label}
-              </Typography>
-            </View>
-          ))}
-        </View>
-
-        {/* --------------------------------------------------------------- PLANS */}
+        {/* Plans */}
         <View style={styles.section}>
-          <SectionHeader title="Paketini seç" />
+          <Typography variant="title">Paketi seç</Typography>
           <View style={styles.plans}>
             {premiumPlans.map(p => {
               const selected = p.id === plan;
-              const inner = (
-                <View
+              return (
+                <Pressable
+                  key={p.id}
+                  onPress={() => setPlan(p.id)}
                   style={[
-                    styles.planInner,
+                    styles.plan,
                     {
-                      backgroundColor: selected
-                        ? theme.colors.cardElevated
-                        : theme.colors.card,
-                      borderRadius: theme.radii.xl - (selected ? 2 : 0),
+                      backgroundColor: theme.colors.card,
+                      borderColor: selected
+                        ? theme.colors.primary
+                        : theme.colors.border,
+                      borderWidth: selected ? 2 : StyleSheet.hairlineWidth,
                     },
+                    selected && theme.shadows.sm,
                   ]}>
                   <View style={styles.planLeft}>
                     <View
@@ -134,27 +89,34 @@ export function PremiumScreen() {
                         styles.radio,
                         {
                           borderColor: selected
-                            ? '#F7971E'
+                            ? theme.colors.primary
                             : theme.colors.borderStrong,
-                          backgroundColor: selected ? '#F7971E' : 'transparent',
+                          backgroundColor: selected
+                            ? theme.colors.primary
+                            : 'transparent',
                         },
                       ]}>
                       {selected && (
                         <Icon
                           name="check"
-                          size={13}
-                          color={ON_GOLD}
+                          size={12}
+                          color={theme.colors.onPrimary}
                           strokeWidth={3}
                         />
                       )}
                     </View>
-                    <View style={styles.planMeta}>
+                    <View>
                       <View style={styles.planNameRow}>
-                        <Typography variant="title">{p.name}</Typography>
+                        <Typography variant="bodyStrong">{p.name}</Typography>
                         {p.popular && (
-                          <View style={styles.popularPill}>
-                            <Icon name="star" size={10} color={ON_GOLD} filled />
-                            <Typography variant="overline" tint={ON_GOLD}>
+                          <View
+                            style={[
+                              styles.pop,
+                              { backgroundColor: theme.colors.primarySoft },
+                            ]}>
+                            <Typography
+                              variant="overline"
+                              tint={theme.colors.primary}>
                               Popüler
                             </Typography>
                           </View>
@@ -165,88 +127,47 @@ export function PremiumScreen() {
                       </Typography>
                     </View>
                   </View>
-
                   <View style={styles.planRight}>
-                    <View style={styles.priceRow}>
-                      <Typography variant="h3">{p.price}</Typography>
-                      <Typography variant="caption" color="textMuted">
-                        {p.period}
+                    <Typography variant="h3">{p.price}</Typography>
+                    <Typography variant="caption" color="textMuted">
+                      {p.period}
+                    </Typography>
+                    {p.highlight ? (
+                      <Typography variant="overline" tint={theme.colors.success}>
+                        {p.highlight}
                       </Typography>
-                    </View>
-                    {p.highlight && (
-                      <View
-                        style={[
-                          styles.savePill,
-                          { backgroundColor: 'rgba(34,197,94,0.16)' },
-                        ]}>
-                        <Typography variant="overline" tint={theme.colors.success}>
-                          {p.highlight}
-                        </Typography>
-                      </View>
-                    )}
+                    ) : null}
                   </View>
-                </View>
-              );
-
-              return (
-                <Pressable key={p.id} onPress={() => setPlan(p.id)}>
-                  {selected ? (
-                    <LinearGradient
-                      colors={GOLD}
-                      start={{ x: 0, y: 0 }}
-                      end={{ x: 1, y: 1 }}
-                      style={[
-                        styles.planBorder,
-                        { borderRadius: theme.radii.xl },
-                        goldGlow,
-                      ]}>
-                      {inner}
-                    </LinearGradient>
-                  ) : (
-                    <View
-                      style={[
-                        styles.planOutline,
-                        {
-                          borderRadius: theme.radii.xl,
-                          borderColor: theme.colors.border,
-                        },
-                      ]}>
-                      {inner}
-                    </View>
-                  )}
                 </Pressable>
               );
             })}
           </View>
         </View>
 
-        {/* --------------------------------------------------------------- PERKS */}
+        {/* Perks */}
         <View style={styles.section}>
-          <SectionHeader title="Premium avantajları" />
+          <Typography variant="title">Neler dahil?</Typography>
           <View style={styles.perks}>
             {premiumPerks.map(perk => (
               <View
                 key={perk.id}
                 style={[
-                  styles.perkCard,
-                  {
-                    backgroundColor: theme.colors.card,
-                    borderColor: theme.colors.border,
-                    borderRadius: theme.radii.xl,
-                  },
+                  styles.perk,
+                  { backgroundColor: theme.colors.card },
+                  theme.shadows.sm,
                 ]}>
-                <LinearGradient
-                  colors={GOLD}
-                  start={{ x: 0, y: 0 }}
-                  end={{ x: 1, y: 1 }}
-                  style={styles.perkIcon}>
+                <View
+                  style={[
+                    styles.perkIcon,
+                    { backgroundColor: theme.colors.primarySoft },
+                  ]}>
                   <Icon
                     name={perk.icon as IconName}
-                    size={19}
-                    color={ON_GOLD}
+                    size={18}
+                    color={theme.colors.primary}
                     filled
                   />
-                </LinearGradient>
+                </View>
                 <Typography variant="bodyStrong">{perk.title}</Typography>
                 <Typography variant="caption" color="textMuted">
                   {perk.description}
@@ -257,231 +178,138 @@ export function PremiumScreen() {
         </View>
       </ScrollView>
 
-      {/* ------------------------------------------------------------- STICKY CTA */}
+      {/* Sticky CTA above floating tab */}
       <View
         style={[
-          styles.purchaseBar,
+          styles.footer,
           {
-            bottom: TAB_BAR_SPACE - 26,
-            paddingBottom: 28,
+            bottom: tabClearance - 8,
+            paddingBottom: 12,
             backgroundColor: theme.colors.background,
             borderTopColor: theme.colors.border,
           },
         ]}>
-        <View style={styles.summaryRow}>
-          <View>
+        <View style={styles.footerSummary}>
+          <Typography variant="caption" color="textMuted">
+            {active.name}
+          </Typography>
+          <Typography variant="title">
+            {active.price}
             <Typography variant="caption" color="textMuted">
-              {activePlan.name} plan
+              {' '}
+              {active.period}
             </Typography>
-            <View style={styles.summaryPriceRow}>
-              <Typography variant="h3">{activePlan.price}</Typography>
-              <Typography variant="caption" color="textMuted">
-                {activePlan.period}
-              </Typography>
-            </View>
-          </View>
-          {activePlan.perMonth && (
-            <View
-              style={[
-                styles.summaryBadge,
-                { backgroundColor: theme.colors.surfaceAlt },
-              ]}>
-              <Typography variant="overline" tint={theme.colors.textSecondary}>
-                {activePlan.perMonth}
-              </Typography>
-            </View>
-          )}
+          </Typography>
         </View>
-
         <Pressable
-          onPressIn={() =>
-            (ctaScale.value = withSpring(0.97, { damping: 16, stiffness: 320 }))
-          }
-          onPressOut={() =>
-            (ctaScale.value = withSpring(1, { damping: 12, stiffness: 260 }))
-          }
+          onPressIn={() => {
+            scale.value = withSpring(0.97, { damping: 16, stiffness: 320 });
+          }}
+          onPressOut={() => {
+            scale.value = withSpring(1, { damping: 14, stiffness: 260 });
+          }}
           onPress={() => {}}>
-          <Animated.View style={[ctaStyle, goldGlow]}>
-            <LinearGradient
-              colors={GOLD}
-              start={{ x: 0, y: 0.5 }}
-              end={{ x: 1, y: 0.5 }}
-              style={styles.cta}>
-              <Icon name="crown" size={20} color={ON_GOLD} filled />
+          <Animated.View style={[ctaStyle, theme.shadows.md]}>
+            <LinearGradient colors={GOLD} style={styles.cta}>
+              <Icon name="crown" size={18} color={ON_GOLD} filled />
               <Typography variant="button" tint={ON_GOLD}>
-                Premium’a Yükselt
+                Premium’a yükselt
               </Typography>
             </LinearGradient>
           </Animated.View>
         </Pressable>
-
-        <Typography
-          variant="caption"
-          color="textMuted"
-          align="center"
-          style={styles.cancelNote}>
-          İstediğin zaman iptal et · Otomatik yenilenir
-        </Typography>
       </View>
     </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  content: { paddingHorizontal: 20, paddingTop: 20, gap: 24 },
-
-  /* hero */
-  heroWrap: { borderRadius: 28 },
-  hero: {
-    borderRadius: 28,
-    padding: 22,
-    overflow: 'hidden',
-  },
-  blob: {
-    position: 'absolute',
-    borderRadius: 999,
-    backgroundColor: 'rgba(255,255,255,0.18)',
-  },
-  blobOne: { width: 160, height: 160, top: -60, right: -40 },
-  blobTwo: { width: 110, height: 110, bottom: -40, left: -20 },
-  crown: {
+  content: { paddingHorizontal: 20, paddingTop: 8, gap: 28 },
+  hero: { borderRadius: 24, overflow: 'hidden' },
+  heroInner: { padding: 24, gap: 10 },
+  crownWrap: {
     width: 52,
     height: 52,
-    borderRadius: 18,
+    borderRadius: 16,
+    backgroundColor: 'rgba(255,255,255,0.4)',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: 'rgba(255,255,255,0.35)',
-    marginBottom: 18,
+    marginBottom: 4,
   },
-  freePill: {
+  trialPill: {
     alignSelf: 'flex-start',
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    marginTop: 16,
-    paddingVertical: 7,
-    paddingHorizontal: 13,
+    marginTop: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
     borderRadius: 999,
-    backgroundColor: 'rgba(255,255,255,0.4)',
+    backgroundColor: 'rgba(255,255,255,0.45)',
   },
-  heroTitle: { letterSpacing: 0.3 },
-  heroDesc: { marginTop: 8, opacity: 0.82, maxWidth: 300 },
-
-  /* highlights */
-  highlights: { flexDirection: 'row', gap: 10 },
-  highlightChip: {
-    flex: 1,
-    alignItems: 'center',
-    gap: 8,
-    paddingVertical: 16,
-    paddingHorizontal: 8,
-    borderWidth: 1,
-  },
-  highlightIcon: {
-    width: 38,
-    height: 38,
-    borderRadius: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: 'rgba(247,151,30,0.14)',
-  },
-
-  /* sections */
   section: { gap: 14 },
-
-  /* plans */
-  plans: { gap: 12 },
-  planBorder: { padding: 2 },
-  planOutline: { borderWidth: 1 },
-  planInner: {
+  plans: { gap: 10 },
+  plan: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     padding: 16,
+    borderRadius: 20,
   },
-  planLeft: { flexDirection: 'row', alignItems: 'center', gap: 14, flex: 1 },
-  planMeta: { gap: 3, flex: 1 },
+  planLeft: { flexDirection: 'row', alignItems: 'center', gap: 12, flex: 1 },
   radio: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
+    width: 22,
+    height: 22,
+    borderRadius: 11,
     borderWidth: 2,
     alignItems: 'center',
     justifyContent: 'center',
   },
   planNameRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  popularPill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    paddingVertical: 3,
+  pop: {
     paddingHorizontal: 8,
-    borderRadius: 999,
-    backgroundColor: '#FFD200',
-  },
-  planRight: { alignItems: 'flex-end', gap: 6 },
-  priceRow: { flexDirection: 'row', alignItems: 'flex-end', gap: 3 },
-  savePill: {
     paddingVertical: 3,
-    paddingHorizontal: 8,
     borderRadius: 999,
   },
-
-  /* perks */
+  planRight: { alignItems: 'flex-end', gap: 2 },
   perks: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     justifyContent: 'space-between',
     rowGap: 12,
   },
-  perkCard: {
+  perk: {
     width: '48.5%',
-    gap: 7,
-    minHeight: 138,
+    borderRadius: 20,
     padding: 16,
-    borderWidth: 1,
+    gap: 8,
+    minHeight: 140,
   },
   perkIcon: {
     width: 40,
     height: 40,
-    borderRadius: 13,
+    borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 4,
   },
-
-  /* sticky cta */
-  purchaseBar: {
+  footer: {
     position: 'absolute',
     left: 0,
     right: 0,
     bottom: 0,
     paddingHorizontal: 20,
-    paddingTop: 14,
-    borderTopWidth: 1,
-    gap: 12,
+    paddingTop: 12,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    gap: 10,
   },
-  summaryRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  summaryPriceRow: { flexDirection: 'row', alignItems: 'flex-end', gap: 4 },
-  summaryBadge: {
-    paddingVertical: 6,
-    paddingHorizontal: 12,
-    borderRadius: 999,
-  },
+  footerSummary: { gap: 2 },
   cta: {
-    height: 56,
+    height: 54,
     borderRadius: 999,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 8,
-  },
-  cancelNote: {
-    marginBottom: 6,
   },
 });
 

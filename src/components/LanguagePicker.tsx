@@ -45,7 +45,7 @@ export function LanguagePicker({
                   backgroundColor: selected
                     ? theme.colors.primarySoft ?? theme.colors.surfaceAlt
                     : theme.colors.surfaceAlt,
-                  borderRadius: theme.radii.md,
+                  borderRadius: 16,
                 },
               ]}>
               <Typography

@@ -2,12 +2,13 @@ import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import React, { useMemo, useState } from 'react';
 import {
   Alert,
+  Image,
   Pressable,
   ScrollView,
   StyleSheet,
   View,
 } from 'react-native';
-import LinearGradient from 'react-native-linear-gradient';
+import { images } from '../../assets';
 import {
   Button,
   Divider,
@@ -103,13 +104,7 @@ export function LoginScreen({ navigation }: Props) {
         keyboardDismissMode="interactive"
         automaticallyAdjustKeyboardInsets>
         <View style={styles.header}>
-          <LinearGradient
-            colors={theme.gradients.primary}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-            style={[styles.logo, theme.shadows.glow]}>
-            <Icon name="heart" size={30} color={theme.colors.onPrimary} filled />
-          </LinearGradient>
+          <Image source={images.appLogo} style={[styles.logo, theme.shadows.glow]} />
           <Typography variant="h1">{t('auth.login_title')}</Typography>
           <Typography variant="body" color="textMuted">
             {t('auth.login_subtitle')}
@@ -165,7 +160,7 @@ export function LoginScreen({ navigation }: Props) {
                 {
                   backgroundColor: theme.colors.surface,
                   borderColor: theme.colors.border,
-                  borderRadius: theme.radii.lg,
+                  borderRadius: 20,
                 },
               ]}>
               <Icon name={s.icon} size={22} color={theme.colors.text} />
@@ -204,11 +199,9 @@ const styles = StyleSheet.create({
   content: { flexGrow: 1, paddingTop: 12, paddingBottom: 24, gap: 16 },
   header: { alignItems: 'center', gap: 8, marginBottom: 8, marginTop: 28 },
   logo: {
-    width: 64,
-    height: 64,
+    width: 72,
+    height: 72,
     borderRadius: 20,
-    alignItems: 'center',
-    justifyContent: 'center',
     marginBottom: 8,
   },
   form: { gap: 16 },

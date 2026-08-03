@@ -8,12 +8,16 @@ import { Typography } from './Typography';
 export interface HeaderAction {
   icon: IconName;
   onPress: () => void;
+  /** Screen-reader description for this icon-only action. */
+  accessibilityLabel?: string;
 }
 
 export interface HeaderProps {
   title?: string;
   subtitle?: string;
   onBack?: () => void;
+  /** Screen-reader description for the back affordance. */
+  backAccessibilityLabel?: string;
   actions?: HeaderAction[];
   /** Large screen title style (left-aligned, bold). */
   large?: boolean;
@@ -24,6 +28,7 @@ export function Header({
   title,
   subtitle,
   onBack,
+  backAccessibilityLabel,
   actions = [],
   large = false,
   style,
@@ -32,7 +37,7 @@ export function Header({
 
   if (large) {
     return (
-      <View style={[styles.largeContainer, { paddingHorizontal: theme.spacing.lg }, style]}>
+      <View style={[styles.largeContainer, { paddingHorizontal: 24 }, style]}>
         <View style={styles.largeText}>
           {subtitle && (
             <Typography variant="overline" color="primary">
@@ -43,7 +48,12 @@ export function Header({
         </View>
         <View style={styles.actions}>
           {actions.map((a, i) => (
-            <IconButton key={`${a.icon}-${i}`} name={a.icon} onPress={a.onPress} />
+            <IconButton
+              key={`${a.icon}-${i}`}
+              name={a.icon}
+              onPress={a.onPress}
+              accessibilityLabel={a.accessibilityLabel}
+            />
           ))}
         </View>
       </View>
@@ -51,9 +61,16 @@ export function Header({
   }
 
   return (
-    <View style={[styles.container, { paddingHorizontal: theme.spacing.base }, style]}>
+    <View style={[styles.container, { paddingHorizontal: 16 }, style]}>
       <View style={styles.side}>
-        {onBack && <IconButton name="arrow-left" variant="surface" onPress={onBack} />}
+        {onBack && (
+          <IconButton
+            name="arrow-left"
+            variant="surface"
+            onPress={onBack}
+            accessibilityLabel={backAccessibilityLabel}
+          />
+        )}
       </View>
       <View style={styles.center}>
         {title && (
@@ -69,7 +86,12 @@ export function Header({
       </View>
       <View style={[styles.side, styles.right]}>
         {actions.map((a, i) => (
-          <IconButton key={`${a.icon}-${i}`} name={a.icon} onPress={a.onPress} />
+          <IconButton
+            key={`${a.icon}-${i}`}
+            name={a.icon}
+            onPress={a.onPress}
+            accessibilityLabel={a.accessibilityLabel}
+          />
         ))}
       </View>
     </View>

@@ -41,17 +41,17 @@ export function Card({
     padding === 'none'
       ? 0
       : padding === 'sm'
-      ? theme.spacing.md
+      ? 12
       : padding === 'lg'
-      ? theme.spacing.xl
-      : theme.spacing.base;
+      ? 32
+      : 16;
 
   const animatedStyle = useAnimatedStyle(() => ({
     transform: [{ scale: scale.value }],
   }));
 
   const baseStyle: ViewStyle = {
-    borderRadius: theme.radii.xl,
+    borderRadius: 24,
     padding: paddingValue,
     overflow: 'hidden',
   };
@@ -60,10 +60,14 @@ export function Card({
     variant === 'elevated'
       ? { backgroundColor: theme.colors.cardElevated, ...theme.shadows.md }
       : variant === 'outline'
-      ? { backgroundColor: theme.colors.transparent, borderWidth: 1, borderColor: theme.colors.border }
+      ? {
+          backgroundColor: theme.colors.transparent,
+          borderWidth: StyleSheet.hairlineWidth,
+          borderColor: theme.colors.border,
+        }
       : variant === 'glass'
-      ? { backgroundColor: theme.colors.card, borderWidth: 1, borderColor: theme.colors.border }
-      : { backgroundColor: theme.colors.card };
+      ? { backgroundColor: theme.colors.card, ...theme.shadows.sm }
+      : { backgroundColor: theme.colors.card, ...theme.shadows.sm };
 
   const content =
     variant === 'glass' ? (

@@ -77,7 +77,7 @@ export function LanguageFlagButton({
               {
                 backgroundColor: theme.colors.surface,
                 borderColor: theme.colors.border,
-                borderRadius: theme.radii.lg,
+                borderRadius: 20,
               },
               theme.shadows.sm,
             ]}>

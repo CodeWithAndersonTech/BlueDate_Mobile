@@ -10,15 +10,41 @@ import { ProfileStackParamList } from './types';
 
 const Stack = createNativeStackNavigator<ProfileStackParamList>();
 
+const nestedOptions = {
+  gestureEnabled: true,
+  fullScreenGestureEnabled: true,
+  animation: 'slide_from_right' as const,
+};
+
 export function ProfileStack() {
   return (
     <Stack.Navigator screenOptions={{ headerShown: false }}>
       <Stack.Screen name="ProfileMain" component={ProfileScreen} />
-      <Stack.Screen name="EditProfile" component={EditProfileScreen} />
-      <Stack.Screen name="Settings" component={SettingsScreen} />
-      <Stack.Screen name="FriendsList" component={FriendsListScreen} />
-      <Stack.Screen name="Filter" component={FilterScreen} />
-      <Stack.Screen name="UserProfile" component={UserProfileScreen} />
+      <Stack.Screen
+        name="EditProfile"
+        component={EditProfileScreen}
+        options={nestedOptions}
+      />
+      <Stack.Screen
+        name="Settings"
+        component={SettingsScreen}
+        options={nestedOptions}
+      />
+      <Stack.Screen
+        name="FriendsList"
+        component={FriendsListScreen}
+        options={nestedOptions}
+      />
+      <Stack.Screen
+        name="Filter"
+        component={FilterScreen}
+        options={nestedOptions}
+      />
+      <Stack.Screen
+        name="UserProfile"
+        component={UserProfileScreen}
+        options={nestedOptions}
+      />
     </Stack.Navigator>
   );
 }

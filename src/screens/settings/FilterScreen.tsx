@@ -1,6 +1,7 @@
 import { useNavigation } from '@react-navigation/native';
 import React, { useState } from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   Button,
   Card,
@@ -13,7 +14,7 @@ import {
   Typography,
 } from '../../components';
 import { useTheme } from '../../theme';
-import { TAB_BAR_SPACE } from '../../utils';
+import { useLockTabSwipe } from '../../navigation/useLockTabSwipe';
 
 const AGE_MIN = 18;
 const AGE_MAX = 65;
@@ -35,8 +36,10 @@ const SHOW_ME: VisibilityOption[] = [
 ];
 
 export function FilterScreen() {
+  useLockTabSwipe();
   const navigation = useNavigation();
   const theme = useTheme();
+  const insets = useSafeAreaInsets();
 
   const [age, setAge] = useState({ low: 20, high: 40 });
   const [showMe, setShowMe] = useState<string[]>(['women']);
@@ -73,7 +76,10 @@ export function FilterScreen() {
       />
       <ScrollView
         showsVerticalScrollIndicator={false}
-        contentContainerStyle={styles.content}>
+        contentContainerStyle={[
+          styles.content,
+          { paddingBottom: Math.max(insets.bottom, 16) + 24 },
+        ]}>
         {/* Age range */}
         <View style={styles.section}>
           <SectionHeader title="Yaş aralığı" />
@@ -171,7 +177,6 @@ export function FilterScreen() {
 const styles = StyleSheet.create({
   content: {
     paddingHorizontal: 20,
-    paddingBottom: TAB_BAR_SPACE + 24,
     gap: 24,
     paddingTop: 8,
   },

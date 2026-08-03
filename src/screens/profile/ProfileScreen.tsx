@@ -1,57 +1,92 @@
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
-  Alert,
+  Image,
   Pressable,
   RefreshControl,
   ScrollView,
+  StatusBar,
   StyleSheet,
+  Text,
   View,
 } from 'react-native';
-import LinearGradient from 'react-native-linear-gradient';
-import { useFocusEffect } from '@react-navigation/native';
+import Animated, {
+  Easing,
+  useAnimatedStyle,
+  useSharedValue,
+  withTiming,
+} from 'react-native-reanimated';
 import {
-  Avatar,
-  BioEditModal,
-  Button,
-  Card,
-  Chip,
-  Icon,
-  IconButton,
-  Loading,
-  SectionHeader,
-  StatItem,
-  Typography,
-  UserListItem,
-} from '../../components';
-import { Screen } from '../../components';
+  SafeAreaView,
+} from 'react-native-safe-area-context';
+import { useFocusEffect } from '@react-navigation/native';
 import {
   getInterestTypes,
   getUserProfile,
-  updateUserBio,
+  InterestTypeItem,
   UserProfileResponse,
 } from '../../api';
 import { useLocale } from '../../i18n';
 import { useAuth } from '../../navigation/AuthContext';
+import { useTabBarClearance } from '../../navigation/CustomTabBar';
 import { ProfileStackParamList } from '../../navigation/types';
 import { useTheme } from '../../theme';
-import { TAB_BAR_SPACE, friends } from '../../utils';
+import { ProfileSkeleton } from './ProfileSkeleton';
 
 type Props = NativeStackScreenProps<ProfileStackParamList, 'ProfileMain'>;
 
+const AVATAR_SIZE = 86;
+const TILE_WIDTH = '48%';
+const TILE_HEIGHT = 100;
+
+const INTEREST_EMOJI: { match: RegExp; emoji: string }[] = [
+  { match: /food|yemek|yeme/i, emoji: '🍽' },
+  { match: /dessert|tatlı|tatl/i, emoji: '🍰' },
+  { match: /coffee|kahve/i, emoji: '☕' },
+  { match: /drink|beverage|alcohol|alkol|içecek|icecek/i, emoji: '🥤' },
+  { match: /music|müzik|muzik/i, emoji: '🎵' },
+  { match: /travel|gezi|seyahat/i, emoji: '✈' },
+  { match: /fitness|sport|spor/i, emoji: '🏋' },
+  { match: /game|oyun/i, emoji: '🎮' },
+  { match: /book|kitap/i, emoji: '📚' },
+  { match: /movie|film|sinema/i, emoji: '🎬' },
+  { match: /art|sanat/i, emoji: '🎨' },
+  { match: /nature|doğa|doga/i, emoji: '🌿' },
+];
+
+function initialsFromName(name: string) {
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return '?';
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+  return `${parts[0][0]}${parts[1][0]}`.toUpperCase();
+}
+
+function interestEmoji(type: InterestTypeItem): string {
+  const hay = `${type.Code ?? ''} ${type.Name ?? ''} ${type.KeyName ?? ''}`;
+  for (const item of INTEREST_EMOJI) {
+    if (item.match.test(hay)) return item.emoji;
+  }
+  return '✨';
+}
+
 export function ProfileScreen({ navigation }: Props) {
   const theme = useTheme();
+  // Floating pill tab bar + one interest-tile row of breathing room.
+  const bottomPad = useTabBarClearance(TILE_HEIGHT);
   const { t } = useLocale();
   const { userId, accessToken } = useAuth();
+
   const [profile, setProfile] = useState<UserProfileResponse | null>(null);
-  const [interestTypeCount, setInterestTypeCount] = useState(0);
+  const [interestTypes, setInterestTypes] = useState<InterestTypeItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [bioModalOpen, setBioModalOpen] = useState(false);
-  const [savingBio, setSavingBio] = useState(false);
+  const [verifyTipOpen, setVerifyTipOpen] = useState(false);
+  const contentOpacity = useSharedValue(0);
+  const profileRef = useRef<UserProfileResponse | null>(null);
+  profileRef.current = profile;
 
-  const onlineFriends = friends.filter(f => f.online).slice(0, 4);
+  const closeVerifyTip = () => setVerifyTipOpen(false);
 
   const loadProfile = useCallback(
     async (isRefresh = false) => {
@@ -60,10 +95,10 @@ export function ProfileScreen({ navigation }: Props) {
         setLoading(false);
         return;
       }
-
+      // Keep existing content on re-focus; skeleton only when we have nothing yet.
       if (isRefresh) {
         setRefreshing(true);
-      } else {
+      } else if (!profileRef.current) {
         setLoading(true);
       }
       setError(null);
@@ -73,10 +108,12 @@ export function ProfileScreen({ navigation }: Props) {
           getUserProfile(userId, accessToken),
           getInterestTypes(accessToken).catch(() => null),
         ]);
-
         setProfile(profileResponse);
-        setInterestTypeCount(
-          interestTypesResponse?.GetAllInterestTypeQueryCommonObject?.length ?? 0,
+        setInterestTypes(
+          [
+            ...(interestTypesResponse?.GetAllInterestTypeQueryCommonObject ??
+              []),
+          ].sort((a, b) => (a.SortOrder ?? 0) - (b.SortOrder ?? 0)),
         );
       } catch (err) {
         setError(err instanceof Error ? err.message : t('profile.load_failed'));
@@ -94,6 +131,21 @@ export function ProfileScreen({ navigation }: Props) {
     }, [loadProfile]),
   );
 
+  useEffect(() => {
+    if (!loading && profile) {
+      contentOpacity.value = withTiming(1, {
+        duration: 280,
+        easing: Easing.out(Easing.quad),
+      });
+    } else if (loading && !profile) {
+      contentOpacity.value = 0;
+    }
+  }, [loading, profile, contentOpacity]);
+
+  const contentFadeStyle = useAnimatedStyle(() => ({
+    opacity: contentOpacity.value,
+  }));
+
   const fullName = profile
     ? `${profile.FirstName} ${profile.LastName}`.trim()
     : '';
@@ -101,73 +153,71 @@ export function ProfileScreen({ navigation }: Props) {
   const hasBio = bio.length > 0;
   const interests = profile?.Interests ?? [];
   const hasInterests = interests.length > 0;
+  const isVerified =
+    interestTypes.length > 0 &&
+    interestTypes.every(type =>
+      interests.some(
+        item =>
+          Number(item.InterestTypeId) === Number(type.Id) &&
+          (item.Value ?? '').trim().length > 0,
+      ),
+    );
 
-  const onSaveBio = async (nextBio: string) => {
-    if (!userId) {
-      Alert.alert(t('profile.bio'), t('profile.session_missing'));
-      return;
-    }
+  const shell = (children: React.ReactNode) => (
+    <SafeAreaView
+      edges={['top']}
+      style={[styles.root, { backgroundColor: theme.colors.background }]}>
+      <StatusBar
+        barStyle={theme.isDark ? 'light-content' : 'dark-content'}
+        backgroundColor="transparent"
+        translucent
+      />
+      {children}
+    </SafeAreaView>
+  );
 
-    setSavingBio(true);
-    try {
-      const response = await updateUserBio(
-        { UserId: userId, Bio: nextBio },
-        accessToken,
-      );
-      setProfile(prev =>
-        prev
-          ? {
-              ...prev,
-              Bio: response.Bio,
-            }
-          : prev,
-      );
-      setBioModalOpen(false);
-    } catch (err) {
-      Alert.alert(
-        t('profile.bio'),
-        err instanceof Error ? err.message : t('profile.bio_save_failed'),
-      );
-    } finally {
-      setSavingBio(false);
-    }
-  };
+  const showSkeleton = loading && !profile;
 
-  if (loading && !profile) {
-    return (
-      <Screen edges={['top']}>
-        <Loading message={t('profile.loading')} />
-      </Screen>
+  if (showSkeleton) {
+    return shell(
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={{ flexGrow: 1 }}
+        scrollEnabled={false}>
+        <ProfileSkeleton />
+      </ScrollView>,
     );
   }
 
   if (error && !profile) {
-    return (
-      <Screen edges={['top']}>
-        <View style={styles.centerState}>
-          <Typography variant="body" color="danger" align="center">
-            {error}
-          </Typography>
-          <Button
-            label={t('profile.retry')}
-            size="sm"
-            fullWidth={false}
-            onPress={() => loadProfile()}
-          />
-        </View>
-      </Screen>
+    return shell(
+      <View style={styles.center}>
+        <Text style={[styles.errorText, { color: theme.colors.danger }]}>
+          {error}
+        </Text>
+        <Pressable
+          onPress={() => loadProfile()}
+          style={[styles.retryBtn, { backgroundColor: theme.colors.primary }]}>
+          <Text style={[styles.retryLabel, { color: theme.colors.onPrimary }]}>
+            {t('profile.retry')}
+          </Text>
+        </Pressable>
+      </View>,
     );
   }
 
   if (!profile) {
-    return <Screen edges={['top']} />;
+    return shell(<View />);
   }
 
-  return (
-    <Screen edges={['top']}>
+  return shell(
+    <Animated.View style={[styles.flex, contentFadeStyle]}>
       <ScrollView
         showsVerticalScrollIndicator={false}
-        contentContainerStyle={{ paddingBottom: TAB_BAR_SPACE }}
+        contentContainerStyle={{ paddingBottom: bottomPad }}
+        onScrollBeginDrag={closeVerifyTip}
+        scrollEventThrottle={16}
+        keyboardShouldPersistTaps="handled"
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
@@ -175,246 +225,717 @@ export function ProfileScreen({ navigation }: Props) {
             tintColor={theme.colors.primary}
           />
         }>
-        <View style={styles.coverWrap}>
-          <LinearGradient
-            colors={theme.gradients.primary}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-            style={styles.cover}
-          />
-          <View style={styles.coverActions}>
-            <IconButton
-              name="settings"
-              color="#fff"
-              variant="plain"
-              onPress={() => navigation.navigate('Settings')}
+        <View style={styles.header}>
+          {verifyTipOpen ? (
+            <Pressable
+              style={styles.verifyTipDismiss}
+              onPress={closeVerifyTip}
+              accessibilityRole="button"
+              accessibilityLabel={t('common.close')}
             />
+          ) : null}
+          <View style={styles.headerActions}>
+            <Pressable
+              onPress={() => {
+                closeVerifyTip();
+                navigation.navigate('EditProfile');
+              }}
+              hitSlop={8}
+              accessibilityRole="button"
+              accessibilityLabel={t('profile.edit')}
+              style={[
+                styles.headerActionBtn,
+                { backgroundColor: theme.colors.surfaceAlt },
+              ]}>
+              <Text
+                style={[styles.headerActionGlyph, { color: theme.colors.text }]}>
+                ✎
+              </Text>
+            </Pressable>
+            <Pressable
+              onPress={() => {
+                closeVerifyTip();
+                navigation.navigate('Settings');
+              }}
+              hitSlop={8}
+              accessibilityRole="button"
+              accessibilityLabel="Settings"
+              style={[
+                styles.headerActionBtn,
+                { backgroundColor: theme.colors.surfaceAlt },
+              ]}>
+              <Text
+                style={[styles.headerActionGlyph, { color: theme.colors.text }]}>
+                ⚙
+              </Text>
+            </Pressable>
+          </View>
+
+          <View style={styles.headerTop}>
+            <View style={styles.avatarRing}>
+              {profile.ProfileImage ? (
+                <Image
+                  source={{ uri: profile.ProfileImage }}
+                  style={[
+                    styles.avatar,
+                    { borderColor: theme.colors.border },
+                  ]}
+                />
+              ) : (
+                <View
+                  style={[
+                    styles.avatar,
+                    styles.avatarFallback,
+                    {
+                      backgroundColor: theme.colors.primarySoft,
+                      borderColor: theme.colors.border,
+                    },
+                  ]}>
+                  <Text
+                    style={[
+                      styles.avatarInitials,
+                      { color: theme.colors.primary },
+                    ]}>
+                    {initialsFromName(fullName)}
+                  </Text>
+                </View>
+              )}
+              <View
+                style={[
+                  styles.onlineDot,
+                  {
+                    backgroundColor: theme.colors.online,
+                    borderColor: theme.colors.background,
+                  },
+                ]}
+              />
+            </View>
+
+            <View style={styles.statsRow}>
+              <View style={styles.statItem}>
+                <Text style={[styles.statValue, { color: theme.colors.text }]}>
+                  0
+                </Text>
+                <Text
+                  style={[styles.statLabel, { color: theme.colors.textMuted }]}>
+                  {t('profile.stat_friends')}
+                </Text>
+              </View>
+              <View style={styles.statItem}>
+                <Text style={[styles.statValue, { color: theme.colors.text }]}>
+                  0
+                </Text>
+                <Text
+                  style={[styles.statLabel, { color: theme.colors.textMuted }]}>
+                  {t('profile.stat_likes')}
+                </Text>
+              </View>
+              <View style={styles.statItem}>
+                <Text style={[styles.statValue, { color: theme.colors.text }]}>
+                  0
+                </Text>
+                <Text
+                  style={[styles.statLabel, { color: theme.colors.textMuted }]}>
+                  {t('profile.stat_visits')}
+                </Text>
+              </View>
+            </View>
+          </View>
+
+          <View style={styles.nameBlock}>
+            <View style={styles.nameAnchor}>
+              <Text
+                style={[styles.name, { color: theme.colors.text }]}
+                numberOfLines={1}>
+                {fullName}
+              </Text>
+              {isVerified ? (
+                <View
+                  style={[
+                    styles.verifiedDot,
+                    { backgroundColor: theme.colors.primary },
+                  ]}>
+                  <Text
+                    style={[
+                      styles.verifiedDotGlyph,
+                      { color: theme.colors.onPrimary },
+                    ]}>
+                    ✓
+                  </Text>
+                </View>
+              ) : null}
+            </View>
+            <View style={styles.usernameRow}>
+              <Text
+                style={[styles.username, { color: theme.colors.textMuted }]}
+                numberOfLines={1}>
+                @{profile.Username}
+              </Text>
+              {!isVerified ? (
+                <View style={styles.notVerifiedWrap}>
+                  <Pressable
+                    onPress={() => setVerifyTipOpen(open => !open)}
+                    hitSlop={10}
+                    accessibilityRole="button"
+                    accessibilityLabel={t('profile.not_verified')}
+                    accessibilityState={{ expanded: verifyTipOpen }}
+                    style={styles.notVerifiedChip}>
+                    <Text
+                      style={[
+                        styles.notVerifiedIcon,
+                        { color: theme.colors.danger },
+                      ]}>
+                      ⓘ
+                    </Text>
+                    <Text
+                      style={[
+                        styles.notVerifiedLabel,
+                        { color: theme.colors.danger },
+                      ]}>
+                      {t('profile.not_verified')}
+                    </Text>
+                  </Pressable>
+
+                  {verifyTipOpen ? (
+                    <View
+                      style={[
+                        styles.verifyTip,
+                        {
+                          backgroundColor: theme.colors.card,
+                          borderColor: theme.colors.danger,
+                        },
+                        theme.shadows.sm,
+                      ]}>
+                      <View
+                        style={[
+                          styles.verifyTipCaret,
+                          {
+                            backgroundColor: theme.colors.card,
+                            borderColor: theme.colors.danger,
+                          },
+                        ]}
+                      />
+                      <Text
+                        style={[
+                          styles.verifyTipText,
+                          { color: theme.colors.text },
+                        ]}>
+                        {t('profile.verify_requires_interests')}
+                      </Text>
+                      <Pressable
+                        onPress={() => {
+                          closeVerifyTip();
+                          navigation.navigate('EditProfile');
+                        }}
+                        hitSlop={8}
+                        style={styles.verifyTipAction}>
+                        <Text
+                          style={[
+                            styles.verifyTipActionLabel,
+                            { color: theme.colors.danger },
+                          ]}>
+                          {t('profile.edit')}
+                        </Text>
+                      </Pressable>
+                    </View>
+                  ) : null}
+                </View>
+              ) : null}
+            </View>
           </View>
         </View>
 
-        <View style={styles.body}>
-          <View style={styles.avatarRow}>
-                <Avatar
-                  uri={profile.ProfileImage ?? undefined}
-                  name={fullName}
-                  size="xxl"
-                  style={styles.avatar}
-                />
-                <View style={styles.editBtn}>
-                  <Button
-                    label={t('profile.edit')}
-                    size="sm"
-                    variant="secondary"
-                    leftIcon="edit"
-                    fullWidth={false}
-                    onPress={() => navigation.navigate('EditProfile')}
-                  />
-                </View>
+        <View
+          style={styles.body}
+          onStartShouldSetResponder={() => {
+            if (verifyTipOpen) {
+              closeVerifyTip();
+            }
+            return false;
+          }}>
+          <Text
+            style={[styles.bioFieldLabel, { color: theme.colors.textMuted }]}>
+            {t('profile.bio')}
+          </Text>
+          {hasBio ? (
+            <Pressable
+              onPress={() => navigation.navigate('EditProfile')}
+              style={[
+                styles.bioField,
+                {
+                  backgroundColor: theme.colors.card,
+                  borderColor: theme.colors.border,
+                },
+              ]}>
+              <Text style={[styles.bio, { color: theme.colors.text }]}>
+                {bio}
+              </Text>
+            </Pressable>
+          ) : (
+            <Pressable
+              onPress={() => navigation.navigate('EditProfile')}
+              style={[
+                styles.bioField,
+                styles.bioFieldEmpty,
+                {
+                  backgroundColor: theme.colors.surfaceAlt,
+                  borderColor: theme.colors.borderStrong,
+                },
+              ]}>
+              <Text
+                style={[styles.bioPlaceholder, { color: theme.colors.textMuted }]}>
+                {t('profile.add_bio_desc')}
+              </Text>
+            </Pressable>
+          )}
+
+          <View style={styles.section}>
+            <View style={styles.sectionHead}>
+              <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>
+                {t('profile.interests')}
+              </Text>
+            </View>
+
+            {interestTypes.length > 0 ? (
+              <View style={styles.tileGrid}>
+                {interestTypes.map(type => {
+                  const existing = interests.find(
+                    item =>
+                      Number(item.InterestTypeId) === Number(type.Id) ||
+                      item.InterestTypeName === type.Name,
+                  );
+                  const value = existing?.Value?.trim() ?? '';
+                  const selected = value.length > 0;
+                  return (
+                    <Pressable
+                      key={type.Id}
+                      onPress={() => navigation.navigate('EditProfile')}
+                      accessibilityRole="button"
+                      accessibilityLabel={`${type.Name}: ${
+                        selected ? value : t('edit.add_interest')
+                      }`}
+                      style={styles.tileWrap}>
+                      <View
+                        style={[
+                          styles.tile,
+                          {
+                            backgroundColor: selected
+                              ? theme.colors.primarySoft
+                              : theme.colors.card,
+                            borderColor: selected
+                              ? theme.colors.primary
+                              : theme.colors.border,
+                          },
+                          theme.shadows.sm,
+                        ]}>
+                        <View style={styles.tileTop}>
+                          <View
+                            style={[
+                              styles.emojiBadge,
+                              {
+                                backgroundColor: selected
+                                  ? theme.colors.primary
+                                  : theme.colors.surfaceAlt,
+                              },
+                            ]}>
+                            <Text style={styles.emojiText}>
+                              {interestEmoji(type)}
+                            </Text>
+                          </View>
+                          {selected ? (
+                            <View
+                              style={[
+                                styles.checkDot,
+                                { backgroundColor: theme.colors.primary },
+                              ]}>
+                              <Text
+                                style={[
+                                  styles.checkGlyph,
+                                  { color: theme.colors.onPrimary },
+                                ]}>
+                                ✓
+                              </Text>
+                            </View>
+                          ) : (
+                            <Text
+                              style={[
+                                styles.plusGlyph,
+                                { color: theme.colors.textMuted },
+                              ]}>
+                              +
+                            </Text>
+                          )}
+                        </View>
+                        <Text
+                          style={[
+                            styles.tileTitle,
+                            { color: theme.colors.textMuted },
+                          ]}
+                          numberOfLines={1}
+                          ellipsizeMode="tail">
+                          {type.Name}
+                        </Text>
+                        <Text
+                          style={[
+                            styles.tileValue,
+                            {
+                              color: selected
+                                ? theme.colors.text
+                                : theme.colors.textMuted,
+                            },
+                          ]}
+                          numberOfLines={1}
+                          ellipsizeMode="tail">
+                          {selected ? value : t('edit.add_interest')}
+                        </Text>
+                      </View>
+                    </Pressable>
+                  );
+                })}
               </View>
-
-              <View style={styles.nameRow}>
-                <Typography variant="h2">{fullName}</Typography>
-                {profile.IsEmailVerified && (
-                  <Icon name="check" size={18} color={theme.colors.info} strokeWidth={3} />
-                )}
-              </View>
-              <View style={styles.metaRow}>
-                <Typography variant="callout" color="textMuted">
-                  @{profile.Username}
-                </Typography>
-              </View>
-
-              {hasBio ? (
-                <Pressable onPress={() => setBioModalOpen(true)} style={styles.bioWrap}>
-                  <Typography variant="body" color="textSecondary" style={styles.bio}>
-                    {bio}
-                  </Typography>
-                  <View style={styles.bioEditRow}>
-                    <Icon name="edit" size={14} color={theme.colors.primary} />
-                    <Typography variant="caption" tint={theme.colors.primary}>
-                      {t('profile.edit_action')}
-                    </Typography>
-                  </View>
-                </Pressable>
-              ) : (
-                <Pressable
-                  onPress={() => setBioModalOpen(true)}
-                  style={[
-                    styles.promptCard,
-                    {
-                      backgroundColor: theme.colors.primarySoft,
-                      borderColor: theme.colors.primary,
-                    },
-                  ]}>
-                  <Icon name="edit" size={18} color={theme.colors.primary} />
-                  <View style={styles.promptText}>
-                    <Typography variant="bodyStrong" tint={theme.colors.primary}>
-                      {t('profile.add_bio')}
-                    </Typography>
-                    <Typography variant="caption" color="textMuted">
-                      {t('profile.add_bio_desc')}
-                    </Typography>
-                  </View>
-                  <Icon name="chevron-right" size={18} color={theme.colors.primary} />
-                </Pressable>
-              )}
-
-              <Card variant="surface" style={styles.statsCard}>
-                <StatItem value={0} label={t('profile.stat_friends')} />
-                <View style={[styles.statSep, { backgroundColor: theme.colors.border }]} />
-                <StatItem value={0} label={t('profile.stat_likes')} />
-                <View style={[styles.statSep, { backgroundColor: theme.colors.border }]} />
-                <StatItem value={0} label={t('profile.stat_visits')} />
-              </Card>
-
-              <View style={styles.section}>
-                <SectionHeader
-                  title={t('profile.interests')}
-                  actionLabel={hasInterests ? t('profile.edit_action') : undefined}
-                  onAction={
-                    hasInterests ? () => navigation.navigate('EditProfile') : undefined
-                  }
-                />
-                {hasInterests ? (
-                  <View style={styles.interests}>
-                    {interests.map(item => (
-                      <Chip
-                        key={item.Id}
-                        label={
-                          item.InterestTypeName
-                            ? `${item.InterestTypeName}: ${item.Value}`
-                            : item.Value
-                        }
-                      />
-                    ))}
-                  </View>
-                ) : (
+            ) : hasInterests ? (
+              <View style={styles.tileGrid}>
+                {interests.map(item => (
                   <Pressable
+                    key={item.Id}
                     onPress={() => navigation.navigate('EditProfile')}
-                    style={[
-                      styles.promptCard,
-                      {
-                        backgroundColor: theme.colors.surfaceAlt,
-                        borderColor: theme.colors.borderStrong,
-                      },
-                    ]}>
-                    <Icon name="sparkles" size={18} color={theme.colors.primary} />
-                    <View style={styles.promptText}>
-                      <Typography variant="bodyStrong">
-                        {t('profile.add_interests')}
-                      </Typography>
-                      <Typography variant="caption" color="textMuted">
-                        {interestTypeCount > 0
-                          ? `${interestTypeCount} ${t('profile.categories_ready')}`
-                          : t('profile.interests_empty')}
-                      </Typography>
+                    style={styles.tileWrap}>
+                    <View
+                      style={[
+                        styles.tile,
+                        {
+                          backgroundColor: theme.colors.primarySoft,
+                          borderColor: theme.colors.primary,
+                        },
+                        theme.shadows.sm,
+                      ]}>
+                      <View style={styles.tileTop}>
+                        <View
+                          style={[
+                            styles.emojiBadge,
+                            { backgroundColor: theme.colors.primary },
+                          ]}>
+                          <Text style={styles.emojiText}>✨</Text>
+                        </View>
+                        <View
+                          style={[
+                            styles.checkDot,
+                            { backgroundColor: theme.colors.primary },
+                          ]}>
+                          <Text
+                            style={[
+                              styles.checkGlyph,
+                              { color: theme.colors.onPrimary },
+                            ]}>
+                            ✓
+                          </Text>
+                        </View>
+                      </View>
+                      <Text
+                        style={[
+                          styles.tileTitle,
+                          { color: theme.colors.textMuted },
+                        ]}
+                        numberOfLines={1}>
+                        {item.InterestTypeName || t('profile.interests')}
+                      </Text>
+                      <Text
+                        style={[
+                          styles.tileValue,
+                          { color: theme.colors.text },
+                        ]}
+                        numberOfLines={1}>
+                        {item.Value}
+                      </Text>
                     </View>
-                    <Icon name="chevron-right" size={18} color={theme.colors.textMuted} />
                   </Pressable>
-                )}
+                ))}
               </View>
-
-              <View style={styles.section}>
-                <SectionHeader
-                  title={t('profile.friends')}
-                  actionLabel={t('profile.see_all')}
-                  onAction={() => navigation.navigate('FriendsList')}
-                />
-                <Card variant="surface" padding="sm">
-                  {onlineFriends.map((f, i) => (
-                    <View key={f.id}>
-                      <UserListItem
-                        name={f.name}
-                        subtitle={
-                          f.online
-                            ? t('profile.online')
-                            : (f.lastActive ?? t('profile.offline'))
-                        }
-                        avatarUri={f.avatar}
-                        online={f.online}
-                        premium={f.premium}
-                        right={
-                          <Icon name="chevron-right" size={20} color={theme.colors.textMuted} />
-                        }
-                        onPress={() =>
-                          navigation.navigate('UserProfile', { userId: f.id })
-                        }
-                      />
-                      {i < onlineFriends.length - 1 && (
-                        <View style={[styles.sep, { backgroundColor: theme.colors.border }]} />
-                      )}
-                    </View>
-                  ))}
-                </Card>
-              </View>
+            ) : (
+              <Pressable
+                onPress={() => navigation.navigate('EditProfile')}
+                style={[
+                  styles.promptCard,
+                  {
+                    backgroundColor: theme.colors.surfaceAlt,
+                    borderColor: theme.colors.borderStrong,
+                    marginTop: 0,
+                  },
+                ]}>
+                <View style={styles.promptText}>
+                  <Text
+                    style={[styles.promptTitle, { color: theme.colors.text }]}>
+                    {t('profile.add_interests')}
+                  </Text>
+                  <Text
+                    style={[
+                      styles.promptDesc,
+                      { color: theme.colors.textMuted },
+                    ]}>
+                    {t('profile.interests_empty')}
+                  </Text>
+                </View>
+                <Text
+                  style={{ color: theme.colors.textMuted, fontSize: 18 }}>
+                  ›
+                </Text>
+              </Pressable>
+            )}
+          </View>
         </View>
       </ScrollView>
-
-      <BioEditModal
-        visible={bioModalOpen}
-        initialBio={bio}
-        saving={savingBio}
-        onClose={() => {
-          if (!savingBio) {
-            setBioModalOpen(false);
-          }
-        }}
-        onSave={onSaveBio}
-      />
-    </Screen>
+    </Animated.View>,
   );
 }
 
 const styles = StyleSheet.create({
-  coverWrap: { height: 160 },
-  cover: { flex: 1 },
-  coverActions: {
+  root: { flex: 1 },
+  flex: { flex: 1 },
+  center: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 32,
+    gap: 14,
+  },
+  muted: { fontSize: 14, textAlign: 'center' },
+  errorText: { fontSize: 15, textAlign: 'center', lineHeight: 22 },
+  retryBtn: {
+    height: 44,
+    paddingHorizontal: 20,
+    borderRadius: 999,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  retryLabel: { fontSize: 15, fontWeight: '700' },
+  header: {
+    position: 'relative',
+    paddingHorizontal: 16,
+    paddingTop: 40,
+    paddingBottom: 12,
+    gap: 12,
+    overflow: 'visible',
+    zIndex: 2,
+  },
+  headerTop: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  avatarRing: {
+    width: AVATAR_SIZE,
+    height: AVATAR_SIZE,
+    position: 'relative',
+  },
+  avatar: {
+    width: AVATAR_SIZE,
+    height: AVATAR_SIZE,
+    borderRadius: AVATAR_SIZE / 2,
+    borderWidth: 1.5,
+  },
+  avatarFallback: { alignItems: 'center', justifyContent: 'center' },
+  avatarInitials: { fontSize: 26, fontWeight: '700' },
+  onlineDot: {
     position: 'absolute',
-    top: 8,
-    right: 16,
-    flexDirection: 'row',
+    right: 2,
+    bottom: 4,
+    width: 14,
+    height: 14,
+    borderRadius: 7,
+    borderWidth: 2.5,
   },
-  body: { paddingHorizontal: 20, marginTop: -52 },
-  avatarRow: {
+  statsRow: {
+    flex: 1,
     flexDirection: 'row',
-    alignItems: 'flex-end',
-    justifyContent: 'space-between',
+    alignItems: 'center',
+    justifyContent: 'space-around',
   },
-  avatar: {},
-  editBtn: { marginBottom: 8 },
-  nameRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 12 },
-  metaRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 4 },
-  bioWrap: { marginTop: 12, gap: 8 },
-  bio: { lineHeight: 22 },
-  bioEditRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  headerActions: {
+    position: 'absolute',
+    top: 2,
+    right: 12,
+    zIndex: 2,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  headerActionBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  headerActionGlyph: { fontSize: 16, fontWeight: '600' },
+  nameBlock: {
+    gap: 2,
+    paddingRight: 8,
+    overflow: 'visible',
+    zIndex: 3,
+  },
+  nameAnchor: {
+    position: 'relative',
+    alignSelf: 'flex-start',
+    maxWidth: '92%',
+  },
+  name: {
+    fontSize: 18,
+    fontWeight: '700',
+    letterSpacing: -0.2,
+  },
+  verifiedDot: {
+    position: 'absolute',
+    left: '100%',
+    marginLeft: 6,
+    top: 1,
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  verifiedDotGlyph: { fontSize: 10, fontWeight: '700' },
+  usernameRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginTop: 2,
+    zIndex: 4,
+    overflow: 'visible',
+  },
+  username: { fontSize: 14 },
+  notVerifiedWrap: {
+    position: 'relative',
+    zIndex: 5,
+  },
+  notVerifiedChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+  },
+  notVerifiedIcon: { fontSize: 12, fontWeight: '600' },
+  notVerifiedLabel: { fontSize: 11, fontWeight: '600' },
+  verifyTipDismiss: {
+    ...StyleSheet.absoluteFillObject,
+    zIndex: 1,
+  },
+  verifyTipCaret: {
+    position: 'absolute',
+    top: -5,
+    left: 16,
+    width: 10,
+    height: 10,
+    borderLeftWidth: 1,
+    borderTopWidth: 1,
+    transform: [{ rotate: '45deg' }],
+    zIndex: 2,
+  },
+  verifyTip: {
+    position: 'absolute',
+    top: '100%',
+    left: 0,
+    marginTop: 8,
+    width: 220,
+    borderRadius: 12,
+    borderWidth: 1,
+    paddingHorizontal: 12,
+    paddingTop: 12,
+    paddingBottom: 10,
+    gap: 8,
+    zIndex: 6,
+    elevation: 12,
+  },
+  verifyTipText: { fontSize: 12, lineHeight: 17 },
+  verifyTipAction: { alignSelf: 'flex-start' },
+  verifyTipActionLabel: { fontSize: 12, fontWeight: '700' },
+  body: { paddingHorizontal: 16, paddingTop: 4 },
+  bioFieldLabel: {
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 1.1,
+    textTransform: 'uppercase',
+    marginBottom: 8,
+  },
+  bioField: {
+    minHeight: 88,
+    borderRadius: 14,
+    borderWidth: 1,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+  },
+  bioFieldEmpty: {
+    borderStyle: 'dashed',
+    justifyContent: 'center',
+  },
+  bio: { fontSize: 15, lineHeight: 22 },
+  bioPlaceholder: { fontSize: 14, lineHeight: 20 },
   promptCard: {
-    marginTop: 14,
+    marginTop: 4,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
     paddingVertical: 14,
     paddingHorizontal: 14,
-    borderRadius: 16,
+    borderRadius: 18,
     borderWidth: 1,
     borderStyle: 'dashed',
   },
   promptText: { flex: 1, gap: 2 },
-  statsCard: {
+  promptTitle: { fontSize: 15, fontWeight: '600' },
+  promptDesc: { fontSize: 12, lineHeight: 16 },
+  statItem: { alignItems: 'center', gap: 2, flex: 1 },
+  statValue: { fontSize: 18, fontWeight: '700' },
+  statLabel: { fontSize: 11 },
+  section: { marginTop: 22, gap: 12 },
+  sectionHead: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-around',
-    marginTop: 18,
+    justifyContent: 'space-between',
+    gap: 12,
   },
-  statSep: { width: 1, height: 32 },
-  section: { marginTop: 24, gap: 14 },
-  interests: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  sep: { height: 1, marginLeft: 52 },
-  centerState: {
-    marginTop: 48,
+  sectionTitle: { fontSize: 18, fontWeight: '700', flexShrink: 1 },
+  tileGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+    rowGap: 10,
+  },
+  tileWrap: { width: TILE_WIDTH, height: TILE_HEIGHT },
+  tile: {
+    flex: 1,
+    height: TILE_HEIGHT,
+    borderRadius: 16,
+    borderWidth: 1,
+    paddingHorizontal: 10,
+    paddingVertical: 10,
+    overflow: 'hidden',
+  },
+  tileTop: {
+    flexDirection: 'row',
     alignItems: 'center',
-    gap: 14,
-    paddingHorizontal: 24,
+    justifyContent: 'space-between',
+    marginBottom: 6,
   },
+  emojiBadge: {
+    width: 28,
+    height: 28,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  emojiText: { fontSize: 14 },
+  checkDot: {
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  checkGlyph: { fontSize: 11, fontWeight: '700' },
+  plusGlyph: { fontSize: 18, fontWeight: '500' },
+  tileTitle: { fontSize: 11, lineHeight: 14, marginBottom: 2 },
+  tileValue: { fontSize: 13, lineHeight: 16, fontWeight: '600' },
 });
 
 export default ProfileScreen;

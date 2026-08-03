@@ -12,7 +12,7 @@ export interface DividerProps {
 
 export function Divider({ label, spacing, style }: DividerProps) {
   const theme = useTheme();
-  const marginVertical = spacing ?? theme.spacing.base;
+  const marginVertical = spacing ?? 16;
 
   if (!label) {
     return (

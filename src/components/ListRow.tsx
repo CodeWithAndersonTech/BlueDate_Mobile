@@ -38,14 +38,14 @@ export function ListRow({
   const titleColor = destructive ? theme.colors.danger : theme.colors.text;
 
   const content = (
-    <View style={[styles.row, { paddingVertical: theme.spacing.md }, style]}>
+    <View style={[styles.row, { paddingVertical: 12 }, style]}>
       {icon && (
         <View
           style={[
             styles.iconChip,
             {
               backgroundColor: iconBackground ?? theme.colors.surfaceAlt,
-              borderRadius: theme.radii.md,
+              borderRadius: 16,
             },
           ]}>
           <Icon name={icon} size={20} color={iconColor ?? theme.colors.primary} />

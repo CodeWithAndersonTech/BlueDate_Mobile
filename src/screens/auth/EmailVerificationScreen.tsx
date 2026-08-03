@@ -180,7 +180,7 @@ export function EmailVerificationScreen({ navigation, route }: Props) {
                     backgroundColor: theme.colors.surfaceAlt,
                     borderColor: error ? theme.colors.danger : focusedBorder,
                     color: theme.colors.text,
-                    borderRadius: theme.radii.md,
+                    borderRadius: 16,
                   },
                 ]}
               />

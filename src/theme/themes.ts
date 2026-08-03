@@ -9,8 +9,6 @@ import {
   neutrals,
   statusColors,
 } from './palette';
-import { radii } from './radii';
-import { spacing } from './spacing';
 import { typography } from './typography';
 
 export interface ThemeColors {
@@ -75,15 +73,13 @@ export interface Theme {
   isDark: boolean;
   colors: ThemeColors;
   gradients: ThemeGradients;
-  spacing: typeof spacing;
-  radii: typeof radii;
   typography: typeof typography;
   shadows: ThemeShadows;
 }
 
 function buildShadows(mode: ColorMode, accent: AccentDefinition): ThemeShadows {
-  const shadowColor = mode === 'dark' ? '#000000' : '#1B1F3B';
-  const baseOpacity = mode === 'dark' ? 0.45 : 0.12;
+  const shadowColor = mode === 'dark' ? '#000000' : '#0A0A0F';
+  const baseOpacity = mode === 'dark' ? 0.35 : 0.08;
 
   return {
     none: {
@@ -97,29 +93,29 @@ function buildShadows(mode: ColorMode, accent: AccentDefinition): ThemeShadows {
       shadowColor,
       shadowOffset: { width: 0, height: 2 },
       shadowOpacity: baseOpacity,
-      shadowRadius: 6,
-      elevation: 3,
+      shadowRadius: 8,
+      elevation: 2,
     },
     md: {
       shadowColor,
-      shadowOffset: { width: 0, height: 8 },
+      shadowOffset: { width: 0, height: 6 },
       shadowOpacity: baseOpacity + 0.04,
       shadowRadius: 16,
-      elevation: 8,
+      elevation: 5,
     },
     lg: {
       shadowColor,
-      shadowOffset: { width: 0, height: 16 },
-      shadowOpacity: baseOpacity + 0.08,
-      shadowRadius: 28,
-      elevation: 16,
+      shadowOffset: { width: 0, height: 12 },
+      shadowOpacity: baseOpacity + 0.06,
+      shadowRadius: 24,
+      elevation: 10,
     },
     glow: {
       shadowColor: accent.primary,
       shadowOffset: { width: 0, height: 8 },
-      shadowOpacity: Platform.OS === 'ios' ? 0.6 : 0.9,
-      shadowRadius: 20,
-      elevation: 12,
+      shadowOpacity: Platform.OS === 'ios' ? 0.35 : 0.45,
+      shadowRadius: 18,
+      elevation: 8,
     },
   };
 }
@@ -165,8 +161,6 @@ export function buildTheme(mode: ColorMode, accentKey: AccentKey): Theme {
     isDark: mode === 'dark',
     colors,
     gradients,
-    spacing,
-    radii,
     typography,
     shadows: buildShadows(mode, accent),
   };

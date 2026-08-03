@@ -12,7 +12,13 @@ export interface ChipProps {
   style?: StyleProp<ViewStyle>;
 }
 
-export function Chip({ label, selected = false, icon, onPress, style }: ChipProps) {
+export function Chip({
+  label,
+  selected = false,
+  icon,
+  onPress,
+  style,
+}: ChipProps) {
   const theme = useTheme();
 
   return (
@@ -23,25 +29,26 @@ export function Chip({ label, selected = false, icon, onPress, style }: ChipProp
           flexDirection: 'row',
           alignItems: 'center',
           gap: 6,
-          paddingVertical: 8,
-          paddingHorizontal: 14,
-          borderRadius: theme.radii.pill,
-          borderWidth: 1,
-          backgroundColor: selected ? theme.colors.primarySoft : theme.colors.surface,
-          borderColor: selected ? theme.colors.primary : theme.colors.border,
+          paddingVertical: 10,
+          paddingHorizontal: 16,
+          borderRadius: 999,
+          backgroundColor: selected
+            ? theme.colors.primary
+            : theme.colors.surfaceAlt,
         },
         style,
       ]}>
       {icon && (
         <Icon
           name={icon}
-          size={15}
-          color={selected ? theme.colors.primary : theme.colors.textSecondary}
+          size={14}
+          color={selected ? theme.colors.onPrimary : theme.colors.textSecondary}
         />
       )}
       <Typography
         variant="callout"
-        tint={selected ? theme.colors.primary : theme.colors.textSecondary}>
+        weight="600"
+        tint={selected ? theme.colors.onPrimary : theme.colors.textSecondary}>
         {label}
       </Typography>
     </Pressable>

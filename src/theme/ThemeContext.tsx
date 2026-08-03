@@ -72,7 +72,7 @@ export function ThemeProvider({
   return <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>;
 }
 
-/** Access the active theme object (colors, spacing, typography, ...). */
+/** Access the active theme object (colors, typography, ...). */
 export function useTheme(): Theme {
   const ctx = useContext(ThemeContext);
   if (!ctx) {

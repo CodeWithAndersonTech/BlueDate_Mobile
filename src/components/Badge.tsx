@@ -37,7 +37,7 @@ export function Badge({ label, tone = 'neutral', size = 'sm', icon, style }: Bad
     gap: 4,
     paddingVertical: paddingV,
     paddingHorizontal: paddingH,
-    borderRadius: theme.radii.pill,
+    borderRadius: 999,
     alignSelf: 'flex-start',
   };
 

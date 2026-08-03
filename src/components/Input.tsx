@@ -79,8 +79,8 @@ export const Input = forwardRef<TextInput, InputProps>(function Input(
           {
             backgroundColor: theme.colors.surfaceAlt,
             borderColor,
-            borderRadius: theme.radii.md,
-            paddingHorizontal: theme.spacing.base,
+            borderRadius: 16,
+            paddingHorizontal: 16,
           },
         ]}>
         {leftIcon ? (

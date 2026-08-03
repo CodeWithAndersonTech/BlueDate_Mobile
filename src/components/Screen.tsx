@@ -40,7 +40,7 @@ export function Screen({
   const bg = backgroundColor ?? theme.colors.background;
 
   const innerStyle = [
-    padded ? { paddingHorizontal: theme.spacing.lg } : null,
+    padded ? { paddingHorizontal: 24 } : null,
     style,
   ];
 
@@ -55,7 +55,7 @@ export function Screen({
         <ScrollView
           style={styles.flex}
           contentContainerStyle={[
-            padded ? { paddingHorizontal: theme.spacing.lg } : null,
+            padded ? { paddingHorizontal: 24 } : null,
             contentContainerStyle,
           ]}
           showsVerticalScrollIndicator={false}

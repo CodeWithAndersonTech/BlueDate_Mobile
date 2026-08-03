@@ -36,7 +36,7 @@ export function Checkbox({
           end={{ x: 1, y: 1 }}
           style={[
             styles.box,
-            { width: size, height: size, borderRadius: theme.radii.sm },
+            { width: size, height: size, borderRadius: 12 },
           ]}>
           <Icon name="check" size={size * 0.66} color={theme.colors.onPrimary} strokeWidth={3} />
         </LinearGradient>
@@ -47,7 +47,7 @@ export function Checkbox({
             {
               width: size,
               height: size,
-              borderRadius: theme.radii.sm,
+              borderRadius: 12,
               borderWidth: 2,
               borderColor: theme.colors.borderStrong,
               backgroundColor: theme.colors.surfaceAlt,

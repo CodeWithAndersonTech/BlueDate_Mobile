@@ -56,7 +56,7 @@ export function SegmentedControl({
         styles.container,
         {
           backgroundColor: theme.colors.surfaceAlt,
-          borderRadius: theme.radii.lg,
+          borderRadius: 20,
           padding: 4,
         },
         style,
@@ -68,7 +68,7 @@ export function SegmentedControl({
             indicatorStyle,
             {
               backgroundColor: theme.colors.card,
-              borderRadius: theme.radii.md,
+              borderRadius: 16,
               ...theme.shadows.sm,
             },
           ]}

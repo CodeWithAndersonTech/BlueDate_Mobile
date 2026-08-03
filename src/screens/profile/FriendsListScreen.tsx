@@ -10,12 +10,14 @@ import {
 } from '../../components';
 import { useLocale } from '../../i18n';
 import { ProfileStackParamList } from '../../navigation/types';
+import { useLockTabSwipe } from '../../navigation/useLockTabSwipe';
 import { useTheme } from '../../theme';
 import { friends } from '../../utils';
 
 type Props = NativeStackScreenProps<ProfileStackParamList, 'FriendsList'>;
 
 export function FriendsListScreen({ navigation }: Props) {
+  useLockTabSwipe();
   const theme = useTheme();
   const { t } = useLocale();
   const [query, setQuery] = useState('');

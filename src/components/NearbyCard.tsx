@@ -1,10 +1,20 @@
 import React from 'react';
-import { Image, Pressable, StyleProp, StyleSheet, View, ViewStyle } from 'react-native';
+import {
+  Image,
+  Pressable,
+  StyleProp,
+  StyleSheet,
+  View,
+  ViewStyle,
+} from 'react-native';
 import LinearGradient from 'react-native-linear-gradient';
+import Animated, {
+  useAnimatedStyle,
+  useSharedValue,
+  withSpring,
+} from 'react-native-reanimated';
 import { useTheme } from '../theme';
-import { Badge } from './Badge';
 import { Icon } from './Icon';
-import { IconButton } from './IconButton';
 import { Typography } from './Typography';
 
 export interface NearbyUser {
@@ -24,120 +34,248 @@ export interface NearbyCardProps {
   onPress?: () => void;
   onAdd?: () => void;
   added?: boolean;
+  /** 'grid' = photo card, 'rail' = compact circle rail */
+  variant?: 'grid' | 'rail';
   style?: StyleProp<ViewStyle>;
 }
 
-export function NearbyCard({ user, onPress, onAdd, added = false, style }: NearbyCardProps) {
+function formatDistance(distanceKm: number): string {
+  if (distanceKm < 1) {
+    return `${Math.round(distanceKm * 1000)} m`;
+  }
+  return `${distanceKm.toFixed(1)} km`;
+}
+
+export function NearbyCard({
+  user,
+  onPress,
+  onAdd,
+  added = false,
+  variant = 'grid',
+  style,
+}: NearbyCardProps) {
   const theme = useTheme();
+  const scale = useSharedValue(1);
+  const animated = useAnimatedStyle(() => ({
+    transform: [{ scale: scale.value }],
+  }));
+
+  if (variant === 'rail') {
+    return (
+      <Pressable
+        onPress={onPress}
+        onPressIn={() => {
+          scale.value = withSpring(0.96, { damping: 16, stiffness: 320 });
+        }}
+        onPressOut={() => {
+          scale.value = withSpring(1, { damping: 14, stiffness: 260 });
+        }}
+        style={style}>
+        <Animated.View style={[styles.rail, animated]}>
+          <View
+            style={[
+              styles.railAvatar,
+              {
+                borderColor: user.online
+                  ? theme.colors.primary
+                  : theme.colors.border,
+              },
+            ]}>
+            {user.photo ? (
+              <Image source={{ uri: user.photo }} style={styles.fill} />
+            ) : (
+              <LinearGradient
+                colors={user.accentColors ?? theme.gradients.primary}
+                style={styles.fill}
+              />
+            )}
+          </View>
+          <Typography variant="caption" weight="600" numberOfLines={1} align="center">
+            {user.name.split(' ')[0]}
+          </Typography>
+          <View
+            style={[
+              styles.distBadge,
+              { backgroundColor: theme.colors.surfaceAlt },
+            ]}>
+            <Typography variant="overline" color="textMuted">
+              {formatDistance(user.distanceKm)}
+            </Typography>
+          </View>
+        </Animated.View>
+      </Pressable>
+    );
+  }
 
   return (
     <Pressable
       onPress={onPress}
-      style={[
-        styles.card,
-        {
-          borderRadius: theme.radii.xl,
-          backgroundColor: theme.colors.card,
-          ...theme.shadows.md,
-        },
-        style,
-      ]}>
-      <View style={styles.media}>
-        {user.photo ? (
-          <Image source={{ uri: user.photo }} style={StyleSheet.absoluteFill} />
-        ) : (
+      onPressIn={() => {
+        scale.value = withSpring(0.97, { damping: 16, stiffness: 320 });
+      }}
+      onPressOut={() => {
+        scale.value = withSpring(1, { damping: 14, stiffness: 260 });
+      }}
+      style={style}>
+      <Animated.View
+        style={[
+          styles.gridCard,
+          {
+            backgroundColor: theme.colors.card,
+            ...theme.shadows.sm,
+          },
+          animated,
+        ]}>
+        <View style={styles.photoWrap}>
+          {user.photo ? (
+            <Image source={{ uri: user.photo }} style={styles.fill} />
+          ) : (
+            <LinearGradient
+              colors={user.accentColors ?? theme.gradients.primary}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={styles.fill}
+            />
+          )}
           <LinearGradient
-            colors={user.accentColors ?? theme.gradients.primary}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-            style={StyleSheet.absoluteFill}
+            colors={['transparent', 'rgba(0,0,0,0.55)']}
+            style={styles.photoFade}
           />
-        )}
-        <LinearGradient
-          colors={['transparent', 'rgba(0,0,0,0.05)', 'rgba(0,0,0,0.8)']}
-          style={StyleSheet.absoluteFill}
-        />
 
-        <View style={styles.topRow}>
-          {user.online && (
-            <Badge label="Çevrimiçi" tone="success" icon="globe" />
-          )}
-          {user.premium && <Badge label="Premium" tone="premium" />}
-        </View>
-
-        <View style={styles.distanceChip}>
-          <Icon name="map-pin" size={12} color="#FFFFFF" />
-          <Typography variant="overline" tint="#FFFFFF">
-            {user.distanceKm < 1
-              ? `${Math.round(user.distanceKm * 1000)} m`
-              : `${user.distanceKm.toFixed(1)} km`}
-          </Typography>
-        </View>
-
-        <View style={styles.bottom}>
-          <Typography variant="title" tint="#FFFFFF" numberOfLines={1}>
-            {user.name}, {user.age}
-          </Typography>
-          {user.bio && (
-            <Typography variant="caption" tint="rgba(255,255,255,0.85)" numberOfLines={1}>
-              {user.bio}
-            </Typography>
-          )}
-        </View>
-      </View>
-
-      <View style={[styles.footer, { padding: theme.spacing.md }]}>
-        <View style={styles.statusRow}>
           <View
             style={[
-              styles.statusDot,
-              { backgroundColor: user.online ? theme.colors.online : theme.colors.offline },
-            ]}
-          />
+              styles.badge,
+              { backgroundColor: 'rgba(0,0,0,0.45)' },
+            ]}>
+            <Icon name="map-pin" size={11} color="#fff" />
+            <Typography variant="overline" tint="#fff">
+              {formatDistance(user.distanceKm)}
+            </Typography>
+          </View>
+
+          {user.online && (
+            <View
+              style={[
+                styles.online,
+                {
+                  backgroundColor: theme.colors.online,
+                  borderColor: theme.colors.card,
+                },
+              ]}
+            />
+          )}
+
+          {user.premium && (
+            <View style={[styles.crown, { backgroundColor: '#F5D76E' }]}>
+              <Icon name="crown" size={11} color="#3A2A00" filled />
+            </View>
+          )}
+
+          <Pressable
+            onPress={onAdd}
+            hitSlop={8}
+            style={[
+              styles.addFab,
+              { backgroundColor: theme.colors.card },
+            ]}>
+            <Icon
+              name={added ? 'user-check' : 'user-plus'}
+              size={16}
+              color={added ? theme.colors.success : theme.colors.primary}
+            />
+          </Pressable>
+        </View>
+
+        <View style={styles.meta}>
+          <Typography variant="bodyStrong" numberOfLines={1}>
+            {user.name}
+          </Typography>
           <Typography variant="caption" color="textMuted">
-            {user.online ? 'Şimdi aktif' : 'Son görülme yakın'}
+            {user.age} yaş
           </Typography>
         </View>
-        <IconButton
-          name={added ? 'user-check' : 'user-plus'}
-          variant="surface"
-          size={18}
-          color={added ? theme.colors.success : theme.colors.primary}
-          onPress={onAdd}
-        />
-      </View>
+      </Animated.View>
     </Pressable>
   );
 }
 
 const styles = StyleSheet.create({
-  card: { overflow: 'hidden' },
-  media: {
-    height: 200,
-    justifyContent: 'space-between',
-    padding: 12,
+  rail: { width: 76, alignItems: 'center', gap: 6 },
+  railAvatar: {
+    width: 68,
+    height: 68,
+    borderRadius: 34,
+    borderWidth: 2,
+    overflow: 'hidden',
+    padding: 2,
   },
-  topRow: { flexDirection: 'row', gap: 6 },
-  distanceChip: {
+  distBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 999,
+  },
+  gridCard: {
+    borderRadius: 20,
+    overflow: 'hidden',
+  },
+  photoWrap: {
+    width: '100%',
+    aspectRatio: 0.82,
+    position: 'relative',
+  },
+  fill: { width: '100%', height: '100%' },
+  photoFade: {
     position: 'absolute',
-    bottom: 56,
-    left: 12,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    height: '45%',
+  },
+  badge: {
+    position: 'absolute',
+    top: 10,
+    left: 10,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-    backgroundColor: 'rgba(0,0,0,0.35)',
+    paddingHorizontal: 8,
     paddingVertical: 4,
-    paddingHorizontal: 10,
     borderRadius: 999,
   },
-  bottom: { gap: 2 },
-  footer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
+  online: {
+    position: 'absolute',
+    top: 12,
+    right: 12,
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    borderWidth: 2,
   },
-  statusRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  statusDot: { width: 8, height: 8, borderRadius: 4 },
+  crown: {
+    position: 'absolute',
+    top: 10,
+    right: 10,
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  addFab: {
+    position: 'absolute',
+    right: 10,
+    bottom: 10,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  meta: {
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+    gap: 2,
+  },
 });
 
 export default NearbyCard;
