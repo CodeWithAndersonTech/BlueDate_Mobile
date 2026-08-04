@@ -33,6 +33,15 @@
 		<key>NSAllowsLocalNetworking</key>
 		<true/>
 	</dict>
+	<key>NSBluetoothAlwaysUsageDescription</key>
+	<string>Yakınınızdaki kişileri bulabilmek için Bluetooth kullanıyoruz.</string>
+	<key>NSBluetoothPeripheralUsageDescription</key>
+	<string>Yakınınızdaki kişilere görünür olabilmek için Bluetooth yayınlıyoruz.</string>
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>bluetooth-central</string>
+		<string>bluetooth-peripheral</string>
+	</array>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>Yakınınızdaki kişileri gösterebilmemiz için konumunuza erişmemize izin verin.</string>
 	<key>NSPhotoLibraryUsageDescription</key>

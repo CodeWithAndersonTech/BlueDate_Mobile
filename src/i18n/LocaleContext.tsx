@@ -345,6 +345,8 @@ const FALLBACK_TRANSLATIONS: Record<string, string> = {
   'nearby.filter_online': 'Online',
   'nearby.filter_near': '< 2 km',
   'nearby.empty_title': 'No one nearby',
+  'nearby.ble_permission_denied':
+    'Bluetooth permission is required to discover people nearby.',
   'nearby.empty_desc':
     'Tap the Meerk logo to scan who’s around you. Move closer and try again if needed.',
   'nearby.scanning': 'Scanning nearby…',
@@ -611,6 +613,8 @@ const LOCAL_TRANSLATIONS_TR: Record<string, string> = {
   'nearby.filter_online': 'Çevrimiçi',
   'nearby.filter_near': '< 2 km',
   'nearby.empty_title': 'Kimse bulunamadı',
+  'nearby.ble_permission_denied':
+    'Yakındakileri bulmak için Bluetooth izni gerekli.',
   'nearby.empty_desc':
     'Yeniden taramak için Meerk logosuna dokun. Gerekirse biraz yaklaşarak tekrar dene.',
   'nearby.scanning': 'Yakındakiler taranıyor…',

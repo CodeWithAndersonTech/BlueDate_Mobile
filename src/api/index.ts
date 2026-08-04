@@ -5,4 +5,5 @@ export * from './auth';
 export * from './user';
 export * from './social';
 export * from './photos';
+export * from './proximity';
 export * from './languageHeader';

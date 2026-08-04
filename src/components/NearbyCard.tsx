@@ -188,7 +188,9 @@ export function NearbyCard({
             <View style={styles.nameBlock}>
               <Text style={styles.name} numberOfLines={1}>
                 {user.name}
-                <Text style={styles.age}>  {user.age}</Text>
+                {user.age > 0 ? (
+                  <Text style={styles.age}>  {user.age}</Text>
+                ) : null}
               </Text>
             </View>
 

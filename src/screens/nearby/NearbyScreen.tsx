@@ -1,6 +1,6 @@
-import { useNavigation } from '@react-navigation/native';
+import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Image,
   Pressable,
@@ -18,6 +18,11 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { resolveMediaUrl } from '../../api/photos';
+import {
+  BridgeNearbyItem,
+  DirectNearbyItem,
+} from '../../api/proximity';
 import { images } from '../../assets';
 import {
   EmptyState,
@@ -25,7 +30,9 @@ import {
   NearbyUser,
   TabScreenScrollView,
 } from '../../components';
+import { useBlePresence } from '../../hooks/useBlePresence';
 import { useLocale } from '../../i18n';
+import { useAuth } from '../../navigation/AuthContext';
 import { NearbyStackParamList } from '../../navigation/types';
 import { useTheme } from '../../theme';
 import { NearbyScanOverlay } from './NearbyScanOverlay';
@@ -35,96 +42,139 @@ type Props = NativeStackScreenProps<NearbyStackParamList, 'NearbyMain'>;
 
 const H_PAD = 20;
 const GAP = 12;
-const LOAD_MS = 500;
-const SCAN_MS = 2800;
+const LOAD_MS = 400;
+
+function estimateDistanceKm(
+  item: DirectNearbyItem | BridgeNearbyItem,
+): number {
+  if ('DistanceKm' in item && typeof item.DistanceKm === 'number' && item.DistanceKm > 0) {
+    return item.DistanceKm;
+  }
+  if ('Rssi' in item && typeof item.Rssi === 'number') {
+    const meters = Math.pow(10, (-59 - item.Rssi) / 20);
+    return Math.max(0.001, meters / 1000);
+  }
+  // Bridge / unknown: soften by strength (0-100 → ~5m-80m)
+  const score = item.StrengthScore ?? 0;
+  return Math.max(0.005, (100 - score) / 1000);
+}
+
+async function mapNearbyItem(
+  item: DirectNearbyItem | BridgeNearbyItem,
+): Promise<NearbyUser> {
+  const photo = await resolveMediaUrl(item.ProfilePhotoUrl);
+  return {
+    id: String(item.UserId),
+    name: item.FullName || 'User',
+    age: item.Age ?? 0,
+    distanceKm: estimateDistanceKm(item),
+    online: true,
+    photo,
+    bio:
+      'ViaUserId' in item && item.ViaFullName
+        ? `via ${item.ViaFullName}`
+        : undefined,
+  };
+}
 
 export function NearbyScreen({ navigation }: Props) {
   const theme = useTheme();
-  const { t } = useLocale();
+  const { t, device } = useLocale();
+  const { userId, accessToken, isSignedIn } = useAuth();
   const { width: windowWidth } = useWindowDimensions();
   const rootNav = useNavigation();
+
+  const session = useMemo(
+    () =>
+      userId
+        ? {
+            userId,
+            accessToken,
+            knownDeviceId: device?.id ?? null,
+            knownUniqueId: device?.uniqueId ?? null,
+          }
+        : null,
+    [userId, accessToken, device?.id, device?.uniqueId],
+  );
+
+  const { state, start, stop, refresh } = useBlePresence(session);
 
   const [users, setUsers] = useState<NearbyUser[]>([]);
   const [added, setAdded] = useState<Record<string, boolean>>({});
   const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
-  const [scanning, setScanning] = useState(false);
-  const [hasScanned, setHasScanned] = useState(false);
   const [scanTipOpen, setScanTipOpen] = useState(false);
   const contentOpacity = useSharedValue(0);
-  const scanTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const booted = useRef(false);
+  const mappingRef = useRef(0);
 
   const closeScanTip = () => setScanTipOpen(false);
-
   const cardW = (windowWidth - H_PAD * 2 - GAP) / 2;
 
-  const clearScanTimer = () => {
-    if (scanTimer.current) {
-      clearTimeout(scanTimer.current);
-      scanTimer.current = null;
+  const scanning =
+    state.status === 'starting' ||
+    (state.refreshing && users.length === 0);
+
+  useFocusEffect(
+    useCallback(() => {
+      if (!isSignedIn || !session) return undefined;
+      start();
+      return () => {
+        // Keep advertising while tab stack stays mounted; stop only on sign-out.
+      };
+    }, [isSignedIn, session, start]),
+  );
+
+  useEffect(() => {
+    if (!isSignedIn) {
+      stop();
     }
-  };
+  }, [isSignedIn, stop]);
 
-  const finishScan = useCallback(() => {
-    clearScanTimer();
-    // No mock feed — real BLE/API results will land in setUsers later.
-    setUsers([]);
-    setScanning(false);
-    setHasScanned(true);
-    setRefreshing(false);
-    contentOpacity.value = withTiming(1, {
-      duration: 320,
-      easing: Easing.out(Easing.quad),
-    });
-  }, [contentOpacity]);
-
-  // Content stays visible under the overlay's translucent scrim — the
-  // overlay handles dimming, so no extra opacity drop while scanning.
-  const startScan = useCallback(() => {
-    if (scanning) return;
-    closeScanTip();
-    clearScanTimer();
-    setScanning(true);
-    scanTimer.current = setTimeout(finishScan, SCAN_MS);
-  }, [scanning, finishScan]);
-
-  const cancelScan = useCallback(() => {
-    clearScanTimer();
-    setScanning(false);
-    setRefreshing(false);
-    contentOpacity.value = withTiming(1, { duration: 220 });
+  useEffect(() => {
+    const boot = setTimeout(() => {
+      setLoading(false);
+      contentOpacity.value = withTiming(1, {
+        duration: 280,
+        easing: Easing.out(Easing.quad),
+      });
+    }, LOAD_MS);
+    return () => clearTimeout(boot);
   }, [contentOpacity]);
 
   useEffect(() => {
-    if (booted.current) return;
-    booted.current = true;
+    const seq = ++mappingRef.current;
+    const combined = [...state.direct, ...state.bridge];
+    // Dedupe by userId — prefer direct over bridge
+    const byId = new Map<number, DirectNearbyItem | BridgeNearbyItem>();
+    for (const item of combined) {
+      if (!byId.has(item.UserId) || item.HopCount === 1) {
+        byId.set(item.UserId, item);
+      }
+    }
 
-    const boot = setTimeout(() => {
-      setLoading(false);
-      setScanning(true);
-      contentOpacity.value = withTiming(1, { duration: 280 });
-      scanTimer.current = setTimeout(finishScan, SCAN_MS);
-    }, LOAD_MS);
-
-    return () => {
-      clearTimeout(boot);
-      clearScanTimer();
-    };
-  }, [finishScan, contentOpacity]);
+    (async () => {
+      const mapped = await Promise.all(
+        Array.from(byId.values()).map(mapNearbyItem),
+      );
+      if (seq !== mappingRef.current) return;
+      setUsers(mapped);
+      if (mapped.length > 0) {
+        contentOpacity.value = withTiming(1, { duration: 280 });
+      }
+    })();
+  }, [state.direct, state.bridge, contentOpacity]);
 
   useEffect(() => {
     const parent = rootNav.getParent();
     if (!parent) return;
 
     const unsub = parent.addListener('tabPress' as never, () => {
-      if (navigation.isFocused() && !scanning && !loading) {
-        startScan();
+      if (navigation.isFocused() && state.status === 'running') {
+        refresh();
       }
     });
 
     return unsub;
-  }, [rootNav, navigation, scanning, loading, startScan]);
+  }, [rootNav, navigation, state.status, refresh]);
 
   const contentFadeStyle = useAnimatedStyle(() => ({
     opacity: contentOpacity.value,
@@ -134,9 +184,15 @@ export function NearbyScreen({ navigation }: Props) {
     setAdded(prev => ({ ...prev, [id]: !prev[id] }));
 
   const onRefresh = () => {
-    setRefreshing(true);
-    startScan();
+    refresh();
   };
+
+  const emptyDesc =
+    state.status === 'permission_denied'
+      ? t('nearby.ble_permission_denied')
+      : state.status === 'error'
+        ? state.errorMessage || t('nearby.empty_desc')
+        : t('nearby.empty_desc');
 
   return (
     <SafeAreaView
@@ -224,30 +280,26 @@ export function NearbyScreen({ navigation }: Props) {
             </View>
           </View>
 
-          {!hasScanned ? (
-            <View style={styles.preScan}>
-              <Text
-                style={[styles.preScanText, { color: theme.colors.textMuted }]}>
-                {t('nearby.scan_prompt')}
-              </Text>
-            </View>
-          ) : users.length === 0 ? (
+          {users.length === 0 ? (
             <TabScreenScrollView
               contentContainerStyle={styles.emptyScroll}
               onScrollBeginDrag={closeScanTip}
               refreshControl={
                 <RefreshControl
-                  refreshing={refreshing}
+                  refreshing={state.refreshing}
                   onRefresh={onRefresh}
                   tintColor={theme.colors.primary}
                 />
               }>
               <EmptyState
                 image={images.appLogo}
-                onImagePress={startScan}
+                onImagePress={() => {
+                  if (state.status === 'idle') start();
+                  else refresh();
+                }}
                 imageAccessibilityLabel={t('nearby.scan_action')}
                 title={t('nearby.empty_title')}
-                description={t('nearby.empty_desc')}
+                description={emptyDesc}
               />
             </TabScreenScrollView>
           ) : (
@@ -256,7 +308,7 @@ export function NearbyScreen({ navigation }: Props) {
               onScrollBeginDrag={closeScanTip}
               refreshControl={
                 <RefreshControl
-                  refreshing={refreshing}
+                  refreshing={state.refreshing}
                   onRefresh={onRefresh}
                   tintColor={theme.colors.primary}
                 />
@@ -279,7 +331,12 @@ export function NearbyScreen({ navigation }: Props) {
         </Animated.View>
       )}
 
-      <NearbyScanOverlay visible={scanning} onCancel={cancelScan} />
+      <NearbyScanOverlay
+        visible={scanning && !state.refreshing}
+        onCancel={() => {
+          /* scanning is continuous while BLE runs */
+        }}
+      />
     </SafeAreaView>
   );
 }
@@ -365,18 +422,6 @@ const styles = StyleSheet.create({
   },
   scanTipTitle: { fontSize: 13, fontWeight: '700' },
   scanTipText: { fontSize: 12, lineHeight: 17, fontWeight: '500' },
-  preScan: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 40,
-  },
-  preScanText: {
-    fontSize: 14,
-    fontWeight: '500',
-    textAlign: 'center',
-    lineHeight: 20,
-  },
   emptyScroll: {
     flexGrow: 1,
     justifyContent: 'center',

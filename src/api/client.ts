@@ -91,16 +91,27 @@ export async function apiRequest<T>(
     );
   }
 
-  if (payload && typeof payload === 'object' && 'IsSuccess' in payload) {
-    const hasToken =
-      'AccessToken' in payload &&
-      typeof (payload as { AccessToken?: string }).AccessToken === 'string' &&
-      Boolean((payload as { AccessToken?: string }).AccessToken);
+  if (payload && typeof payload === 'object') {
+    const envelope = payload as ApiEnvelope & {
+      isSuccess?: boolean;
+      errorMessage?: string[] | null;
+      AccessToken?: string;
+      accessToken?: string;
+    };
+    const isSuccess =
+      typeof envelope.IsSuccess === 'boolean'
+        ? envelope.IsSuccess
+        : typeof envelope.isSuccess === 'boolean'
+          ? envelope.isSuccess
+          : undefined;
+    const hasToken = Boolean(envelope.AccessToken || envelope.accessToken);
 
-    if (!payload.IsSuccess && !hasToken) {
+    if (isSuccess === false && !hasToken) {
       throw new ApiError(
         response.status,
-        payload.ErrorMessage?.filter(Boolean) ?? ['Request was not successful'],
+        envelope.ErrorMessage?.filter(Boolean) ??
+          envelope.errorMessage?.filter(Boolean) ??
+          ['Request was not successful'],
       );
     }
   }

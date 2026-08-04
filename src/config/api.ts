@@ -103,4 +103,9 @@ export const API_PATHS = {
   userPhotoGallery: '/api/UserPhoto/gallery',
   userPhotoAvatar: '/api/UserPhoto/avatar',
   userPhoto: '/api/UserPhoto',
+  bleDevice: '/api/Ble/device',
+  bleToken: '/api/Ble/token',
+  bleSightings: '/api/Ble/sightings',
+  proximityNearby: '/api/Proximity/nearby',
+  proximityReset: '/api/Proximity/reset',
 } as const;
