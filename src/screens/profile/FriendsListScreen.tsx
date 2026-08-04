@@ -2,6 +2,7 @@ import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import React, { useMemo, useState } from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
 import {
+  EmptyState,
   Header,
   IconButton,
   Input,
@@ -12,7 +13,7 @@ import { useLocale } from '../../i18n';
 import { ProfileStackParamList } from '../../navigation/types';
 import { useLockTabSwipe } from '../../navigation/useLockTabSwipe';
 import { useTheme } from '../../theme';
-import { friends } from '../../utils';
+import { Friend } from '../../utils';
 
 type Props = NativeStackScreenProps<ProfileStackParamList, 'FriendsList'>;
 
@@ -21,14 +22,18 @@ export function FriendsListScreen({ navigation }: Props) {
   const theme = useTheme();
   const { t } = useLocale();
   const [query, setQuery] = useState('');
+  // Real friends API will populate this — no mock feed.
+  const [friends] = useState<Friend[]>([]);
 
   const list = useMemo(() => {
     const q = query.trim().toLowerCase();
     if (!q) return friends;
     return friends.filter(
-      f => f.name.toLowerCase().includes(q) || f.username.toLowerCase().includes(q),
+      f =>
+        f.name.toLowerCase().includes(q) ||
+        f.username.toLowerCase().includes(q),
     );
-  }, [query]);
+  }, [friends, query]);
 
   return (
     <Screen edges={['top']}>
@@ -50,22 +55,39 @@ export function FriendsListScreen({ navigation }: Props) {
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
         contentContainerStyle={styles.content}>
-        {list.map(f => (
-          <UserListItem
-            key={f.id}
-            name={f.name}
-            subtitle={
-              f.online
-                ? t('profile.online')
-                : `${f.lastActive ?? t('profile.offline')} · ${f.mutualFriends ?? 0} ${t('friends.mutual')}`
-            }
-            avatarUri={f.avatar}
-            online={f.online}
-            premium={f.premium}
-            onPress={() => navigation.navigate('UserProfile', { userId: f.id })}
-            right={<IconButton name="message" size={18} color={theme.colors.primary} onPress={() => {}} />}
+        {list.length === 0 ? (
+          <EmptyState
+            icon="users"
+            title={t('friends.empty_title')}
+            description={t('friends.empty_desc')}
           />
-        ))}
+        ) : (
+          list.map(f => (
+            <UserListItem
+              key={f.id}
+              name={f.name}
+              subtitle={
+                f.online
+                  ? t('profile.online')
+                  : `${f.lastActive ?? t('profile.offline')} · ${f.mutualFriends ?? 0} ${t('friends.mutual')}`
+              }
+              avatarUri={f.avatar}
+              online={f.online}
+              premium={f.premium}
+              onPress={() =>
+                navigation.navigate('UserProfile', { userId: f.id })
+              }
+              right={
+                <IconButton
+                  name="message"
+                  size={18}
+                  color={theme.colors.primary}
+                  onPress={() => {}}
+                />
+              }
+            />
+          ))
+        )}
       </ScrollView>
     </Screen>
   );

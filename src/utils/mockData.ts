@@ -29,14 +29,15 @@ export interface FriendRequest {
 
 export interface PremiumPlan {
   id: string;
-  name: string;
+  /** i18n key — resolved via t() / language_translations. */
+  nameKey: string;
+  /** Store / billing price (not localized). */
   price: string;
-  period: string;
-  perMonth?: string;
-  highlight?: string;
+  periodKey: string;
+  perMonthKey?: string;
+  highlightKey?: string;
   popular?: boolean;
-  /** Short tagline under the plan name. */
-  tagline?: string;
+  taglineKey?: string;
   /** Feature ids included in this plan. */
   perkIds: string[];
 }
@@ -44,8 +45,8 @@ export interface PremiumPlan {
 export interface PremiumPerk {
   id: string;
   icon: 'zap' | 'heart' | 'eye' | 'eye-off' | 'shield' | 'star' | 'sparkles';
-  title: string;
-  description: string;
+  titleKey: string;
+  descriptionKey: string;
   /** If true, only Premium+ includes this perk. */
   plusOnly?: boolean;
 }
@@ -85,54 +86,37 @@ export const currentUser: UserProfile = {
   interests: ['Oyun', 'Müzik', 'Seyahat', 'Fotoğraf', 'Kahve', 'Spor'],
 };
 
-export const nearbyUsers: NearbyUser[] = [
-  { id: 'n1', name: 'Elif', age: 24, distanceKm: 0.4, online: true, premium: true, bio: 'Sanat & kahve tutkunu', photo: avatar(45) },
-  { id: 'n2', name: 'Kerem', age: 29, distanceKm: 1.2, online: true, bio: 'Yazılımcı, gamer', photo: avatar(13) },
-  { id: 'n3', name: 'Deniz', age: 26, distanceKm: 2.7, online: false, bio: 'Gezgin ruh', photo: avatar(32) },
-  { id: 'n4', name: 'Ada', age: 23, distanceKm: 3.1, online: true, premium: true, bio: 'Müzik & dans', photo: avatar(47) },
-  { id: 'n5', name: 'Mert', age: 31, distanceKm: 4.5, online: false, bio: 'Fotoğrafçı', photo: avatar(15) },
-  { id: 'n6', name: 'Zeynep', age: 25, distanceKm: 5.8, online: true, bio: 'Yoga & doğa', photo: avatar(49) },
-];
+/** Populated later from nearby/BLE API — no mock feed. */
+export const nearbyUsers: NearbyUser[] = [];
 
-export const friends: Friend[] = [
-  { id: 'f1', name: 'Ahmet Kaya', username: '@ahmetk', avatar: avatar(11), online: true, premium: true, mutualFriends: 12 },
-  { id: 'f2', name: 'Selin Demir', username: '@selind', avatar: avatar(20), online: true, mutualFriends: 8 },
-  { id: 'f3', name: 'Burak Şahin', username: '@buraks', avatar: avatar(33), online: false, lastActive: '2 sa önce', mutualFriends: 4 },
-  { id: 'f4', name: 'Ceren Yıldız', username: '@cereny', avatar: avatar(44), online: false, lastActive: 'dün', mutualFriends: 21, premium: true },
-  { id: 'f5', name: 'Emre Aydın', username: '@emrea', avatar: avatar(52), online: true, mutualFriends: 2 },
-  { id: 'f6', name: 'Gizem Arslan', username: '@gizema', avatar: avatar(25), online: false, lastActive: '3 gün önce', mutualFriends: 7 },
-];
+/** Populated later from friends API — no mock feed. */
+export const friends: Friend[] = [];
 
-export const incomingRequests: FriendRequest[] = [
-  { id: 'r1', name: 'Cansu Polat', username: '@cansup', avatar: avatar(16), mutualFriends: 5, sentAt: '2 sa önce', premium: true },
-  { id: 'r2', name: 'Onur Çelik', username: '@onurc', avatar: avatar(51), mutualFriends: 1, sentAt: 'dün' },
-  { id: 'r3', name: 'Pınar Koç', username: '@pinark', avatar: avatar(24), mutualFriends: 9, sentAt: '2 gün önce' },
-];
+/** Populated later from friends API — no mock feed. */
+export const incomingRequests: FriendRequest[] = [];
 
-export const sentRequests: FriendRequest[] = [
-  { id: 's1', name: 'Tolga Eren', username: '@tolgae', avatar: avatar(53), mutualFriends: 3, sentAt: '1 sa önce' },
-  { id: 's2', name: 'Melis Doğan', username: '@melisd', avatar: avatar(26), mutualFriends: 0, sentAt: '4 sa önce' },
-];
+/** Populated later from friends API — no mock feed. */
+export const sentRequests: FriendRequest[] = [];
 
 export const premiumPlans: PremiumPlan[] = [
   {
     id: 'standard',
-    name: 'Premium',
+    nameKey: 'premium.plan.standard.name',
     price: '₺149',
-    period: '/ay',
-    tagline: 'Standart',
-    highlight: 'Temel paket',
+    periodKey: 'premium.plan.period',
+    taglineKey: 'premium.plan.standard.tagline',
+    highlightKey: 'premium.plan.standard.highlight',
     perkIds: ['visitors', 'treats', 'adfree', 'featured'],
   },
   {
     id: 'plus',
-    name: 'Premium+',
+    nameKey: 'premium.plan.plus.name',
     price: '₺249',
-    period: '/ay',
-    perMonth: 'Tüm Standart özellikler +',
-    tagline: 'Plus',
+    periodKey: 'premium.plan.period',
+    perMonthKey: 'premium.plan.plus.per_month',
+    taglineKey: 'premium.plan.plus.tagline',
     popular: true,
-    highlight: 'Hayalet Modu',
+    highlightKey: 'premium.plan.plus.highlight',
     perkIds: ['visitors', 'treats', 'adfree', 'featured', 'ghost'],
   },
 ];
@@ -141,37 +125,32 @@ export const premiumPerks: PremiumPerk[] = [
   {
     id: 'visitors',
     icon: 'eye',
-    title: 'Profilini ziyaret edenleri gör',
-    description:
-      'Profilini ziyaret eden kullanıcıları gör. Seninle ilgilenenleri fark edip doğru zamanda etkileşime geç.',
+    titleKey: 'premium.perk.visitors.title',
+    descriptionKey: 'premium.perk.visitors.desc',
   },
   {
     id: 'treats',
     icon: 'sparkles',
-    title: 'Sınırsız ısmarlama',
-    description:
-      'Karşı tarafın favori yemek, tatlı, kahve ve içeceklerine sınırsız ısmarlama gönder. Ek ücret veya limit yok.',
+    titleKey: 'premium.perk.treats.title',
+    descriptionKey: 'premium.perk.treats.desc',
   },
   {
     id: 'adfree',
     icon: 'zap',
-    title: 'Reklamsız deneyim',
-    description:
-      'Uygulama tamamen reklamsız çalışır; daha hızlı, kesintisiz ve akıcı bir deneyim.',
+    titleKey: 'premium.perk.adfree.title',
+    descriptionKey: 'premium.perk.adfree.desc',
   },
   {
     id: 'featured',
     icon: 'star',
-    title: 'Öne çıkma',
-    description:
-      'Mesafe sınırı olmadan yakındakiler arasında daima en üstte görün.',
+    titleKey: 'premium.perk.featured.title',
+    descriptionKey: 'premium.perk.featured.desc',
   },
   {
     id: 'ghost',
     icon: 'eye-off',
-    title: 'Hayalet Modu',
-    description:
-      'Çevrendekileri gör ve profillerini incele; ilk etkileşimi sen başlatana kadar tamamen görünmez kal.',
+    titleKey: 'premium.perk.ghost.title',
+    descriptionKey: 'premium.perk.ghost.desc',
     plusOnly: true,
   },
 ];
@@ -185,13 +164,8 @@ export interface ActivityItem {
   time: string;
 }
 
-export const recentActivity: ActivityItem[] = [
-  { id: 'a1', userId: 'n1', type: 'match', name: 'Elif', avatar: avatar(45), time: 'şimdi' },
-  { id: 'a2', userId: 'n2', type: 'like', name: 'Kerem', avatar: avatar(13), time: '5 dk' },
-  { id: 'a3', userId: 'n3', type: 'visit', name: 'Deniz', avatar: avatar(32), time: '1 sa' },
-  { id: 'a4', userId: 'r1', type: 'request', name: 'Cansu', avatar: avatar(16), time: '2 sa' },
-  { id: 'a5', userId: 'n4', type: 'like', name: 'Ada', avatar: avatar(47), time: '3 sa' },
-];
+/** Populated later from activity API — no mock feed. */
+export const recentActivity: ActivityItem[] = [];
 
 export const suggestedUsers = nearbyUsers.slice(0, 4);
 

@@ -11,29 +11,52 @@ import {
   TabScreenScrollView,
   UserListItem,
 } from '../../components';
+import { useLocale } from '../../i18n';
 import { FriendsStackParamList } from '../../navigation/types';
-import { friends, incomingRequests, sentRequests } from '../../utils';
+import { Friend, FriendRequest } from '../../utils';
 
 type Props = NativeStackScreenProps<FriendsStackParamList, 'FriendsMain'>;
 
 type Tab = 'friends' | 'incoming' | 'sent';
 
 export function FriendsScreen({ navigation }: Props) {
+  const { t } = useLocale();
   const [tab, setTab] = useState<Tab>('friends');
+  // Real friends API will populate these — no mock feed.
+  const [friends] = useState<Friend[]>([]);
+  const [incomingRequests] = useState<FriendRequest[]>([]);
+  const [sentRequests] = useState<FriendRequest[]>([]);
 
   const segments = [
-    { key: 'friends', label: 'Arkadaşlar', badge: friends.length },
-    { key: 'incoming', label: 'Gelen', badge: incomingRequests.length },
-    { key: 'sent', label: 'Gönderilen', badge: sentRequests.length },
+    {
+      key: 'friends',
+      label: t('friends.tab.friends'),
+      badge: friends.length,
+    },
+    {
+      key: 'incoming',
+      label: t('friends.tab.incoming'),
+      badge: incomingRequests.length,
+    },
+    {
+      key: 'sent',
+      label: t('friends.tab.sent'),
+      badge: sentRequests.length,
+    },
   ];
 
   return (
     <Screen edges={['top']}>
       <Header
         large
-        subtitle={`${friends.length} bağlantı`}
-        title="Arkadaşlar"
-        actions={[{ icon: 'search', onPress: () => navigation.navigate('SearchUsers') }]}
+        subtitle={t('friends.subtitle').replace(
+          '{count}',
+          String(friends.length),
+        )}
+        title={t('friends.title')}
+        actions={[
+          { icon: 'search', onPress: () => navigation.navigate('SearchUsers') },
+        ]}
       />
 
       <View style={styles.segmentWrap}>
@@ -49,8 +72,8 @@ export function FriendsScreen({ navigation }: Props) {
           (friends.length === 0 ? (
             <EmptyState
               icon="users"
-              title="Henüz arkadaşın yok"
-              description="Yakındaki kişilerden arkadaş ekleyerek başla."
+              title={t('friends.empty_title')}
+              description={t('friends.empty_desc')}
             />
           ) : (
             friends.map(f => (
@@ -59,17 +82,29 @@ export function FriendsScreen({ navigation }: Props) {
                 name={f.name}
                 subtitle={
                   f.online
-                    ? 'Çevrimiçi'
-                    : `${f.lastActive ?? 'çevrimdışı'} · ${f.mutualFriends ?? 0} ortak`
+                    ? t('friends.online')
+                    : t('friends.offline_meta')
+                        .replace(
+                          '{lastActive}',
+                          f.lastActive ?? t('friends.offline'),
+                        )
+                        .replace('{mutual}', String(f.mutualFriends ?? 0))
                 }
                 avatarUri={f.avatar}
                 online={f.online}
                 premium={f.premium}
-                onPress={() => navigation.navigate('UserProfile', { userId: f.id })}
+                onPress={() =>
+                  navigation.navigate('UserProfile', { userId: f.id })
+                }
                 right={
                   <View style={styles.rowActions}>
                     <IconButton name="message" size={18} onPress={() => {}} />
-                    <IconButton name="more" size={18} variant="plain" onPress={() => {}} />
+                    <IconButton
+                      name="more"
+                      size={18}
+                      variant="plain"
+                      onPress={() => {}}
+                    />
                   </View>
                 }
               />
@@ -78,26 +113,39 @@ export function FriendsScreen({ navigation }: Props) {
 
         {tab === 'incoming' &&
           (incomingRequests.length === 0 ? (
-            <EmptyState icon="bell" title="Yeni istek yok" description="Gelen arkadaşlık istekleri burada görünür." />
+            <EmptyState
+              icon="bell"
+              title={t('friends.incoming_empty_title')}
+              description={t('friends.incoming_empty_desc')}
+            />
           ) : (
             incomingRequests.map(r => (
               <UserListItem
                 key={r.id}
                 name={r.name}
-                subtitle={`${r.mutualFriends} ortak arkadaş · ${r.sentAt}`}
+                subtitle={t('friends.incoming_meta')
+                  .replace('{count}', String(r.mutualFriends))
+                  .replace('{time}', r.sentAt)}
                 avatarUri={r.avatar}
                 premium={r.premium}
-                onPress={() => navigation.navigate('UserProfile', { userId: r.id })}
+                onPress={() =>
+                  navigation.navigate('UserProfile', { userId: r.id })
+                }
                 right={
                   <View style={styles.rowActions}>
                     <Button
-                      label="Kabul et"
+                      label={t('friends.accept')}
                       size="sm"
                       minWidth={108}
                       fullWidth={false}
                       onPress={() => {}}
                     />
-                    <IconButton name="close" size={18} variant="surface" onPress={() => {}} />
+                    <IconButton
+                      name="close"
+                      size={18}
+                      variant="surface"
+                      onPress={() => {}}
+                    />
                   </View>
                 }
               />
@@ -106,18 +154,24 @@ export function FriendsScreen({ navigation }: Props) {
 
         {tab === 'sent' &&
           (sentRequests.length === 0 ? (
-            <EmptyState icon="send" title="Bekleyen istek yok" description="Gönderdiğin istekler burada listelenir." />
+            <EmptyState
+              icon="send"
+              title={t('friends.sent_empty_title')}
+              description={t('friends.sent_empty_desc')}
+            />
           ) : (
             sentRequests.map(r => (
               <UserListItem
                 key={r.id}
                 name={r.name}
-                subtitle={`Gönderildi · ${r.sentAt}`}
+                subtitle={t('friends.sent_meta').replace('{time}', r.sentAt)}
                 avatarUri={r.avatar}
-                onPress={() => navigation.navigate('UserProfile', { userId: r.id })}
+                onPress={() =>
+                  navigation.navigate('UserProfile', { userId: r.id })
+                }
                 right={
                   <Button
-                    label="İptal"
+                    label={t('friends.cancel')}
                     size="sm"
                     variant="outline"
                     fullWidth={false}

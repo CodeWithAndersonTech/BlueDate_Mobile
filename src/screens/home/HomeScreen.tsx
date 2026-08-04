@@ -2,7 +2,6 @@ import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import React, { useCallback, useState } from 'react';
 import {
   Pressable,
-  ScrollView,
   StyleSheet,
   View,
 } from 'react-native';
@@ -14,51 +13,55 @@ import {
   Icon,
   IconButton,
   IconName,
-  NearbyCard,
   TabScreenScrollView,
   Typography,
 } from '../../components';
 import { getUserProfile } from '../../api';
+import { useLocale } from '../../i18n';
 import { useAuth } from '../../navigation/AuthContext';
 import { HomeStackParamList } from '../../navigation/types';
 import { ThemeColors, useTheme } from '../../theme';
-import { recentActivity, suggestedUsers } from '../../utils';
+import { ActivityItem } from '../../utils';
 
 type Props = NativeStackScreenProps<HomeStackParamList, 'HomeFeed'>;
 
 const ACTIVITY_META: Record<
   string,
-  { icon: IconName; label: string; color: keyof ThemeColors }
+  { icon: IconName; labelKey: string; color: keyof ThemeColors }
 > = {
   match: {
     icon: 'sparkles',
-    label: 'ile eşleştin',
+    labelKey: 'home.activity.match',
     color: 'primary',
   },
   like: {
     icon: 'heart',
-    label: 'seni beğendi',
+    labelKey: 'home.activity.like',
     color: 'danger',
   },
   visit: {
     icon: 'eye',
-    label: 'profiline baktı',
+    labelKey: 'home.activity.visit',
     color: 'info',
   },
   request: {
     icon: 'user-plus',
-    label: 'istek gönderdi',
+    labelKey: 'home.activity.request',
     color: 'warning',
   },
 };
 
 export function HomeScreen({ navigation }: Props) {
   const theme = useTheme();
+  const { t } = useLocale();
   const insets = useSafeAreaInsets();
   const { userId, accessToken } = useAuth();
   const [firstName, setFirstName] = useState('');
   const [fullName, setFullName] = useState('');
   const [avatarUri, setAvatarUri] = useState<string | undefined>();
+  // Real activity API will populate this — no mock feed.
+  const [recentActivity] = useState<ActivityItem[]>([]);
+  const [likeCount] = useState(0);
   const goToTab = (tab: string) => navigation.getParent()?.navigate(tab as never);
 
   useFocusEffect(
@@ -85,11 +88,11 @@ export function HomeScreen({ navigation }: Props) {
   return (
     <View style={[styles.flex, { backgroundColor: theme.colors.background }]}>
       <TabScreenScrollView
+        bottomSpacing={28}
         contentContainerStyle={[
           styles.content,
           { paddingTop: insets.top + 8 },
         ]}>
-        {/* Header */}
         <View style={styles.header}>
           <Pressable
             style={styles.greeting}
@@ -103,21 +106,21 @@ export function HomeScreen({ navigation }: Props) {
             />
             <View style={styles.greetingText}>
               <Typography variant="caption" color="textMuted">
-                Merhaba
+                {t('home.greeting')}
               </Typography>
               <Typography variant="h3">{firstName || '…'}</Typography>
             </View>
           </Pressable>
           <View style={styles.headerActions}>
-            <IconButton name="bell" onPress={() => {}} />
             <IconButton
-              name="settings"
-              onPress={() => navigation.navigate('Settings')}
+              name="message"
+              onPress={() => {}}
+              accessibilityLabel={t('home.messages')}
             />
+            <IconButton name="bell" onPress={() => {}} />
           </View>
         </View>
 
-        {/* Search affordance */}
         <Pressable
           onPress={() => goToTab('Nearby')}
           style={[
@@ -128,16 +131,18 @@ export function HomeScreen({ navigation }: Props) {
           ]}>
           <Icon name="search" size={18} color={theme.colors.textMuted} />
           <Typography variant="callout" color="textMuted">
-            Yakındaki kişileri keşfet
+            {t('home.search_placeholder')}
           </Typography>
         </Pressable>
 
-        {/* Hero — single focus CTA */}
         <Pressable
           onPress={() => goToTab('Premium')}
           style={({ pressed }) => [
             styles.hero,
-            { opacity: pressed ? 0.94 : 1, transform: [{ scale: pressed ? 0.985 : 1 }] },
+            {
+              opacity: pressed ? 0.94 : 1,
+              transform: [{ scale: pressed ? 0.985 : 1 }],
+            },
             theme.shadows.md,
           ]}>
           <LinearGradient
@@ -150,104 +155,107 @@ export function HomeScreen({ navigation }: Props) {
             <View style={styles.heroPill}>
               <Icon name="crown" size={12} color="#3A2A00" filled />
               <Typography variant="overline" tint="#3A2A00">
-                Premium
+                {t('home.hero_badge')}
               </Typography>
             </View>
             <Typography variant="h2" tint="#FFFFFF" style={styles.heroTitle}>
-              Bugün 12 kişi{'\n'}seni beğendi
+              {t('home.hero_title').replace('{count}', String(likeCount))}
             </Typography>
             <Typography variant="callout" tint="rgba(255,255,255,0.82)">
-              Kim olduklarını gör, sohbeti başlat.
+              {t('home.hero_subtitle')}
             </Typography>
             <View style={styles.heroCta}>
               <Typography variant="bodyStrong" tint={theme.colors.textInverse}>
-                Keşfet
+                {t('home.hero_cta')}
               </Typography>
-              <Icon name="chevron-right" size={16} color={theme.colors.textInverse} />
+              <Icon
+                name="chevron-right"
+                size={16}
+                color={theme.colors.textInverse}
+              />
             </View>
           </View>
         </Pressable>
 
-        {/* Nearby rail */}
         <View style={styles.section}>
-          <View style={styles.sectionHead}>
-            <Typography variant="title">Yakında</Typography>
-            <Pressable onPress={() => goToTab('Nearby')} hitSlop={8}>
-              <Typography variant="caption" tint={theme.colors.primary}>
-                Tümü
+          <Typography variant="title">{t('home.activity_section')}</Typography>
+          {recentActivity.length === 0 ? (
+            <View
+              style={[
+                styles.emptyCard,
+                styles.activityEmptyCard,
+                {
+                  backgroundColor: theme.colors.card,
+                  borderColor: theme.colors.border,
+                },
+              ]}>
+              <View
+                style={[
+                  styles.activityEmptyIcon,
+                  { backgroundColor: theme.colors.primarySoft },
+                ]}>
+                <Icon name="bell" size={22} color={theme.colors.primary} />
+              </View>
+              <Typography variant="bodyStrong" align="center">
+                {t('home.activity_empty')}
               </Typography>
-            </Pressable>
-          </View>
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.rail}>
-            {suggestedUsers.map(u => (
-              <NearbyCard
-                key={u.id}
-                user={u}
-                variant="rail"
-                onPress={() =>
-                  navigation.navigate('UserProfile', { userId: u.id })
-                }
-              />
-            ))}
-          </ScrollView>
-        </View>
-
-        {/* Activity */}
-        <View style={styles.section}>
-          <Typography variant="title">Aktivite</Typography>
-          <View
-            style={[
-              styles.activityCard,
-              { backgroundColor: theme.colors.card },
-              theme.shadows.sm,
-            ]}>
-            {recentActivity.map((item, i) => {
-              const meta = ACTIVITY_META[item.type];
-              return (
-                <View key={item.id}>
-                  <Pressable
-                    style={styles.activityRow}
-                    onPress={() =>
-                      navigation.navigate('UserProfile', { userId: item.userId })
-                    }>
-                    <Avatar uri={item.avatar} name={item.name} size="md" />
-                    <View style={styles.activityText}>
-                      <Typography variant="body" numberOfLines={2}>
-                        <Typography variant="bodyStrong">{item.name}</Typography>
-                        {` ${meta.label}`}
-                      </Typography>
-                      <Typography variant="caption" color="textMuted">
-                        {item.time}
-                      </Typography>
-                    </View>
-                    <View
-                      style={[
-                        styles.activityIcon,
-                        { backgroundColor: theme.colors.surfaceAlt },
-                      ]}>
-                      <Icon
-                        name={meta.icon}
-                        size={16}
-                        color={theme.colors[meta.color]}
-                        filled
+            </View>
+          ) : (
+            <View
+              style={[
+                styles.activityCard,
+                { backgroundColor: theme.colors.card },
+                theme.shadows.sm,
+              ]}>
+              {recentActivity.map((item, i) => {
+                const meta = ACTIVITY_META[item.type];
+                return (
+                  <View key={item.id}>
+                    <Pressable
+                      style={styles.activityRow}
+                      onPress={() =>
+                        navigation.navigate('UserProfile', {
+                          userId: item.userId,
+                        })
+                      }>
+                      <Avatar uri={item.avatar} name={item.name} size="md" />
+                      <View style={styles.activityText}>
+                        <Typography variant="body" numberOfLines={2}>
+                          <Typography variant="bodyStrong">
+                            {item.name}
+                          </Typography>
+                          {` ${t(meta.labelKey)}`}
+                        </Typography>
+                        <Typography variant="caption" color="textMuted">
+                          {item.time}
+                        </Typography>
+                      </View>
+                      <View
+                        style={[
+                          styles.activityIcon,
+                          { backgroundColor: theme.colors.surfaceAlt },
+                        ]}>
+                        <Icon
+                          name={meta.icon}
+                          size={16}
+                          color={theme.colors[meta.color]}
+                          filled
+                        />
+                      </View>
+                    </Pressable>
+                    {i < recentActivity.length - 1 && (
+                      <View
+                        style={[
+                          styles.sep,
+                          { backgroundColor: theme.colors.border },
+                        ]}
                       />
-                    </View>
-                  </Pressable>
-                  {i < recentActivity.length - 1 && (
-                    <View
-                      style={[
-                        styles.sep,
-                        { backgroundColor: theme.colors.border },
-                      ]}
-                    />
-                  )}
-                </View>
-              );
-            })}
-          </View>
+                    )}
+                  </View>
+                );
+              })}
+            </View>
+          )}
         </View>
       </TabScreenScrollView>
     </View>
@@ -308,12 +316,27 @@ const styles = StyleSheet.create({
     borderRadius: 999,
   },
   section: { gap: 14 },
-  sectionHead: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
+  emptyCard: {
+    borderRadius: 20,
+    borderWidth: StyleSheet.hairlineWidth,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
   },
-  rail: { gap: 12, paddingRight: 8 },
+  activityEmptyCard: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+    paddingVertical: 22,
+    paddingHorizontal: 16,
+    minHeight: 120,
+  },
+  activityEmptyIcon: {
+    width: 48,
+    height: 48,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   activityCard: {
     borderRadius: 20,
     paddingVertical: 4,
@@ -326,13 +349,14 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     paddingHorizontal: 12,
   },
-  activityText: { flex: 1, gap: 2 },
+  activityText: { flex: 1, gap: 2, minWidth: 0 },
   activityIcon: {
     width: 36,
     height: 36,
     borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
+    flexShrink: 0,
   },
   sep: { height: StyleSheet.hairlineWidth, marginLeft: 68 },
 });

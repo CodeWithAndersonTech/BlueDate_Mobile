@@ -10,10 +10,12 @@ import Animated, {
 } from 'react-native-reanimated';
 import { images } from '../../assets';
 import { Typography } from '../../components';
+import { useLocale } from '../../i18n';
 import { useTheme } from '../../theme';
 
 export function SplashScreen() {
   const theme = useTheme();
+  const { t } = useLocale();
   const scale = useSharedValue(0.6);
   const opacity = useSharedValue(0);
   const textOpacity = useSharedValue(0);
@@ -43,10 +45,10 @@ export function SplashScreen() {
 
         <Animated.View style={[styles.titleWrap, textStyle]}>
           <Typography variant="display" align="center">
-            Meerk
+            {t('splash.brand')}
           </Typography>
           <Typography variant="callout" color="textMuted" align="center">
-            Yeni bağlantılar burada başlar
+            {t('splash.tagline')}
           </Typography>
         </Animated.View>
       </View>

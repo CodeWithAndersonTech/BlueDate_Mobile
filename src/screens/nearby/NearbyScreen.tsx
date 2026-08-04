@@ -50,9 +50,12 @@ export function NearbyScreen({ navigation }: Props) {
   const [refreshing, setRefreshing] = useState(false);
   const [scanning, setScanning] = useState(false);
   const [hasScanned, setHasScanned] = useState(false);
+  const [scanTipOpen, setScanTipOpen] = useState(false);
   const contentOpacity = useSharedValue(0);
   const scanTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const booted = useRef(false);
+
+  const closeScanTip = () => setScanTipOpen(false);
 
   const cardW = (windowWidth - H_PAD * 2 - GAP) / 2;
 
@@ -80,6 +83,7 @@ export function NearbyScreen({ navigation }: Props) {
   // overlay handles dimming, so no extra opacity drop while scanning.
   const startScan = useCallback(() => {
     if (scanning) return;
+    closeScanTip();
     clearScanTimer();
     setScanning(true);
     scanTimer.current = setTimeout(finishScan, SCAN_MS);
@@ -149,6 +153,15 @@ export function NearbyScreen({ navigation }: Props) {
       ) : (
         <Animated.View style={[styles.flex, contentFadeStyle]}>
           <View style={styles.header}>
+            {scanTipOpen ? (
+              <Pressable
+                style={styles.scanTipDismiss}
+                onPress={closeScanTip}
+                accessibilityRole="button"
+                accessibilityLabel={t('common.close')}
+              />
+            ) : null}
+
             <View style={styles.headerText}>
               <Text
                 style={[styles.eyebrow, { color: theme.colors.textMuted }]}>
@@ -159,47 +172,57 @@ export function NearbyScreen({ navigation }: Props) {
               </Text>
             </View>
 
-            <Pressable
-              onPress={startScan}
-              hitSlop={8}
-              disabled={scanning}
-              accessibilityRole="button"
-              accessibilityLabel={t('nearby.scan_action')}
-              style={[
-                styles.scanBtn,
-                {
-                  backgroundColor: theme.colors.surfaceAlt,
-                  borderColor: theme.colors.border,
-                },
-              ]}>
-              <Image source={images.appLogo} style={styles.scanBtnLogo} />
-            </Pressable>
-          </View>
+            <View style={styles.scanBtnWrap}>
+              <Pressable
+                onPress={() => setScanTipOpen(open => !open)}
+                hitSlop={8}
+                accessibilityRole="button"
+                accessibilityLabel={t('nearby.scan_action')}
+                accessibilityState={{ expanded: scanTipOpen }}
+                style={[
+                  styles.scanBtn,
+                  {
+                    backgroundColor: theme.colors.surfaceAlt,
+                    borderColor: theme.colors.border,
+                  },
+                ]}>
+                <Image source={images.appLogo} style={styles.scanBtnLogo} />
+              </Pressable>
 
-          <Pressable
-            onPress={startScan}
-            disabled={scanning}
-            accessibilityRole="button"
-            accessibilityLabel={t('nearby.scan_action')}
-            style={[
-              styles.scanBanner,
-              {
-                backgroundColor: theme.colors.card,
-                borderColor: theme.colors.border,
-              },
-              theme.shadows.sm,
-            ]}>
-            <Image source={images.appLogo} style={styles.bannerLogo} />
-            <View style={styles.bannerCopy}>
-              <Text style={[styles.bannerTitle, { color: theme.colors.text }]}>
-                {t('nearby.scan_action')}
-              </Text>
-              <Text
-                style={[styles.bannerDesc, { color: theme.colors.textMuted }]}>
-                {t('nearby.scan_banner')}
-              </Text>
+              {scanTipOpen ? (
+                <View
+                  style={[
+                    styles.scanTip,
+                    {
+                      backgroundColor: theme.colors.card,
+                      borderColor: theme.colors.border,
+                    },
+                    theme.shadows.sm,
+                  ]}>
+                  <View
+                    style={[
+                      styles.scanTipCaret,
+                      {
+                        backgroundColor: theme.colors.card,
+                        borderColor: theme.colors.border,
+                      },
+                    ]}
+                  />
+                  <Text
+                    style={[styles.scanTipTitle, { color: theme.colors.text }]}>
+                    {t('nearby.scan_action')}
+                  </Text>
+                  <Text
+                    style={[
+                      styles.scanTipText,
+                      { color: theme.colors.textMuted },
+                    ]}>
+                    {t('nearby.scan_banner')}
+                  </Text>
+                </View>
+              ) : null}
             </View>
-          </Pressable>
+          </View>
 
           {!hasScanned ? (
             <View style={styles.preScan}>
@@ -211,6 +234,7 @@ export function NearbyScreen({ navigation }: Props) {
           ) : users.length === 0 ? (
             <TabScreenScrollView
               contentContainerStyle={styles.emptyScroll}
+              onScrollBeginDrag={closeScanTip}
               refreshControl={
                 <RefreshControl
                   refreshing={refreshing}
@@ -219,7 +243,9 @@ export function NearbyScreen({ navigation }: Props) {
                 />
               }>
               <EmptyState
-                icon="map-pin"
+                image={images.appLogo}
+                onImagePress={startScan}
+                imageAccessibilityLabel={t('nearby.scan_action')}
                 title={t('nearby.empty_title')}
                 description={t('nearby.empty_desc')}
               />
@@ -227,6 +253,7 @@ export function NearbyScreen({ navigation }: Props) {
           ) : (
             <TabScreenScrollView
               contentContainerStyle={styles.grid}
+              onScrollBeginDrag={closeScanTip}
               refreshControl={
                 <RefreshControl
                   refreshing={refreshing}
@@ -261,6 +288,7 @@ const styles = StyleSheet.create({
   root: { flex: 1 },
   flex: { flex: 1 },
   header: {
+    position: 'relative',
     paddingHorizontal: H_PAD,
     paddingTop: 4,
     paddingBottom: 10,
@@ -268,6 +296,8 @@ const styles = StyleSheet.create({
     alignItems: 'flex-start',
     justifyContent: 'space-between',
     gap: 12,
+    zIndex: 4,
+    overflow: 'visible',
   },
   headerText: { flex: 1, gap: 2 },
   eyebrow: {
@@ -280,6 +310,11 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     letterSpacing: -0.6,
   },
+  scanBtnWrap: {
+    position: 'relative',
+    marginTop: 10,
+    zIndex: 5,
+  },
   scanBtn: {
     width: 44,
     height: 44,
@@ -287,7 +322,6 @@ const styles = StyleSheet.create({
     borderWidth: StyleSheet.hairlineWidth,
     alignItems: 'center',
     justifyContent: 'center',
-    marginTop: 10,
     overflow: 'hidden',
   },
   scanBtnLogo: {
@@ -295,25 +329,42 @@ const styles = StyleSheet.create({
     height: 32,
     borderRadius: 8,
   },
-  scanBanner: {
-    marginHorizontal: H_PAD,
-    marginBottom: 12,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    borderRadius: 16,
+  scanTipDismiss: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    zIndex: 1,
+  },
+  scanTip: {
+    position: 'absolute',
+    top: '100%',
+    right: 0,
+    marginTop: 10,
+    width: 220,
+    borderRadius: 14,
     borderWidth: StyleSheet.hairlineWidth,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
+    paddingHorizontal: 12,
+    paddingTop: 12,
+    paddingBottom: 12,
+    gap: 4,
+    zIndex: 6,
+    elevation: 12,
   },
-  bannerLogo: {
-    width: 48,
-    height: 48,
-    borderRadius: 12,
+  scanTipCaret: {
+    position: 'absolute',
+    top: -5,
+    right: 16,
+    width: 10,
+    height: 10,
+    borderLeftWidth: StyleSheet.hairlineWidth,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    transform: [{ rotate: '45deg' }],
+    zIndex: 2,
   },
-  bannerCopy: { flex: 1, gap: 2 },
-  bannerTitle: { fontSize: 15, fontWeight: '700' },
-  bannerDesc: { fontSize: 12, fontWeight: '500', lineHeight: 16 },
+  scanTipTitle: { fontSize: 13, fontWeight: '700' },
+  scanTipText: { fontSize: 12, lineHeight: 17, fontWeight: '500' },
   preScan: {
     flex: 1,
     alignItems: 'center',

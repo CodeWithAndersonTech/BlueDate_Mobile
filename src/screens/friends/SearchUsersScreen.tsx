@@ -6,38 +6,50 @@ import {
   EmptyState,
   Header,
   Input,
+  Screen,
   SectionHeader,
   UserListItem,
 } from '../../components';
-import { Screen } from '../../components';
+import { useLocale } from '../../i18n';
 import { FriendsStackParamList } from '../../navigation/types';
-import { friends, nearbyUsers } from '../../utils';
 
 type Props = NativeStackScreenProps<FriendsStackParamList, 'SearchUsers'>;
 
-const DIRECTORY = [
-  ...friends.map(f => ({ id: f.id, name: f.name, username: f.username, avatar: f.avatar, premium: f.premium, online: f.online })),
-  ...nearbyUsers.map(n => ({ id: n.id, name: n.name, username: `@${n.name.toLowerCase()}`, avatar: n.photo, premium: n.premium, online: n.online })),
-];
+type DirectoryUser = {
+  id: string;
+  name: string;
+  username: string;
+  avatar?: string;
+  premium?: boolean;
+  online?: boolean;
+};
 
 export function SearchUsersScreen({ navigation }: Props) {
+  const { t } = useLocale();
   const [query, setQuery] = useState('');
+  // Real search API will populate this — no mock directory.
+  const [directory] = useState<DirectoryUser[]>([]);
 
   const results = useMemo(() => {
     if (!query.trim()) return [];
     const q = query.toLowerCase();
-    return DIRECTORY.filter(
-      u => u.name.toLowerCase().includes(q) || u.username.toLowerCase().includes(q),
+    return directory.filter(
+      u =>
+        u.name.toLowerCase().includes(q) ||
+        u.username.toLowerCase().includes(q),
     );
-  }, [query]);
+  }, [directory, query]);
 
   return (
     <Screen edges={['top']}>
-      <Header onBack={() => navigation.goBack()} title="Kullanıcı Ara" />
+      <Header
+        onBack={() => navigation.goBack()}
+        title={t('friends.search_title')}
+      />
 
       <View style={styles.searchWrap}>
         <Input
-          placeholder="İsim veya kullanıcı adı"
+          placeholder={t('friends.search_placeholder')}
           leftIcon="search"
           autoFocus
           autoCapitalize="none"
@@ -51,26 +63,47 @@ export function SearchUsersScreen({ navigation }: Props) {
         keyboardShouldPersistTaps="handled"
         contentContainerStyle={styles.content}>
         {query.trim() === '' ? (
-          <View style={styles.suggest}>
-            <SectionHeader title="Önerilenler" />
-            {DIRECTORY.slice(0, 5).map(u => (
-              <UserListItem
-                key={u.id}
-                name={u.name}
-                subtitle={u.username}
-                avatarUri={u.avatar}
-                online={u.online}
-                premium={u.premium}
-                onPress={() => navigation.navigate('UserProfile', { userId: u.id })}
-                right={<Button label="Ekle" size="sm" fullWidth={false} leftIcon="user-plus" onPress={() => {}} />}
-              />
-            ))}
-          </View>
+          directory.length === 0 ? (
+            <EmptyState
+              icon="search"
+              title={t('friends.search_title')}
+              description={t('friends.search_placeholder')}
+            />
+          ) : (
+            <View style={styles.suggest}>
+              <SectionHeader title={t('friends.suggested')} />
+              {directory.slice(0, 5).map(u => (
+                <UserListItem
+                  key={u.id}
+                  name={u.name}
+                  subtitle={u.username}
+                  avatarUri={u.avatar}
+                  online={u.online}
+                  premium={u.premium}
+                  onPress={() =>
+                    navigation.navigate('UserProfile', { userId: u.id })
+                  }
+                  right={
+                    <Button
+                      label={t('friends.add')}
+                      size="sm"
+                      fullWidth={false}
+                      leftIcon="user-plus"
+                      onPress={() => {}}
+                    />
+                  }
+                />
+              ))}
+            </View>
+          )
         ) : results.length === 0 ? (
           <EmptyState
             icon="search"
-            title="Sonuç bulunamadı"
-            description={`"${query}" için eşleşen kullanıcı yok.`}
+            title={t('friends.no_results_title')}
+            description={t('friends.no_results_desc').replace(
+              '{query}',
+              query,
+            )}
           />
         ) : (
           results.map(u => (
@@ -81,8 +114,18 @@ export function SearchUsersScreen({ navigation }: Props) {
               avatarUri={u.avatar}
               online={u.online}
               premium={u.premium}
-              onPress={() => navigation.navigate('UserProfile', { userId: u.id })}
-              right={<Button label="Ekle" size="sm" fullWidth={false} leftIcon="user-plus" onPress={() => {}} />}
+              onPress={() =>
+                navigation.navigate('UserProfile', { userId: u.id })
+              }
+              right={
+                <Button
+                  label={t('friends.add')}
+                  size="sm"
+                  fullWidth={false}
+                  leftIcon="user-plus"
+                  onPress={() => {}}
+                />
+              }
             />
           ))
         )}

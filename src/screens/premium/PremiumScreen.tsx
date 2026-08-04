@@ -168,9 +168,9 @@ export function PremiumScreen() {
                               styles.planName,
                               { color: theme.colors.text },
                             ]}>
-                            {p.name}
+                            {t(p.nameKey)}
                           </Text>
-                          {p.tagline ? (
+                          {p.taglineKey ? (
                             <View
                               style={[
                                 styles.tag,
@@ -189,7 +189,7 @@ export function PremiumScreen() {
                                       : theme.colors.textMuted,
                                   },
                                 ]}>
-                                {p.tagline}
+                                {t(p.taglineKey)}
                               </Text>
                             </View>
                           ) : null}
@@ -214,7 +214,11 @@ export function PremiumScreen() {
                             styles.planMeta,
                             { color: theme.colors.textMuted },
                           ]}>
-                          {p.perMonth ?? p.highlight ?? t('premium.renews')}
+                          {p.perMonthKey
+                            ? t(p.perMonthKey)
+                            : p.highlightKey
+                              ? t(p.highlightKey)
+                              : t('premium.renews')}
                         </Text>
                       </View>
                     </View>
@@ -228,7 +232,7 @@ export function PremiumScreen() {
                           styles.planPeriod,
                           { color: theme.colors.textMuted },
                         ]}>
-                        {p.period}
+                        {t(p.periodKey)}
                       </Text>
                     </View>
                   </Pressable>
@@ -278,11 +282,13 @@ export function PremiumScreen() {
                           styles.perkTitle,
                           { color: theme.colors.text },
                         ]}>
-                        {perk.title}
+                        {t(perk.titleKey)}
                       </Text>
                       {perk.plusOnly ? (
                         <View style={styles.plusBadge}>
-                          <Text style={styles.plusBadgeText}>Plus</Text>
+                          <Text style={styles.plusBadgeText}>
+                            {t('premium.plus_badge')}
+                          </Text>
                         </View>
                       ) : null}
                     </View>
@@ -291,7 +297,7 @@ export function PremiumScreen() {
                         styles.perkDesc,
                         { color: theme.colors.textMuted },
                       ]}>
-                      {perk.description}
+                      {t(perk.descriptionKey)}
                     </Text>
                   </View>
                 </View>
@@ -320,8 +326,8 @@ export function PremiumScreen() {
             <View style={styles.footerSummary}>
               <Text
                 style={[styles.footerLabel, { color: theme.colors.textMuted }]}>
-                {active.name}
-                {active.tagline ? ` · ${active.tagline}` : ''}
+                {t(active.nameKey)}
+                {active.taglineKey ? ` · ${t(active.taglineKey)}` : ''}
               </Text>
               <Text style={[styles.footerPrice, { color: theme.colors.text }]}>
                 {active.price}
@@ -331,7 +337,7 @@ export function PremiumScreen() {
                     { color: theme.colors.textMuted },
                   ]}>
                   {' '}
-                  {active.period}
+                  {t(active.periodKey)}
                 </Text>
               </Text>
             </View>

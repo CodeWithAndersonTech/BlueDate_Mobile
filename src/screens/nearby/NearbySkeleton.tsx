@@ -52,29 +52,13 @@ export function NearbySkeleton({ visible = true }: Props) {
         fadeStyle,
       ]}
       pointerEvents="none">
-      {/* Header — eyebrow + title + scan chip */}
+      {/* Header — eyebrow + title + info chip */}
       <View style={styles.header}>
         <View style={styles.headerText}>
           <SkeletonLine width={72} height={11} radius={6} />
           <SkeletonLine width={148} height={26} radius={8} style={styles.title} />
         </View>
         <SkeletonBlock width={44} height={44} radius={14} />
-      </View>
-
-      {/* Scan banner */}
-      <View
-        style={[
-          styles.banner,
-          {
-            backgroundColor: theme.colors.card,
-            borderColor: theme.colors.border,
-          },
-        ]}>
-        <SkeletonBlock width={48} height={48} radius={12} />
-        <View style={styles.bannerCopy}>
-          <SkeletonLine width="55%" height={14} radius={6} />
-          <SkeletonLine width="88%" height={11} radius={5} />
-        </View>
       </View>
 
       {/* Photo card grid */}
@@ -122,18 +106,6 @@ const styles = StyleSheet.create({
   },
   headerText: { flex: 1, gap: 8, paddingTop: 2 },
   title: { marginTop: 2 },
-  banner: {
-    marginHorizontal: H_PAD,
-    marginBottom: 12,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    borderRadius: 16,
-    borderWidth: StyleSheet.hairlineWidth,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-  },
-  bannerCopy: { flex: 1, gap: 8 },
   grid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
