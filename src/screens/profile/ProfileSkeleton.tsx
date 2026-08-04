@@ -19,6 +19,7 @@ const TILE_HEIGHT = 100;
 const PHOTO_GAP = 2;
 const PHOTO_COLS = 3;
 const PHOTO_ROWS = 2;
+const PHOTO_H_INSET = 16;
 
 type Props = {
   /** When true, fades the skeleton in (used on first paint). */
@@ -35,7 +36,9 @@ export function ProfileSkeleton({ visible = true }: Props) {
   // Visible immediately — avoid a blank first frame before fade-in.
   const opacity = useSharedValue(visible ? 1 : 0);
 
-  const photoCell = (windowWidth - PHOTO_GAP * (PHOTO_COLS - 1)) / PHOTO_COLS;
+  const photoCell =
+    (windowWidth - PHOTO_H_INSET * 2 - PHOTO_GAP * (PHOTO_COLS - 1)) /
+    PHOTO_COLS;
 
   useEffect(() => {
     opacity.value = withTiming(visible ? 1 : 0, {
@@ -181,11 +184,13 @@ const styles = StyleSheet.create({
   nameBlock: { gap: 8, paddingRight: 8 },
   body: { paddingHorizontal: 16, paddingTop: 4 },
   fieldLabel: { marginBottom: 8 },
-  photos: { marginTop: 22, gap: 12 },
-  photosHeader: { paddingHorizontal: 16 },
+  photos: { marginTop: 22, gap: 12, paddingHorizontal: PHOTO_H_INSET },
+  photosHeader: {},
   photoGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
+    borderRadius: 12,
+    overflow: 'hidden',
   },
   section: { marginTop: 22, gap: 12 },
   tileGrid: {

@@ -8,6 +8,9 @@ import {
   UserPhotoKind,
 } from '../../api/photos';
 
+/** Max gallery photos per profile (avatar is separate). */
+export const MAX_GALLERY_PHOTOS = 5;
+
 export type ProfilePhoto = {
   /** Stable UI key */
   id: string;
@@ -17,6 +20,13 @@ export type ProfilePhoto = {
   /** True when only stored on device (upload pending / offline). */
   localOnly?: boolean;
 };
+
+export class PhotoLimitError extends Error {
+  constructor() {
+    super('PHOTO_LIMIT');
+    this.name = 'PhotoLimitError';
+  }
+}
 
 type LocalBundle = {
   avatarUri?: string;
@@ -103,6 +113,11 @@ export async function pickAndAddGalleryPhoto(
   asset: { uri: string; fileName?: string; type?: string },
   token?: string | null,
 ): Promise<ProfilePhoto> {
+  const current = await loadProfilePhotos(userId, token);
+  if (current.gallery.length >= MAX_GALLERY_PHOTOS) {
+    throw new PhotoLimitError();
+  }
+
   try {
     const uploaded = await uploadGalleryPhoto(userId, asset, token);
     const uri = (await resolveMediaUrl(uploaded.Url)) ?? uploaded.Url;

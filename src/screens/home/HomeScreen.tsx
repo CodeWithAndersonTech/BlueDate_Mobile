@@ -23,10 +23,12 @@ import {
   formatRelativeTime,
   getSocialActivity,
   getUserProfile,
+  resolveMediaUrl,
 } from '../../api';
 import { useLocale } from '../../i18n';
 import { useAuth } from '../../navigation/AuthContext';
 import { HomeStackParamList } from '../../navigation/types';
+import { loadProfilePhotos } from '../../services/photos/photoStore';
 import { ThemeColors, useTheme } from '../../theme';
 import { ActivityItem } from '../../utils';
 
@@ -78,31 +80,49 @@ export function HomeScreen({ navigation }: Props) {
       if (!userId) return;
       let cancelled = false;
 
-      getUserProfile(userId, accessToken)
-        .then(profile => {
+      (async () => {
+        try {
+          const [profile, photoBundle] = await Promise.all([
+            getUserProfile(userId, accessToken),
+            loadProfilePhotos(userId, accessToken).catch(() => ({
+              gallery: [],
+              avatarUri: undefined as string | undefined,
+            })),
+          ]);
           if (cancelled) return;
+
           const name = `${profile.FirstName} ${profile.LastName}`.trim();
           setFirstName(profile.FirstName?.trim() || profile.Username || '');
           setFullName(name || profile.Username || '');
-          setAvatarUri(profile.ProfileImage ?? undefined);
-        })
-        .catch(() => {
+
+          const profileAvatar = await resolveMediaUrl(profile.ProfileImage);
+          setAvatarUri(photoBundle.avatarUri ?? profileAvatar);
+        } catch {
           /* keep last known greeting */
-        });
+        }
+      })();
 
       getSocialActivity(userId, 20, accessToken)
-        .then(activity => {
+        .then(async activity => {
           if (cancelled) return;
-          setRecentActivity(
-            (activity.Items ?? []).map(item => ({
+          const mapped = await Promise.all(
+            (activity.Items ?? []).map(async item => ({
               id: `${item.Type}-${item.EntityId}`,
               userId: String(item.User.UserId),
-              type: item.Type === 'friend_request' ? 'request' : 'like',
+              type:
+                item.Type === 'friend_request'
+                  ? ('request' as const)
+                  : ('like' as const),
               name: displayName(item.User),
-              avatar: item.User.ProfileImage ?? undefined,
+              avatar:
+                (await resolveMediaUrl(item.User.ProfileImage)) ??
+                item.User.ProfileImage ??
+                undefined,
               time: formatRelativeTime(item.CreatedDate),
             })),
           );
+          if (cancelled) return;
+          setRecentActivity(mapped);
         })
         .catch(() => {
           /* keep previous activity */

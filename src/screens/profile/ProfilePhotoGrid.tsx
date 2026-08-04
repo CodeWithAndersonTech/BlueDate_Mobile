@@ -4,7 +4,6 @@ import {
   Alert,
   Dimensions,
   Image,
-  Modal,
   Pressable,
   StyleSheet,
   Text,
@@ -17,13 +16,18 @@ import {
   pickPhotoFromLibrary,
 } from '../../services/photos/pickImage';
 import {
+  MAX_GALLERY_PHOTOS,
+  PhotoLimitError,
   pickAndAddGalleryPhoto,
   ProfilePhoto,
   removeGalleryPhoto,
 } from '../../services/photos/photoStore';
+import { PhotoViewerModal } from './PhotoViewerModal';
 
 const GAP = 2;
 const COLS = 3;
+/** Match profile body inset so the grid isn't edge-to-edge. */
+const H_INSET = 16;
 
 type Props = {
   userId?: number;
@@ -43,10 +47,13 @@ export function ProfilePhotoGrid({
   const theme = useTheme();
   const { t } = useLocale();
   const [busy, setBusy] = useState(false);
-  const [viewer, setViewer] = useState<ProfilePhoto | null>(null);
+  const [viewerIndex, setViewerIndex] = useState<number | null>(null);
+
+  const atLimit = photos.length >= MAX_GALLERY_PHOTOS;
+  const canAdd = editable && !atLimit;
 
   const cell = useMemo(() => {
-    const width = Dimensions.get('window').width;
+    const width = Dimensions.get('window').width - H_INSET * 2;
     return (width - GAP * (COLS - 1)) / COLS;
   }, []);
 
@@ -78,43 +85,68 @@ export function ProfilePhotoGrid({
   };
 
   const onAdd = async () => {
-    if (!editable || busy || !userId || !onPhotosChange) return;
+    if (!canAdd || busy || !userId || !onPhotosChange) return;
+    if (atLimit) {
+      Alert.alert(
+        t('profile.photos'),
+        t('profile.photos_max').replace('{count}', String(MAX_GALLERY_PHOTOS)),
+      );
+      return;
+    }
     const asset = await pickAsset();
     if (!asset) return;
     setBusy(true);
     try {
       const photo = await pickAndAddGalleryPhoto(userId, asset, token);
       onPhotosChange([...photos, photo]);
-    } catch {
-      Alert.alert(t('profile.photos'), t('profile.photo_error'));
+    } catch (error) {
+      if (error instanceof PhotoLimitError) {
+        Alert.alert(
+          t('profile.photos'),
+          t('profile.photos_max').replace('{count}', String(MAX_GALLERY_PHOTOS)),
+        );
+      } else {
+        Alert.alert(t('profile.photos'), t('profile.photo_error'));
+      }
     } finally {
       setBusy(false);
     }
   };
 
-  const onDelete = async (photo: ProfilePhoto) => {
+  const onDelete = (photo: ProfilePhoto) => {
     if (!editable || busy || !userId || !onPhotosChange) return;
-    Alert.alert(t('profile.delete_photo'), undefined, [
-      { text: t('common.close'), style: 'cancel' },
-      {
-        text: t('profile.delete_photo'),
-        style: 'destructive',
-        onPress: async () => {
-          setBusy(true);
-          try {
-            await removeGalleryPhoto(userId, photo, token);
-            onPhotosChange(photos.filter(p => p.id !== photo.id));
-            setViewer(null);
-          } finally {
-            setBusy(false);
-          }
+    Alert.alert(
+      t('profile.delete_photo'),
+      t('profile.delete_photo_confirm'),
+      [
+        { text: t('common.close'), style: 'cancel' },
+        {
+          text: t('profile.delete_photo'),
+          style: 'destructive',
+          onPress: async () => {
+            setBusy(true);
+            try {
+              await removeGalleryPhoto(userId, photo, token);
+              const next = photos.filter(p => p.id !== photo.id);
+              onPhotosChange(next);
+              if (next.length === 0) {
+                setViewerIndex(null);
+              } else {
+                setViewerIndex(i =>
+                  i == null ? null : Math.min(i, next.length - 1),
+                );
+              }
+            } finally {
+              setBusy(false);
+            }
+          },
         },
-      },
-    ]);
+      ],
+    );
   };
 
   const cells: Array<ProfilePhoto | 'add'> = [...photos];
-  if (editable) {
+  if (canAdd) {
     cells.push('add');
   }
 
@@ -124,7 +156,12 @@ export function ProfilePhotoGrid({
         <Text style={[styles.title, { color: theme.colors.text }]}>
           {t('profile.photos')}
         </Text>
-        {busy ? <ActivityIndicator color={theme.colors.primary} /> : null}
+        <View style={styles.headerRight}>
+          <Text style={[styles.count, { color: theme.colors.textMuted }]}>
+            {photos.length}/{MAX_GALLERY_PHOTOS}
+          </Text>
+          {busy ? <ActivityIndicator color={theme.colors.primary} /> : null}
+        </View>
       </View>
 
       {photos.length === 0 && !editable ? null : photos.length === 0 ? (
@@ -173,7 +210,7 @@ export function ProfilePhotoGrid({
             return (
               <Pressable
                 key={item.id}
-                onPress={() => setViewer(item)}
+                onPress={() => setViewerIndex(index)}
                 style={[
                   styles.cell,
                   {
@@ -195,53 +232,34 @@ export function ProfilePhotoGrid({
         </View>
       )}
 
-      <Modal
-        visible={!!viewer}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setViewer(null)}>
-        <View style={styles.viewerRoot}>
-          <Pressable style={styles.viewerBackdrop} onPress={() => setViewer(null)} />
-          {viewer ? (
-            <Image
-              source={{ uri: viewer.uri }}
-              style={styles.viewerImage}
-              resizeMode="contain"
-            />
-          ) : null}
-          <View style={styles.viewerActions}>
-            {editable && viewer ? (
-              <Pressable
-                onPress={() => onDelete(viewer)}
-                style={[styles.viewerBtn, { backgroundColor: theme.colors.danger }]}>
-                <Text style={styles.viewerBtnText}>{t('profile.delete_photo')}</Text>
-              </Pressable>
-            ) : null}
-            <Pressable
-              onPress={() => setViewer(null)}
-              style={[styles.viewerBtn, { backgroundColor: '#FFFFFF' }]}>
-              <Text style={[styles.viewerBtnText, { color: '#111' }]}>
-                {t('common.close')}
-              </Text>
-            </Pressable>
-          </View>
-        </View>
-      </Modal>
+      <PhotoViewerModal
+        photos={photos}
+        index={viewerIndex ?? -1}
+        editable={editable}
+        busy={busy}
+        onClose={() => setViewerIndex(null)}
+        onIndexChange={setViewerIndex}
+        onDelete={onDelete}
+      />
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  wrap: { marginTop: 22, gap: 12 },
+  wrap: { marginTop: 22, gap: 12, paddingHorizontal: H_INSET },
   headerRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 16,
+  },
+  headerRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
   },
   title: { fontSize: 18, fontWeight: '700' },
+  count: { fontSize: 13, fontWeight: '600', fontVariant: ['tabular-nums'] },
   empty: {
-    marginHorizontal: 16,
     borderRadius: 14,
     borderWidth: 1,
     borderStyle: 'dashed',
@@ -255,6 +273,8 @@ const styles = StyleSheet.create({
   grid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
+    borderRadius: 12,
+    overflow: 'hidden',
   },
   cell: {
     overflow: 'hidden',
@@ -275,32 +295,6 @@ const styles = StyleSheet.create({
     backgroundColor: '#F5D76E',
   },
   localBadgeText: { fontSize: 1, color: 'transparent' },
-  viewerRoot: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.92)',
-    justifyContent: 'center',
-  },
-  viewerBackdrop: {
-    ...StyleSheet.absoluteFillObject,
-  },
-  viewerImage: {
-    width: '100%',
-    height: '70%',
-  },
-  viewerActions: {
-    position: 'absolute',
-    left: 16,
-    right: 16,
-    bottom: 40,
-    gap: 10,
-  },
-  viewerBtn: {
-    height: 48,
-    borderRadius: 14,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  viewerBtnText: { color: '#FFF', fontWeight: '700', fontSize: 15 },
 });
 
 export default ProfilePhotoGrid;
