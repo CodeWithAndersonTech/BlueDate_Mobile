@@ -169,6 +169,440 @@ export const recentActivity: ActivityItem[] = [];
 
 export const suggestedUsers = nearbyUsers.slice(0, 4);
 
+export interface ChatMessage {
+  id: string;
+  conversationId: string;
+  /** `me` for current user, otherwise peer user id. */
+  senderId: string;
+  text: string;
+  sentAt: string;
+  /** ISO timestamp for sorting. */
+  sentAtIso: string;
+  read?: boolean;
+}
+
+export interface ChatConversation {
+  id: string;
+  userId: string;
+  name: string;
+  username: string;
+  avatar?: string;
+  online: boolean;
+  premium?: boolean;
+  lastMessage: string;
+  lastMessageAt: string;
+  unreadCount: number;
+  /** Optional short status under the name in the thread header. */
+  statusKey?: 'online' | 'offline' | 'typing';
+}
+
+export const chatConversations: ChatConversation[] = [
+  {
+    id: 'c1',
+    userId: 'u-ayse',
+    name: 'Ayşe Demir',
+    username: '@ayse.d',
+    avatar: avatar(5),
+    online: true,
+    premium: true,
+    lastMessage: 'Kahve önerin neydi, unuttum ☕',
+    lastMessageAt: '2m',
+    unreadCount: 2,
+    statusKey: 'online',
+  },
+  {
+    id: 'c2',
+    userId: 'u-can',
+    name: 'Can Yıldız',
+    username: '@cany',
+    avatar: avatar(11),
+    online: true,
+    lastMessage: 'Yakındayım, 10 dk’da oradayım.',
+    lastMessageAt: '18m',
+    unreadCount: 0,
+    statusKey: 'online',
+  },
+  {
+    id: 'c3',
+    userId: 'u-elif',
+    name: 'Elif Kara',
+    username: '@elifk',
+    avatar: avatar(9),
+    online: false,
+    premium: true,
+    lastMessage: 'Fotoğraflar harika olmuş ✨',
+    lastMessageAt: '1h',
+    unreadCount: 1,
+    statusKey: 'offline',
+  },
+  {
+    id: 'c4',
+    userId: 'u-mert',
+    name: 'Mert Aksoy',
+    username: '@mert.a',
+    avatar: avatar(14),
+    online: false,
+    lastMessage: 'Yarın için planın var mı?',
+    lastMessageAt: 'Yesterday',
+    unreadCount: 0,
+    statusKey: 'offline',
+  },
+  {
+    id: 'c5',
+    userId: 'u-zeynep',
+    name: 'Zeynep Öztürk',
+    username: '@zeynepo',
+    avatar: avatar(20),
+    online: true,
+    lastMessage: 'Sen: Meerk’te görüşürüz 👋',
+    lastMessageAt: 'Tue',
+    unreadCount: 0,
+    statusKey: 'typing',
+  },
+  {
+    id: 'c6',
+    userId: 'u-burak',
+    name: 'Burak Şahin',
+    username: '@buraks',
+    avatar: avatar(33),
+    online: false,
+    lastMessage: 'Playlist’i paylaşır mısın?',
+    lastMessageAt: 'Mon',
+    unreadCount: 0,
+    statusKey: 'offline',
+  },
+];
+
+export const chatMessages: ChatMessage[] = [
+  // Ayşe
+  {
+    id: 'm1',
+    conversationId: 'c1',
+    senderId: 'u-ayse',
+    text: 'Merhaba! Nearby’de göründün, nasılsın?',
+    sentAt: '14:02',
+    sentAtIso: '2026-08-04T14:02:00',
+    read: true,
+  },
+  {
+    id: 'm2',
+    conversationId: 'c1',
+    senderId: 'me',
+    text: 'İyiyim, teşekkürler 😊 Sen nasılsın?',
+    sentAt: '14:05',
+    sentAtIso: '2026-08-04T14:05:00',
+    read: true,
+  },
+  {
+    id: 'm3',
+    conversationId: 'c1',
+    senderId: 'u-ayse',
+    text: 'Harika. Bugün Kadıköy’deyim, kısa bir kahve molası iyi gider.',
+    sentAt: '14:08',
+    sentAtIso: '2026-08-04T14:08:00',
+    read: true,
+  },
+  {
+    id: 'm4',
+    conversationId: 'c1',
+    senderId: 'me',
+    text: 'Süper — ben de yakındayım. Favori kahven ne?',
+    sentAt: '14:10',
+    sentAtIso: '2026-08-04T14:10:00',
+    read: true,
+  },
+  {
+    id: 'm5',
+    conversationId: 'c1',
+    senderId: 'u-ayse',
+    text: 'Flat white 🤍 Senin önerin neydi, unuttum ☕',
+    sentAt: '14:12',
+    sentAtIso: '2026-08-04T14:12:00',
+    read: false,
+  },
+  {
+    id: 'm6',
+    conversationId: 'c1',
+    senderId: 'u-ayse',
+    text: 'Kahve önerin neydi, unuttum ☕',
+    sentAt: '14:13',
+    sentAtIso: '2026-08-04T14:13:00',
+    read: false,
+  },
+  // Can
+  {
+    id: 'm7',
+    conversationId: 'c2',
+    senderId: 'me',
+    text: 'Maçtan sonra bir şeyler içer miyiz?',
+    sentAt: '12:40',
+    sentAtIso: '2026-08-04T12:40:00',
+    read: true,
+  },
+  {
+    id: 'm8',
+    conversationId: 'c2',
+    senderId: 'u-can',
+    text: 'Olur! Hangi taraftasın?',
+    sentAt: '12:44',
+    sentAtIso: '2026-08-04T12:44:00',
+    read: true,
+  },
+  {
+    id: 'm9',
+    conversationId: 'c2',
+    senderId: 'me',
+    text: 'Moda iskelesine yakın bir yerdeyim.',
+    sentAt: '12:46',
+    sentAtIso: '2026-08-04T12:46:00',
+    read: true,
+  },
+  {
+    id: 'm10',
+    conversationId: 'c2',
+    senderId: 'u-can',
+    text: 'Yakındayım, 10 dk’da oradayım.',
+    sentAt: '12:50',
+    sentAtIso: '2026-08-04T12:50:00',
+    read: true,
+  },
+  // Elif
+  {
+    id: 'm11',
+    conversationId: 'c3',
+    senderId: 'u-elif',
+    text: 'Profilindeki seyahat fotoğraflarına bayıldım.',
+    sentAt: 'Yesterday',
+    sentAtIso: '2026-08-03T19:20:00',
+    read: true,
+  },
+  {
+    id: 'm12',
+    conversationId: 'c3',
+    senderId: 'me',
+    text: 'Teşekkürler! Lizbon’tan. Senin favori şehrin?',
+    sentAt: 'Yesterday',
+    sentAtIso: '2026-08-03T19:25:00',
+    read: true,
+  },
+  {
+    id: 'm13',
+    conversationId: 'c3',
+    senderId: 'u-elif',
+    text: 'Fotoğraflar harika olmuş ✨',
+    sentAt: '11:02',
+    sentAtIso: '2026-08-04T11:02:00',
+    read: false,
+  },
+  // Mert
+  {
+    id: 'm14',
+    conversationId: 'c4',
+    senderId: 'u-mert',
+    text: 'Dünkü etkinlik epey kalabalıktı.',
+    sentAt: 'Yesterday',
+    sentAtIso: '2026-08-03T21:10:00',
+    read: true,
+  },
+  {
+    id: 'm15',
+    conversationId: 'c4',
+    senderId: 'me',
+    text: 'Evet, müzik de iyiydi.',
+    sentAt: 'Yesterday',
+    sentAtIso: '2026-08-03T21:14:00',
+    read: true,
+  },
+  {
+    id: 'm16',
+    conversationId: 'c4',
+    senderId: 'u-mert',
+    text: 'Yarın için planın var mı?',
+    sentAt: 'Yesterday',
+    sentAtIso: '2026-08-03T21:18:00',
+    read: true,
+  },
+  // Zeynep
+  {
+    id: 'm17',
+    conversationId: 'c5',
+    senderId: 'u-zeynep',
+    text: 'Meerk Premium denedin mi?',
+    sentAt: 'Tue',
+    sentAtIso: '2026-08-02T16:00:00',
+    read: true,
+  },
+  {
+    id: 'm18',
+    conversationId: 'c5',
+    senderId: 'me',
+    text: 'Evet, Ghost Mode fena değil 😄',
+    sentAt: 'Tue',
+    sentAtIso: '2026-08-02T16:05:00',
+    read: true,
+  },
+  {
+    id: 'm19',
+    conversationId: 'c5',
+    senderId: 'me',
+    text: 'Meerk’te görüşürüz 👋',
+    sentAt: 'Tue',
+    sentAtIso: '2026-08-02T16:06:00',
+    read: true,
+  },
+  // Burak
+  {
+    id: 'm20',
+    conversationId: 'c6',
+    senderId: 'u-burak',
+    text: 'Araba sürüşü playlist’in var mı?',
+    sentAt: 'Mon',
+    sentAtIso: '2026-08-01T20:30:00',
+    read: true,
+  },
+  {
+    id: 'm21',
+    conversationId: 'c6',
+    senderId: 'me',
+    text: 'Var, gece sürüşü için lo-fi + indie mix.',
+    sentAt: 'Mon',
+    sentAtIso: '2026-08-01T20:40:00',
+    read: true,
+  },
+  {
+    id: 'm22',
+    conversationId: 'c6',
+    senderId: 'u-burak',
+    text: 'Playlist’i paylaşır mısın?',
+    sentAt: 'Mon',
+    sentAtIso: '2026-08-01T20:42:00',
+    read: true,
+  },
+];
+
+export function getConversationById(id: string): ChatConversation | undefined {
+  return chatConversations.find(c => c.id === id);
+}
+
+export function getMessagesForConversation(conversationId: string): ChatMessage[] {
+  return chatMessages
+    .filter(m => m.conversationId === conversationId)
+    .sort((a, b) => a.sentAtIso.localeCompare(b.sentAtIso));
+}
+
+export type AppNotificationType =
+  | 'like'
+  | 'match'
+  | 'visit'
+  | 'friend_request'
+  | 'friend_accept'
+  | 'message';
+
+export interface AppNotification {
+  id: string;
+  type: AppNotificationType;
+  userId: string;
+  name: string;
+  avatar?: string;
+  premium?: boolean;
+  /** Relative time label for the list (mock). */
+  createdAt: string;
+  unread: boolean;
+  /** Optional deep-link into a chat thread. */
+  conversationId?: string;
+}
+
+export const appNotifications: AppNotification[] = [
+  {
+    id: 'n1',
+    type: 'like',
+    userId: 'u-ayse',
+    name: 'Ayşe Demir',
+    avatar: avatar(5),
+    premium: true,
+    createdAt: '2m',
+    unread: true,
+  },
+  {
+    id: 'n2',
+    type: 'message',
+    userId: 'u-can',
+    name: 'Can Yıldız',
+    avatar: avatar(11),
+    createdAt: '18m',
+    unread: true,
+    conversationId: 'c2',
+  },
+  {
+    id: 'n3',
+    type: 'friend_request',
+    userId: 'u-elif',
+    name: 'Elif Kara',
+    avatar: avatar(9),
+    premium: true,
+    createdAt: '41m',
+    unread: true,
+  },
+  {
+    id: 'n4',
+    type: 'match',
+    userId: 'u-zeynep',
+    name: 'Zeynep Öztürk',
+    avatar: avatar(20),
+    createdAt: '1h',
+    unread: true,
+    conversationId: 'c5',
+  },
+  {
+    id: 'n5',
+    type: 'visit',
+    userId: 'u-mert',
+    name: 'Mert Aksoy',
+    avatar: avatar(14),
+    createdAt: '3h',
+    unread: false,
+  },
+  {
+    id: 'n6',
+    type: 'friend_accept',
+    userId: 'u-burak',
+    name: 'Burak Şahin',
+    avatar: avatar(33),
+    createdAt: 'Yesterday',
+    unread: false,
+  },
+  {
+    id: 'n7',
+    type: 'like',
+    userId: 'u-deniz',
+    name: 'Deniz Aydın',
+    avatar: avatar(28),
+    createdAt: 'Yesterday',
+    unread: false,
+  },
+  {
+    id: 'n8',
+    type: 'visit',
+    userId: 'u-selin',
+    name: 'Selin Koç',
+    avatar: avatar(47),
+    premium: true,
+    createdAt: 'Tue',
+    unread: false,
+  },
+  {
+    id: 'n9',
+    type: 'message',
+    userId: 'u-ayse',
+    name: 'Ayşe Demir',
+    avatar: avatar(5),
+    premium: true,
+    createdAt: 'Tue',
+    unread: false,
+    conversationId: 'c1',
+  },
+];
+
 export type PublicInterestKey =
   | 'food'
   | 'dessert'

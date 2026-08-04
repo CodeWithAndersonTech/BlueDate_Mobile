@@ -35,6 +35,12 @@
 	</dict>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>Yakınınızdaki kişileri gösterebilmemiz için konumunuza erişmemize izin verin.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Profil ve galeri fotoğraflarınızı ekleyebilmeniz için fotoğraf kütüphanenize erişmemiz gerekir.</string>
+	<key>NSCameraUsageDescription</key>
+	<string>Profil fotoğrafı çekebilmeniz için kameraya erişmemiz gerekir.</string>
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>Fotoğrafları kaydedebilmek için izin gerekir.</string>
 	<key>RCTNewArchEnabled</key>
 	<true/>
 	<key>UILaunchStoryboardName</key>

@@ -40,7 +40,6 @@ export function LoginScreen({ navigation }: Props) {
     () =>
       [
         { icon: 'globe' as IconName, label: t('common.google') },
-        { icon: 'phone' as IconName, label: t('common.phone') },
         { icon: 'mail' as IconName, label: t('common.apple') },
       ] as const,
     [t],

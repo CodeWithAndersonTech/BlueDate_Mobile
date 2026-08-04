@@ -1,6 +1,7 @@
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
+  Alert,
   Image,
   Pressable,
   RefreshControl,
@@ -10,6 +11,7 @@ import {
   Text,
   View,
 } from 'react-native';
+import { launchImageLibrary } from 'react-native-image-picker';
 import Animated, {
   Easing,
   useAnimatedStyle,
@@ -24,13 +26,20 @@ import {
   getInterestTypes,
   getUserProfile,
   InterestTypeItem,
+  resolveMediaUrl,
   UserProfileResponse,
 } from '../../api';
 import { TabScreenScrollView } from '../../components';
 import { useLocale } from '../../i18n';
 import { useAuth } from '../../navigation/AuthContext';
 import { ProfileStackParamList } from '../../navigation/types';
+import {
+  loadProfilePhotos,
+  pickAndSetAvatar,
+  ProfilePhoto,
+} from '../../services/photos/photoStore';
 import { useTheme } from '../../theme';
+import { ProfilePhotoGrid } from './ProfilePhotoGrid';
 import { ProfileSkeleton } from './ProfileSkeleton';
 
 type Props = NativeStackScreenProps<ProfileStackParamList, 'ProfileMain'>;
@@ -76,6 +85,8 @@ export function ProfileScreen({ navigation }: Props) {
 
   const [profile, setProfile] = useState<UserProfileResponse | null>(null);
   const [interestTypes, setInterestTypes] = useState<InterestTypeItem[]>([]);
+  const [photos, setPhotos] = useState<ProfilePhoto[]>([]);
+  const [avatarUri, setAvatarUri] = useState<string | undefined>();
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -102,10 +113,15 @@ export function ProfileScreen({ navigation }: Props) {
       setError(null);
 
       try {
-        const [profileResponse, interestTypesResponse] = await Promise.all([
-          getUserProfile(userId, accessToken),
-          getInterestTypes(accessToken).catch(() => null),
-        ]);
+        const [profileResponse, interestTypesResponse, photoBundle] =
+          await Promise.all([
+            getUserProfile(userId, accessToken),
+            getInterestTypes(accessToken).catch(() => null),
+            loadProfilePhotos(userId, accessToken).catch(() => ({
+              gallery: [] as ProfilePhoto[],
+              avatarUri: undefined as string | undefined,
+            })),
+          ]);
         setProfile(profileResponse);
         setInterestTypes(
           [
@@ -113,6 +129,9 @@ export function ProfileScreen({ navigation }: Props) {
               []),
           ].sort((a, b) => (a.SortOrder ?? 0) - (b.SortOrder ?? 0)),
         );
+        setPhotos(photoBundle.gallery);
+        const profileAvatar = await resolveMediaUrl(profileResponse.ProfileImage);
+        setAvatarUri(photoBundle.avatarUri ?? profileAvatar);
       } catch (err) {
         setError(err instanceof Error ? err.message : t('profile.load_failed'));
       } finally {
@@ -151,7 +170,7 @@ export function ProfileScreen({ navigation }: Props) {
   const hasBio = bio.length > 0;
   const interests = profile?.Interests ?? [];
   const hasInterests = interests.length > 0;
-  const isVerified =
+  const interestsComplete =
     interestTypes.length > 0 &&
     interestTypes.every(type =>
       interests.some(
@@ -160,6 +179,42 @@ export function ProfileScreen({ navigation }: Props) {
           (item.Value ?? '').trim().length > 0,
       ),
     );
+  const hasGalleryPhoto = photos.length > 0;
+  const isVerified = interestsComplete && hasGalleryPhoto;
+
+  const onChangeAvatar = async () => {
+    if (!userId) return;
+    const result = await launchImageLibrary({
+      mediaType: 'photo',
+      selectionLimit: 1,
+      quality: 0.8,
+    });
+    if (result.didCancel) return;
+    if (result.errorCode === 'permission') {
+      Alert.alert(t('profile.change_avatar'), t('profile.photo_permission'));
+      return;
+    }
+    const asset = result.assets?.[0];
+    if (!asset?.uri) {
+      Alert.alert(t('profile.change_avatar'), t('profile.photo_error'));
+      return;
+    }
+    try {
+      const uri = await pickAndSetAvatar(
+        userId,
+        {
+          uri: asset.uri,
+          fileName: asset.fileName ?? undefined,
+          type: asset.type ?? undefined,
+        },
+        accessToken,
+      );
+      setAvatarUri(uri);
+      setProfile(prev => (prev ? { ...prev, ProfileImage: uri } : prev));
+    } catch {
+      Alert.alert(t('profile.change_avatar'), t('profile.photo_error'));
+    }
+  };
 
   const shell = (children: React.ReactNode) => (
     <SafeAreaView
@@ -270,10 +325,14 @@ export function ProfileScreen({ navigation }: Props) {
           </View>
 
           <View style={styles.headerTop}>
-            <View style={styles.avatarRing}>
-              {profile.ProfileImage ? (
+            <Pressable
+              style={styles.avatarRing}
+              onPress={onChangeAvatar}
+              accessibilityRole="button"
+              accessibilityLabel={t('profile.change_avatar')}>
+              {avatarUri ? (
                 <Image
-                  source={{ uri: profile.ProfileImage }}
+                  source={{ uri: avatarUri }}
                   style={[
                     styles.avatar,
                     { borderColor: theme.colors.border },
@@ -300,6 +359,15 @@ export function ProfileScreen({ navigation }: Props) {
               )}
               <View
                 style={[
+                  styles.avatarCamBadge,
+                  { backgroundColor: theme.colors.primary },
+                ]}>
+                <Text style={{ color: theme.colors.onPrimary, fontSize: 11 }}>
+                  ✎
+                </Text>
+              </View>
+              <View
+                style={[
                   styles.onlineDot,
                   {
                     backgroundColor: theme.colors.online,
@@ -307,9 +375,18 @@ export function ProfileScreen({ navigation }: Props) {
                   },
                 ]}
               />
-            </View>
+            </Pressable>
 
             <View style={styles.statsRow}>
+              <View style={styles.statItem}>
+                <Text style={[styles.statValue, { color: theme.colors.text }]}>
+                  {photos.length}
+                </Text>
+                <Text
+                  style={[styles.statLabel, { color: theme.colors.textMuted }]}>
+                  {t('profile.stat_photos')}
+                </Text>
+              </View>
               <View style={styles.statItem}>
                 <Text style={[styles.statValue, { color: theme.colors.text }]}>
                   0
@@ -326,15 +403,6 @@ export function ProfileScreen({ navigation }: Props) {
                 <Text
                   style={[styles.statLabel, { color: theme.colors.textMuted }]}>
                   {t('profile.stat_likes')}
-                </Text>
-              </View>
-              <View style={styles.statItem}>
-                <Text style={[styles.statValue, { color: theme.colors.text }]}>
-                  0
-                </Text>
-                <Text
-                  style={[styles.statLabel, { color: theme.colors.textMuted }]}>
-                  {t('profile.stat_visits')}
                 </Text>
               </View>
             </View>
@@ -486,7 +554,19 @@ export function ProfileScreen({ navigation }: Props) {
               </Text>
             </Pressable>
           )}
+        </View>
 
+        {userId ? (
+          <ProfilePhotoGrid
+            userId={userId}
+            token={accessToken}
+            photos={photos}
+            editable
+            onPhotosChange={setPhotos}
+          />
+        ) : null}
+
+        <View style={styles.body}>
           <View style={styles.section}>
             <View style={styles.sectionHead}>
               <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>
@@ -733,6 +813,16 @@ const styles = StyleSheet.create({
   },
   avatarFallback: { alignItems: 'center', justifyContent: 'center' },
   avatarInitials: { fontSize: 26, fontWeight: '700' },
+  avatarCamBadge: {
+    position: 'absolute',
+    right: -2,
+    bottom: 18,
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   onlineDot: {
     position: 'absolute',
     right: 2,

@@ -3,4 +3,6 @@ export * from './device';
 export * from './languages';
 export * from './auth';
 export * from './user';
+export * from './social';
+export * from './photos';
 export * from './languageHeader';

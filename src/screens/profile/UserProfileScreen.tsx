@@ -1,6 +1,9 @@
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
-import React, { useMemo, useState } from 'react';
+import { useFocusEffect } from '@react-navigation/native';
+import React, { useCallback, useMemo, useState } from 'react';
 import {
+  ActivityIndicator,
+  Alert,
   Image,
   Pressable,
   ScrollView,
@@ -11,10 +14,29 @@ import {
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { EmptyState } from '../../components';
+import {
+  acceptFriendRequest,
+  FriendshipRelation,
+  getFriendshipStatus,
+  getLikeCount,
+  getLikeStatus,
+  getUserProfile,
+  likeUser,
+  resolveMediaUrl,
+  sendFriendRequest,
+  unlikeUser,
+  UserProfileInterest,
+  UserProfileResponse,
+} from '../../api';
 import { useLocale } from '../../i18n';
+import { useAuth } from '../../navigation/AuthContext';
 import { useLockTabSwipe } from '../../navigation/useLockTabSwipe';
+import {
+  loadProfilePhotos,
+  ProfilePhoto,
+} from '../../services/photos/photoStore';
 import { useTheme } from '../../theme';
-import { PublicInterestKey, findPublicUser } from '../../utils';
+import { ProfilePhotoGrid } from './ProfilePhotoGrid';
 
 type UserProfileParams = { UserProfile: { userId: string } };
 type Props = NativeStackScreenProps<UserProfileParams, 'UserProfile'>;
@@ -23,7 +45,7 @@ const AVATAR_SIZE = 86;
 const TILE_WIDTH = '48%';
 const TILE_HEIGHT = 100;
 
-const INTEREST_EMOJI: Record<PublicInterestKey, string> = {
+const INTEREST_EMOJI: Record<string, string> = {
   food: '🍽',
   dessert: '🍰',
   coffee: '☕',
@@ -43,18 +65,168 @@ function formatUsername(username: string) {
   return trimmed.startsWith('@') ? trimmed : `@${trimmed}`;
 }
 
+function mapInterest(item: UserProfileInterest) {
+  const code = (item.InterestTypeCode ?? '').toLowerCase();
+  return {
+    key: code || String(item.Id),
+    label: item.InterestTypeName || item.InterestTypeCode || 'Interest',
+    value: item.Value,
+    emoji: INTEREST_EMOJI[code] ?? '✨',
+  };
+}
+
 export function UserProfileScreen({ navigation, route }: Props) {
   useLockTabSwipe();
   const theme = useTheme();
   const { t } = useLocale();
   const insets = useSafeAreaInsets();
-  const user = useMemo(
-    () => findPublicUser(route.params.userId),
-    [route.params.userId],
-  );
-  const [added, setAdded] = useState(false);
+  const { userId: meId, accessToken } = useAuth();
+  const targetId = Number(route.params.userId);
 
-  if (!user) {
+  const [profile, setProfile] = useState<UserProfileResponse | null>(null);
+  const [photos, setPhotos] = useState<ProfilePhoto[]>([]);
+  const [avatarUri, setAvatarUri] = useState<string | undefined>();
+  const [loading, setLoading] = useState(true);
+  const [notFound, setNotFound] = useState(false);
+  const [relation, setRelation] = useState(FriendshipRelation.None);
+  const [friendshipId, setFriendshipId] = useState<number | null>(null);
+  const [hasLiked, setHasLiked] = useState(false);
+  const [likeCount, setLikeCount] = useState(0);
+  const [busy, setBusy] = useState(false);
+
+  const load = useCallback(async () => {
+    if (!Number.isFinite(targetId) || targetId <= 0) {
+      setNotFound(true);
+      setLoading(false);
+      return;
+    }
+
+    setLoading(true);
+    setNotFound(false);
+    try {
+      const [profileRes, photoBundle] = await Promise.all([
+        getUserProfile(targetId, accessToken),
+        loadProfilePhotos(targetId, accessToken).catch(() => ({
+          gallery: [] as ProfilePhoto[],
+          avatarUri: undefined as string | undefined,
+        })),
+      ]);
+      setProfile(profileRes);
+      setPhotos(photoBundle.gallery);
+      const profileAvatar = await resolveMediaUrl(profileRes.ProfileImage);
+      setAvatarUri(photoBundle.avatarUri ?? profileAvatar);
+
+      if (meId && meId !== targetId) {
+        const [statusRes, likeStatusRes, likeCountRes] = await Promise.all([
+          getFriendshipStatus(meId, targetId, accessToken),
+          getLikeStatus(meId, targetId, accessToken),
+          getLikeCount(targetId, accessToken),
+        ]);
+        setRelation(statusRes.Relation ?? FriendshipRelation.None);
+        setFriendshipId(statusRes.FriendshipId ?? null);
+        setHasLiked(!!likeStatusRes.HasLiked);
+        setLikeCount(likeCountRes.Count ?? 0);
+      } else {
+        const likeCountRes = await getLikeCount(targetId, accessToken);
+        setLikeCount(likeCountRes.Count ?? 0);
+      }
+    } catch {
+      setProfile(null);
+      setNotFound(true);
+    } finally {
+      setLoading(false);
+    }
+  }, [targetId, meId, accessToken]);
+
+  useFocusEffect(
+    useCallback(() => {
+      load();
+    }, [load]),
+  );
+
+  const name = useMemo(() => {
+    if (!profile) return '';
+    return `${profile.FirstName} ${profile.LastName}`.trim() || profile.Username;
+  }, [profile]);
+
+  const interests = useMemo(
+    () => (profile?.Interests ?? []).map(mapInterest),
+    [profile],
+  );
+
+  const friendLabel = (() => {
+    if (relation === FriendshipRelation.Friends) return t('user_profile.friends');
+    if (relation === FriendshipRelation.PendingOutgoing) {
+      return t('user_profile.request_sent');
+    }
+    if (relation === FriendshipRelation.PendingIncoming) {
+      return t('user_profile.accept_request');
+    }
+    return t('user_profile.add_friend');
+  })();
+
+  const onFriendAction = async () => {
+    if (!meId || !profile || busy) return;
+    setBusy(true);
+    try {
+      if (relation === FriendshipRelation.PendingIncoming && friendshipId) {
+        await acceptFriendRequest(meId, friendshipId, accessToken);
+        setRelation(FriendshipRelation.Friends);
+      } else if (
+        relation === FriendshipRelation.None ||
+        relation === FriendshipRelation.Rejected ||
+        relation === FriendshipRelation.Cancelled
+      ) {
+        const res = await sendFriendRequest(meId, targetId, accessToken);
+        setRelation(FriendshipRelation.PendingOutgoing);
+        setFriendshipId(res.Id);
+      }
+    } catch (error) {
+      Alert.alert(
+        t('user_profile.title'),
+        error instanceof Error ? error.message : t('user_profile.action_error'),
+      );
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const onToggleLike = async () => {
+    if (!meId || !profile || busy || meId === targetId) return;
+    setBusy(true);
+    try {
+      if (hasLiked) {
+        await unlikeUser(meId, targetId, accessToken);
+        setHasLiked(false);
+        setLikeCount(c => Math.max(0, c - 1));
+      } else {
+        await likeUser(meId, targetId, accessToken);
+        setHasLiked(true);
+        setLikeCount(c => c + 1);
+      }
+    } catch (error) {
+      Alert.alert(
+        t('user_profile.like'),
+        error instanceof Error ? error.message : t('user_profile.action_error'),
+      );
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  if (loading) {
+    return (
+      <SafeAreaView
+        edges={['top', 'bottom']}
+        style={[styles.root, { backgroundColor: theme.colors.background }]}>
+        <View style={styles.loading}>
+          <ActivityIndicator color={theme.colors.primary} />
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  if (notFound || !profile) {
     return (
       <SafeAreaView
         edges={['top', 'bottom']}
@@ -92,9 +264,8 @@ export function UserProfileScreen({ navigation, route }: Props) {
     );
   }
 
-  const hasBio = user.bio.trim().length > 0;
-  const distanceLabel =
-    user.distanceKm != null ? user.distanceKm.toFixed(1) : '—';
+  const hasBio = (profile.Bio ?? '').trim().length > 0;
+  const isSelf = meId === targetId;
 
   return (
     <SafeAreaView
@@ -128,28 +299,41 @@ export function UserProfileScreen({ navigation, route }: Props) {
             </Pressable>
 
             <View style={styles.topBarActions}>
-              <Pressable
-                onPress={() => {}}
-                hitSlop={8}
-                accessibilityRole="button"
-                accessibilityLabel={t('user_profile.message')}
-                style={[
-                  styles.topBarBtn,
-                  { backgroundColor: theme.colors.surfaceAlt },
-                ]}>
-                <Text
-                  style={[styles.topBarGlyph, { color: theme.colors.text }]}>
-                  ✉
-                </Text>
-              </Pressable>
+              {!isSelf ? (
+                <Pressable
+                  onPress={onToggleLike}
+                  hitSlop={8}
+                  accessibilityRole="button"
+                  accessibilityLabel={
+                    hasLiked ? t('user_profile.liked') : t('user_profile.like')
+                  }
+                  style={[
+                    styles.topBarBtn,
+                    { backgroundColor: theme.colors.surfaceAlt },
+                  ]}>
+                  <Text
+                    style={[
+                      styles.topBarGlyph,
+                      {
+                        color: hasLiked
+                          ? theme.colors.danger
+                          : theme.colors.text,
+                      },
+                    ]}>
+                    {hasLiked ? '♥' : '♡'}
+                  </Text>
+                </Pressable>
+              ) : (
+                <View style={styles.topBarBtnSpacer} />
+              )}
             </View>
           </View>
 
           <View style={styles.headerTop}>
             <View style={styles.avatarRing}>
-              {user.avatar ? (
+              {avatarUri ? (
                 <Image
-                  source={{ uri: user.avatar }}
+                  source={{ uri: avatarUri }}
                   style={[styles.avatar, { borderColor: theme.colors.border }]}
                 />
               ) : (
@@ -167,49 +351,38 @@ export function UserProfileScreen({ navigation, route }: Props) {
                       styles.avatarInitials,
                       { color: theme.colors.primary },
                     ]}>
-                    {initialsFromName(user.name)}
+                    {initialsFromName(name)}
                   </Text>
                 </View>
               )}
-              {user.online ? (
-                <View
-                  style={[
-                    styles.onlineDot,
-                    {
-                      backgroundColor: theme.colors.online,
-                      borderColor: theme.colors.background,
-                    },
-                  ]}
-                />
-              ) : null}
             </View>
 
             <View style={styles.statsRow}>
               <View style={styles.statItem}>
                 <Text style={[styles.statValue, { color: theme.colors.text }]}>
-                  {user.mutualFriends ?? 0}
+                  {photos.length}
                 </Text>
                 <Text
                   style={[styles.statLabel, { color: theme.colors.textMuted }]}>
-                  {t('user_profile.stat_mutual')}
+                  {t('profile.photos')}
                 </Text>
               </View>
               <View style={styles.statItem}>
                 <Text style={[styles.statValue, { color: theme.colors.text }]}>
-                  {user.age ?? '—'}
+                  {likeCount}
+                </Text>
+                <Text
+                  style={[styles.statLabel, { color: theme.colors.textMuted }]}>
+                  {t('user_profile.like')}
+                </Text>
+              </View>
+              <View style={styles.statItem}>
+                <Text style={[styles.statValue, { color: theme.colors.text }]}>
+                  {profile.IsVerified ? '✓' : '—'}
                 </Text>
                 <Text
                   style={[styles.statLabel, { color: theme.colors.textMuted }]}>
                   {t('user_profile.stat_age')}
-                </Text>
-              </View>
-              <View style={styles.statItem}>
-                <Text style={[styles.statValue, { color: theme.colors.text }]}>
-                  {distanceLabel}
-                </Text>
-                <Text
-                  style={[styles.statLabel, { color: theme.colors.textMuted }]}>
-                  {t('user_profile.unit_km')}
                 </Text>
               </View>
             </View>
@@ -219,26 +392,13 @@ export function UserProfileScreen({ navigation, route }: Props) {
             <Text
               style={[styles.name, { color: theme.colors.text }]}
               numberOfLines={1}>
-              {user.name}
+              {name}
             </Text>
             <View style={styles.usernameRow}>
               <Text
                 style={[styles.username, { color: theme.colors.textMuted }]}
                 numberOfLines={1}>
-                {formatUsername(user.username)}
-              </Text>
-              <Text
-                style={[
-                  styles.statusChip,
-                  {
-                    color: user.online
-                      ? theme.colors.online
-                      : theme.colors.textMuted,
-                  },
-                ]}>
-                {user.online
-                  ? t('profile.online')
-                  : t('user_profile.offline')}
+                {formatUsername(profile.Username)}
               </Text>
             </View>
           </View>
@@ -271,18 +431,22 @@ export function UserProfileScreen({ navigation, route }: Props) {
                     : theme.colors.textMuted,
                 },
               ]}>
-              {hasBio ? user.bio : t('user_profile.bio_empty')}
+              {hasBio ? profile.Bio : t('user_profile.bio_empty')}
             </Text>
           </View>
+
+          {photos.length > 0 ? (
+            <ProfilePhotoGrid photos={photos} editable={false} />
+          ) : null}
 
           <View style={styles.section}>
             <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>
               {t('profile.interests')}
             </Text>
 
-            {user.interests.length > 0 ? (
+            {interests.length > 0 ? (
               <View style={styles.tileGrid}>
-                {user.interests.map(item => (
+                {interests.map(item => (
                   <View key={item.key} style={styles.tileWrap}>
                     <View
                       style={[
@@ -299,9 +463,7 @@ export function UserProfileScreen({ navigation, route }: Props) {
                             styles.emojiBadge,
                             { backgroundColor: theme.colors.primary },
                           ]}>
-                          <Text style={styles.emojiText}>
-                            {INTEREST_EMOJI[item.key] ?? '✨'}
-                          </Text>
+                          <Text style={styles.emojiText}>{item.emoji}</Text>
                         </View>
                         <View
                           style={[
@@ -358,64 +520,78 @@ export function UserProfileScreen({ navigation, route }: Props) {
         </View>
       </ScrollView>
 
-      <View
-        style={[
-          styles.actionDock,
-          {
-            paddingBottom: Math.max(insets.bottom, 12),
-            backgroundColor: theme.colors.background,
-            borderTopColor: theme.colors.border,
-          },
-        ]}>
-        <Pressable
-          onPress={() => {}}
+      {!isSelf ? (
+        <View
           style={[
-            styles.actionBtn,
-            styles.actionBtnSecondary,
+            styles.actionDock,
             {
-              backgroundColor: theme.colors.surfaceAlt,
-              borderColor: theme.colors.border,
+              paddingBottom: Math.max(insets.bottom, 12),
+              backgroundColor: theme.colors.background,
+              borderTopColor: theme.colors.border,
             },
           ]}>
-          <Text style={[styles.actionBtnLabel, { color: theme.colors.text }]}>
-            {t('user_profile.message')}
-          </Text>
-        </Pressable>
-        <Pressable
-          onPress={() => setAdded(prev => !prev)}
-          style={[
-            styles.actionBtn,
-            styles.actionBtnPrimary,
-            {
-              backgroundColor: added
-                ? theme.colors.surfaceAlt
-                : theme.colors.primary,
-              borderColor: added
-                ? theme.colors.border
-                : theme.colors.primary,
-            },
-          ]}>
-          <Text
+          <Pressable
+            onPress={() => {}}
             style={[
-              styles.actionBtnLabel,
+              styles.actionBtn,
+              styles.actionBtnSecondary,
               {
-                color: added
-                  ? theme.colors.text
-                  : theme.colors.onPrimary,
+                backgroundColor: theme.colors.surfaceAlt,
+                borderColor: theme.colors.border,
               },
             ]}>
-            {added
-              ? t('user_profile.request_sent')
-              : t('user_profile.add_friend')}
-          </Text>
-        </Pressable>
-      </View>
+            <Text style={[styles.actionBtnLabel, { color: theme.colors.text }]}>
+              {t('user_profile.message')}
+            </Text>
+          </Pressable>
+          <Pressable
+            onPress={onFriendAction}
+            disabled={
+              busy ||
+              isSelf ||
+              relation === FriendshipRelation.Friends ||
+              relation === FriendshipRelation.PendingOutgoing
+            }
+            style={[
+              styles.actionBtn,
+              styles.actionBtnPrimary,
+              {
+                opacity: busy ? 0.7 : 1,
+                backgroundColor:
+                  relation === FriendshipRelation.Friends ||
+                  relation === FriendshipRelation.PendingOutgoing
+                    ? theme.colors.surfaceAlt
+                    : theme.colors.primary,
+                borderColor:
+                  relation === FriendshipRelation.Friends ||
+                  relation === FriendshipRelation.PendingOutgoing
+                    ? theme.colors.border
+                    : theme.colors.primary,
+              },
+            ]}>
+            <Text
+              style={[
+                styles.actionBtnLabel,
+                {
+                  color:
+                    relation === FriendshipRelation.Friends ||
+                    relation === FriendshipRelation.PendingOutgoing
+                      ? theme.colors.text
+                      : theme.colors.onPrimary,
+                },
+              ]}>
+              {friendLabel}
+            </Text>
+          </Pressable>
+        </View>
+      ) : null}
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
   root: { flex: 1 },
+  loading: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   topBar: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -468,15 +644,6 @@ const styles = StyleSheet.create({
   },
   avatarFallback: { alignItems: 'center', justifyContent: 'center' },
   avatarInitials: { fontSize: 26, fontWeight: '700' },
-  onlineDot: {
-    position: 'absolute',
-    right: 2,
-    bottom: 4,
-    width: 14,
-    height: 14,
-    borderRadius: 7,
-    borderWidth: 2.5,
-  },
   statsRow: {
     flex: 1,
     flexDirection: 'row',
@@ -500,7 +667,6 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   username: { fontSize: 14 },
-  statusChip: { fontSize: 12, fontWeight: '600' },
   body: { paddingHorizontal: 16, paddingTop: 4 },
   bioFieldLabel: {
     fontSize: 11,

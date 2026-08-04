@@ -1,6 +1,7 @@
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import React, { useCallback, useState } from 'react';
 import {
+  Image,
   Pressable,
   StyleSheet,
   View,
@@ -8,6 +9,7 @@ import {
 import LinearGradient from 'react-native-linear-gradient';
 import { useFocusEffect } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { images } from '../../assets';
 import {
   Avatar,
   Icon,
@@ -16,7 +18,12 @@ import {
   TabScreenScrollView,
   Typography,
 } from '../../components';
-import { getUserProfile } from '../../api';
+import {
+  displayName,
+  formatRelativeTime,
+  getSocialActivity,
+  getUserProfile,
+} from '../../api';
 import { useLocale } from '../../i18n';
 import { useAuth } from '../../navigation/AuthContext';
 import { HomeStackParamList } from '../../navigation/types';
@@ -24,6 +31,10 @@ import { ThemeColors, useTheme } from '../../theme';
 import { ActivityItem } from '../../utils';
 
 type Props = NativeStackScreenProps<HomeStackParamList, 'HomeFeed'>;
+
+/** Same gold palette as PremiumScreen. */
+const GOLD: [string, string] = ['#F5D76E', '#E8A838'];
+const ON_GOLD = '#2C2100';
 
 const ACTIVITY_META: Record<
   string,
@@ -59,15 +70,14 @@ export function HomeScreen({ navigation }: Props) {
   const [firstName, setFirstName] = useState('');
   const [fullName, setFullName] = useState('');
   const [avatarUri, setAvatarUri] = useState<string | undefined>();
-  // Real activity API will populate this — no mock feed.
-  const [recentActivity] = useState<ActivityItem[]>([]);
-  const [likeCount] = useState(0);
+  const [recentActivity, setRecentActivity] = useState<ActivityItem[]>([]);
   const goToTab = (tab: string) => navigation.getParent()?.navigate(tab as never);
 
   useFocusEffect(
     useCallback(() => {
       if (!userId) return;
       let cancelled = false;
+
       getUserProfile(userId, accessToken)
         .then(profile => {
           if (cancelled) return;
@@ -79,6 +89,25 @@ export function HomeScreen({ navigation }: Props) {
         .catch(() => {
           /* keep last known greeting */
         });
+
+      getSocialActivity(userId, 20, accessToken)
+        .then(activity => {
+          if (cancelled) return;
+          setRecentActivity(
+            (activity.Items ?? []).map(item => ({
+              id: `${item.Type}-${item.EntityId}`,
+              userId: String(item.User.UserId),
+              type: item.Type === 'friend_request' ? 'request' : 'like',
+              name: displayName(item.User),
+              avatar: item.User.ProfileImage ?? undefined,
+              time: formatRelativeTime(item.CreatedDate),
+            })),
+          );
+        })
+        .catch(() => {
+          /* keep previous activity */
+        });
+
       return () => {
         cancelled = true;
       };
@@ -114,64 +143,105 @@ export function HomeScreen({ navigation }: Props) {
           <View style={styles.headerActions}>
             <IconButton
               name="message"
-              onPress={() => {}}
+              onPress={() => navigation.navigate('Messages')}
               accessibilityLabel={t('home.messages')}
             />
-            <IconButton name="bell" onPress={() => {}} />
+            <IconButton
+              name="bell"
+              onPress={() => navigation.navigate('Notifications')}
+              accessibilityLabel={t('notifications.title')}
+            />
           </View>
         </View>
 
-        <Pressable
-          onPress={() => goToTab('Nearby')}
-          style={[
-            styles.search,
-            {
-              backgroundColor: theme.colors.surfaceAlt,
-            },
-          ]}>
-          <Icon name="search" size={18} color={theme.colors.textMuted} />
-          <Typography variant="callout" color="textMuted">
-            {t('home.search_placeholder')}
-          </Typography>
-        </Pressable>
-
+        {/* Premium — compact gold strip (same palette as PremiumScreen) */}
         <Pressable
           onPress={() => goToTab('Premium')}
           style={({ pressed }) => [
-            styles.hero,
+            styles.premiumCard,
             {
+              opacity: pressed ? 0.94 : 1,
+              transform: [{ scale: pressed ? 0.985 : 1 }],
+            },
+            theme.shadows.sm,
+          ]}>
+          <LinearGradient
+            colors={GOLD}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={StyleSheet.absoluteFill}
+          />
+          <View style={styles.premiumContent}>
+            <View style={styles.premiumTextCol}>
+              <View style={styles.premiumBadge}>
+                <Icon name="crown" size={12} color={ON_GOLD} filled />
+                <Typography variant="overline" tint={ON_GOLD}>
+                  {t('home.hero_badge')}
+                </Typography>
+              </View>
+              <Typography variant="title" tint={ON_GOLD} numberOfLines={2}>
+                {t('home.hero_title').replace(/\n/g, ' ')}
+              </Typography>
+              <Typography
+                variant="caption"
+                tint="rgba(44,33,0,0.72)"
+                numberOfLines={2}>
+                {t('home.hero_subtitle')}
+              </Typography>
+            </View>
+            <View style={styles.premiumCta}>
+              <Typography variant="caption" tint={ON_GOLD}>
+                {t('home.hero_cta')}
+              </Typography>
+              <Icon name="chevron-right" size={14} color={ON_GOLD} />
+            </View>
+          </View>
+        </Pressable>
+
+        {/* Nearby — same size card, Meerk logo + copy */}
+        <Pressable
+          onPress={() => goToTab('Nearby')}
+          style={({ pressed }) => [
+            styles.card,
+            {
+              backgroundColor: theme.colors.card,
+              borderColor: theme.colors.border,
+              borderWidth: StyleSheet.hairlineWidth,
               opacity: pressed ? 0.94 : 1,
               transform: [{ scale: pressed ? 0.985 : 1 }],
             },
             theme.shadows.md,
           ]}>
-          <LinearGradient
-            colors={theme.gradients.primary}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-            style={StyleSheet.absoluteFill}
-          />
-          <View style={styles.heroContent}>
-            <View style={styles.heroPill}>
-              <Icon name="crown" size={12} color="#3A2A00" filled />
-              <Typography variant="overline" tint="#3A2A00">
-                {t('home.hero_badge')}
-              </Typography>
+          <View style={styles.cardContent}>
+            <View
+              style={[
+                styles.logoWrap,
+                { backgroundColor: theme.colors.primarySoft },
+              ]}>
+              <Image
+                source={images.appLogo}
+                style={styles.logo}
+                resizeMode="contain"
+              />
             </View>
-            <Typography variant="h2" tint="#FFFFFF" style={styles.heroTitle}>
-              {t('home.hero_title').replace('{count}', String(likeCount))}
+            <Typography variant="h2" style={styles.cardTitle}>
+              {t('home.nearby_card_title')}
             </Typography>
-            <Typography variant="callout" tint="rgba(255,255,255,0.82)">
-              {t('home.hero_subtitle')}
+            <Typography variant="callout" color="textMuted">
+              {t('home.nearby_card_subtitle')}
             </Typography>
-            <View style={styles.heroCta}>
-              <Typography variant="bodyStrong" tint={theme.colors.textInverse}>
-                {t('home.hero_cta')}
+            <View
+              style={[
+                styles.nearbyCta,
+                { backgroundColor: theme.colors.primary },
+              ]}>
+              <Typography variant="bodyStrong" tint={theme.colors.onPrimary}>
+                {t('home.nearby_card_cta')}
               </Typography>
               <Icon
                 name="chevron-right"
                 size={16}
-                color={theme.colors.textInverse}
+                color={theme.colors.onPrimary}
               />
             </View>
           </View>
@@ -266,56 +336,84 @@ const styles = StyleSheet.create({
   flex: { flex: 1 },
   content: {
     paddingHorizontal: 20,
-    gap: 24,
+    gap: 16,
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+    marginBottom: 8,
   },
   greeting: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   greetingText: { gap: 2 },
   headerActions: { flexDirection: 'row', gap: 8 },
-  search: {
+  premiumCard: {
+    borderRadius: 18,
+    overflow: 'hidden',
+  },
+  premiumContent: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
-    height: 48,
+    gap: 12,
     paddingHorizontal: 16,
-    borderRadius: 16,
+    paddingVertical: 14,
   },
-  hero: {
-    borderRadius: 24,
-    overflow: 'hidden',
-    minHeight: 200,
+  premiumTextCol: {
+    flex: 1,
+    gap: 4,
+    minWidth: 0,
   },
-  heroContent: {
-    padding: 24,
-    gap: 10,
-  },
-  heroPill: {
+  premiumBadge: {
     alignSelf: 'flex-start',
     flexDirection: 'row',
     alignItems: 'center',
     gap: 5,
-    backgroundColor: '#F5D76E',
-    paddingHorizontal: 10,
-    paddingVertical: 5,
+    backgroundColor: 'rgba(44,33,0,0.1)',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
     borderRadius: 999,
   },
-  heroTitle: { marginTop: 4 },
-  heroCta: {
+  premiumCta: {
+    flexShrink: 0,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 2,
+    backgroundColor: 'rgba(44,33,0,0.12)',
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    borderRadius: 999,
+  },
+  card: {
+    borderRadius: 24,
+    overflow: 'hidden',
+    minHeight: 200,
+  },
+  cardContent: {
+    padding: 24,
+    gap: 10,
+    minHeight: 200,
+    justifyContent: 'center',
+  },
+  cardTitle: { marginTop: 2 },
+  logoWrap: {
+    width: 56,
+    height: 56,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  logo: { width: 36, height: 36 },
+  nearbyCta: {
     alignSelf: 'flex-start',
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
     marginTop: 8,
-    backgroundColor: '#FFFFFF',
     paddingHorizontal: 16,
     paddingVertical: 10,
     borderRadius: 999,
   },
-  section: { gap: 14 },
+  section: { gap: 14, marginTop: 8 },
   emptyCard: {
     borderRadius: 20,
     borderWidth: StyleSheet.hairlineWidth,

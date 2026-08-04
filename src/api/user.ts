@@ -19,9 +19,16 @@ export type UserProfileResponse = ApiEnvelope & {
   ProfileImage?: string | null;
   Phone?: string | null;
   IsEmailVerified: boolean;
-  /** Onaylı hesap — tüm interest type'lar doldurulmuş. */
+  /** Onaylı hesap — tüm interest type'lar + en az 1 galeri fotoğrafı. */
   IsVerified: boolean;
   Interests: UserProfileInterest[];
+  Photos?: UserProfilePhoto[];
+};
+
+export type UserProfilePhoto = {
+  Id: number;
+  Url: string;
+  SortOrder: number;
 };
 
 export type InterestTypeItem = {

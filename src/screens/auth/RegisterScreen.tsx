@@ -125,7 +125,7 @@ export function RegisterScreen({ navigation }: Props) {
     <Screen edges={['top']}>
       <View style={styles.topBar}>
         <View style={styles.headerWrap}>
-          <Header onBack={() => navigation.goBack()} title={t('auth.register')} />
+          <Header title={t('auth.register')} />
         </View>
         <LanguageFlagButton
           languages={languages}

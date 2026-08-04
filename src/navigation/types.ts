@@ -14,6 +14,9 @@ export type AuthStackParamList = {
 
 export type HomeStackParamList = {
   HomeFeed: undefined;
+  Messages: undefined;
+  Notifications: undefined;
+  ChatThread: { conversationId: string };
   Settings: undefined;
   Filter: undefined;
   UserProfile: { userId: string };
