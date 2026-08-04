@@ -1,0 +1,36 @@
+diff --git a/node_modules/react-native-image-picker/src/platforms/native.ts b/node_modules/react-native-image-picker/src/platforms/native.ts
+index 0885cdf..018acd0 100644
+--- a/node_modules/react-native-image-picker/src/platforms/native.ts
++++ b/node_modules/react-native-image-picker/src/platforms/native.ts
+@@ -27,9 +27,12 @@ const DEFAULT_OPTIONS: ImageLibraryOptions & CameraOptions = {
+ // @ts-ignore We want to check whether __turboModuleProxy exitst, it may not
+ const isTurboModuleEnabled = global.__turboModuleProxy != null;
+ 
+-const nativeImagePicker = isTurboModuleEnabled
++// Prefer TurboModule on New Arch, but fall back to the bridge module when
++// TurboModuleRegistry.get('ImagePicker') returns null (e.g. binary not rebuilt).
++const turboImagePicker = isTurboModuleEnabled
+   ? require('./NativeImagePicker').default
+-  : NativeModules.ImagePicker;
++  : null;
++const nativeImagePicker = turboImagePicker ?? NativeModules.ImagePicker;
+ 
+ export function camera(
+   options: CameraOptions,
+@@ -51,6 +54,16 @@ export function imageLibrary(
+   callback?: Callback,
+ ): Promise<ImagePickerResponse> {
+   return new Promise((resolve) => {
++    if (!nativeImagePicker?.launchImageLibrary) {
++      const result: ImagePickerResponse = {
++        errorCode: 'others',
++        errorMessage:
++          'Native module ImagePicker is null. Rebuild the app after installing react-native-image-picker.',
++      };
++      if (callback) callback(result);
++      resolve(result);
++      return;
++    }
+     nativeImagePicker.launchImageLibrary(
+       {...DEFAULT_OPTIONS, ...options},
+       (result: ImagePickerResponse) => {

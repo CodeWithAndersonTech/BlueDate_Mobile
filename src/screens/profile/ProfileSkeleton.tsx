@@ -1,21 +1,24 @@
 import React, { useEffect } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { StyleSheet, useWindowDimensions, View } from 'react-native';
 import Animated, {
   Easing,
   useAnimatedStyle,
   useSharedValue,
   withTiming,
 } from 'react-native-reanimated';
-import { useTabBarClearance } from '../../navigation/tabBarLayout';
-import { useTheme } from '../../theme';
 import {
   SkeletonBlock,
   SkeletonCircle,
   SkeletonLine,
 } from '../../components/skeleton/SkeletonBone';
+import { useTabBarClearance } from '../../navigation/tabBarLayout';
+import { useTheme } from '../../theme';
 
 const AVATAR_SIZE = 86;
 const TILE_HEIGHT = 100;
+const PHOTO_GAP = 2;
+const PHOTO_COLS = 3;
+const PHOTO_ROWS = 2;
 
 type Props = {
   /** When true, fades the skeleton in (used on first paint). */
@@ -23,12 +26,16 @@ type Props = {
 };
 
 /**
- * Profile screen skeleton — mirrors avatar header, bio field, and interest tiles.
+ * Profile screen skeleton — mirrors avatar header, bio, photo grid, and interest tiles.
  */
 export function ProfileSkeleton({ visible = true }: Props) {
   const theme = useTheme();
+  const { width: windowWidth } = useWindowDimensions();
   const bottomPad = useTabBarClearance(TILE_HEIGHT);
-  const opacity = useSharedValue(0);
+  // Visible immediately — avoid a blank first frame before fade-in.
+  const opacity = useSharedValue(visible ? 1 : 0);
+
+  const photoCell = (windowWidth - PHOTO_GAP * (PHOTO_COLS - 1)) / PHOTO_COLS;
 
   useEffect(() => {
     opacity.value = withTiming(visible ? 1 : 0, {
@@ -41,41 +48,74 @@ export function ProfileSkeleton({ visible = true }: Props) {
 
   return (
     <Animated.View
-      style={[styles.root, { paddingBottom: bottomPad }, fadeStyle]}
+      style={[
+        styles.root,
+        {
+          paddingBottom: bottomPad,
+          backgroundColor: theme.colors.background,
+        },
+        fadeStyle,
+      ]}
       pointerEvents="none">
       <View style={styles.header}>
         <View style={styles.headerActions}>
           <SkeletonCircle size={36} />
           <SkeletonCircle size={36} />
         </View>
+
         <View style={styles.headerTop}>
-          <SkeletonCircle size={AVATAR_SIZE} />
+          <View style={styles.avatarWrap}>
+            <SkeletonCircle size={AVATAR_SIZE} />
+          </View>
           <View style={styles.statsRow}>
             <View style={styles.statItem}>
               <SkeletonLine width={28} height={18} />
-              <SkeletonLine width={44} height={10} style={styles.statLabel} />
+              <SkeletonLine width={44} height={10} />
             </View>
             <View style={styles.statItem}>
               <SkeletonLine width={28} height={18} />
-              <SkeletonLine width={40} height={10} style={styles.statLabel} />
+              <SkeletonLine width={40} height={10} />
             </View>
             <View style={styles.statItem}>
               <SkeletonLine width={28} height={18} />
-              <SkeletonLine width={42} height={10} style={styles.statLabel} />
+              <SkeletonLine width={42} height={10} />
             </View>
           </View>
         </View>
 
         <View style={styles.nameBlock}>
           <SkeletonLine width="52%" height={18} radius={8} />
-          <SkeletonLine width="34%" height={13} style={styles.username} />
+          <SkeletonLine width="34%" height={13} />
         </View>
       </View>
 
       <View style={styles.body}>
         <SkeletonLine width={72} height={10} style={styles.fieldLabel} />
         <SkeletonBlock height={88} radius={14} />
+      </View>
 
+      {/* Photos — matches ProfilePhotoGrid (3-col IG style) */}
+      <View style={styles.photos}>
+        <View style={styles.photosHeader}>
+          <SkeletonLine width={88} height={18} radius={8} />
+        </View>
+        <View style={styles.photoGrid}>
+          {Array.from({ length: PHOTO_COLS * PHOTO_ROWS }).map((_, index) => (
+            <SkeletonBlock
+              key={index}
+              width={photoCell}
+              height={photoCell}
+              radius={0}
+              style={{
+                marginRight: (index + 1) % PHOTO_COLS === 0 ? 0 : PHOTO_GAP,
+                marginBottom: PHOTO_GAP,
+              }}
+            />
+          ))}
+        </View>
+      </View>
+
+      <View style={styles.body}>
         <View style={styles.section}>
           <SkeletonLine width={110} height={18} radius={8} />
           <View style={styles.tileGrid}>
@@ -127,6 +167,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 12,
   },
+  avatarWrap: {
+    width: AVATAR_SIZE,
+    height: AVATAR_SIZE,
+  },
   statsRow: {
     flex: 1,
     flexDirection: 'row',
@@ -134,11 +178,15 @@ const styles = StyleSheet.create({
     justifyContent: 'space-around',
   },
   statItem: { alignItems: 'center', gap: 6, flex: 1 },
-  statLabel: { marginTop: 0 },
   nameBlock: { gap: 8, paddingRight: 8 },
-  username: { marginTop: 0 },
   body: { paddingHorizontal: 16, paddingTop: 4 },
   fieldLabel: { marginBottom: 8 },
+  photos: { marginTop: 22, gap: 12 },
+  photosHeader: { paddingHorizontal: 16 },
+  photoGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+  },
   section: { marginTop: 22, gap: 12 },
   tileGrid: {
     flexDirection: 'row',

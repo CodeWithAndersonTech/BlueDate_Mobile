@@ -26,15 +26,79 @@ export type UploadPhotoResponse = ApiEnvelope & {
   SortOrder?: number;
 };
 
-export function getUserPhotos(
+type RawPhotoItem = {
+  Id?: number;
+  id?: number;
+  Url?: string;
+  url?: string;
+  Kind?: number;
+  kind?: number;
+  SortOrder?: number;
+  sortOrder?: number;
+  CreatedDate?: string;
+  createdDate?: string;
+};
+
+type RawPhotosResponse = ApiEnvelope & {
+  UserId?: number;
+  userId?: number;
+  Items?: RawPhotoItem[];
+  items?: RawPhotoItem[];
+  isSuccess?: boolean;
+};
+
+type RawUploadResponse = ApiEnvelope & {
+  Id?: number;
+  id?: number;
+  Url?: string;
+  url?: string;
+  SortOrder?: number;
+  sortOrder?: number;
+  isSuccess?: boolean;
+};
+
+function normalizePhotoItem(item: RawPhotoItem): UserPhotoItem {
+  return {
+    Id: Number(item.Id ?? item.id ?? 0),
+    Url: String(item.Url ?? item.url ?? ''),
+    Kind: Number(item.Kind ?? item.kind ?? 0),
+    SortOrder: Number(item.SortOrder ?? item.sortOrder ?? 0),
+    CreatedDate: item.CreatedDate ?? item.createdDate,
+  };
+}
+
+function normalizePhotosResponse(raw: RawPhotosResponse): UserPhotosResponse {
+  const items = raw.Items ?? raw.items ?? [];
+  return {
+    IsSuccess: raw.IsSuccess ?? raw.isSuccess ?? true,
+    ErrorMessage: raw.ErrorMessage,
+    SuccessMessage: raw.SuccessMessage,
+    UserId: Number(raw.UserId ?? raw.userId ?? 0),
+    Items: items.map(normalizePhotoItem).filter(item => item.Id > 0 && !!item.Url),
+  };
+}
+
+function normalizeUploadResponse(raw: RawUploadResponse): UploadPhotoResponse {
+  return {
+    IsSuccess: raw.IsSuccess ?? raw.isSuccess ?? true,
+    ErrorMessage: raw.ErrorMessage,
+    SuccessMessage: raw.SuccessMessage,
+    Id: Number(raw.Id ?? raw.id ?? 0),
+    Url: String(raw.Url ?? raw.url ?? ''),
+    SortOrder: Number(raw.SortOrder ?? raw.sortOrder ?? 0),
+  };
+}
+
+export async function getUserPhotos(
   userId: number,
   kind?: number,
   token?: string | null,
-) {
-  return apiRequest<UserPhotosResponse>(API_PATHS.userPhotosByUser, {
+): Promise<UserPhotosResponse> {
+  const raw = await apiRequest<RawPhotosResponse>(API_PATHS.userPhotosByUser, {
     query: { userId, kind },
     token,
   });
+  return normalizePhotosResponse(raw);
 }
 
 export async function resolveMediaUrl(pathOrUrl?: string | null): Promise<string | undefined> {
@@ -90,21 +154,29 @@ async function uploadMultipart(
     ]);
   }
 
-  let payload: UploadPhotoResponse | null = null;
+  let payload: RawUploadResponse | null = null;
   try {
-    payload = (await response.json()) as UploadPhotoResponse;
+    payload = (await response.json()) as RawUploadResponse;
   } catch {
     payload = null;
   }
 
-  if (!response.ok || !payload?.IsSuccess) {
+  const normalized = payload ? normalizeUploadResponse(payload) : null;
+  const ok =
+    response.ok &&
+    !!normalized &&
+    (normalized.IsSuccess ?? true) &&
+    normalized.Id > 0 &&
+    !!normalized.Url;
+
+  if (!ok || !normalized) {
     throw new ApiError(
       response.status,
       payload?.ErrorMessage?.filter(Boolean) ?? ['Upload failed'],
     );
   }
 
-  return payload;
+  return normalized;
 }
 
 export function uploadGalleryPhoto(

@@ -1,5 +1,5 @@
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useRef, useState } from 'react';
 import {
   Alert,
   Image,
@@ -11,7 +11,6 @@ import {
   Text,
   View,
 } from 'react-native';
-import { launchImageLibrary } from 'react-native-image-picker';
 import Animated, {
   Easing,
   useAnimatedStyle,
@@ -33,6 +32,10 @@ import { TabScreenScrollView } from '../../components';
 import { useLocale } from '../../i18n';
 import { useAuth } from '../../navigation/AuthContext';
 import { ProfileStackParamList } from '../../navigation/types';
+import {
+  assetFromPickerResponse,
+  pickPhotoFromLibrary,
+} from '../../services/photos/pickImage';
 import {
   loadProfilePhotos,
   pickAndSetAvatar,
@@ -91,7 +94,8 @@ export function ProfileScreen({ navigation }: Props) {
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [verifyTipOpen, setVerifyTipOpen] = useState(false);
-  const contentOpacity = useSharedValue(0);
+  // Start at 1 so skeleton → content never flashes a blank frame.
+  const contentOpacity = useSharedValue(1);
   const profileRef = useRef<UserProfileResponse | null>(null);
   profileRef.current = profile;
 
@@ -132,6 +136,14 @@ export function ProfileScreen({ navigation }: Props) {
         setPhotos(photoBundle.gallery);
         const profileAvatar = await resolveMediaUrl(profileResponse.ProfileImage);
         setAvatarUri(photoBundle.avatarUri ?? profileAvatar);
+        // Soft settle after skeleton — only when this was a cold load.
+        if (!profileRef.current) {
+          contentOpacity.value = 0;
+          contentOpacity.value = withTiming(1, {
+            duration: 220,
+            easing: Easing.out(Easing.quad),
+          });
+        }
       } catch (err) {
         setError(err instanceof Error ? err.message : t('profile.load_failed'));
       } finally {
@@ -139,7 +151,7 @@ export function ProfileScreen({ navigation }: Props) {
         setRefreshing(false);
       }
     },
-    [userId, accessToken, t],
+    [userId, accessToken, t, contentOpacity],
   );
 
   useFocusEffect(
@@ -147,17 +159,6 @@ export function ProfileScreen({ navigation }: Props) {
       loadProfile();
     }, [loadProfile]),
   );
-
-  useEffect(() => {
-    if (!loading && profile) {
-      contentOpacity.value = withTiming(1, {
-        duration: 280,
-        easing: Easing.out(Easing.quad),
-      });
-    } else if (loading && !profile) {
-      contentOpacity.value = 0;
-    }
-  }, [loading, profile, contentOpacity]);
 
   const contentFadeStyle = useAnimatedStyle(() => ({
     opacity: contentOpacity.value,
@@ -184,7 +185,7 @@ export function ProfileScreen({ navigation }: Props) {
 
   const onChangeAvatar = async () => {
     if (!userId) return;
-    const result = await launchImageLibrary({
+    const result = await pickPhotoFromLibrary({
       mediaType: 'photo',
       selectionLimit: 1,
       quality: 0.8,
@@ -194,21 +195,17 @@ export function ProfileScreen({ navigation }: Props) {
       Alert.alert(t('profile.change_avatar'), t('profile.photo_permission'));
       return;
     }
-    const asset = result.assets?.[0];
-    if (!asset?.uri) {
+    if (result.errorMessage === 'NATIVE_MODULE_MISSING') {
+      Alert.alert(t('profile.change_avatar'), t('profile.photo_native_missing'));
+      return;
+    }
+    const asset = assetFromPickerResponse(result);
+    if (!asset) {
       Alert.alert(t('profile.change_avatar'), t('profile.photo_error'));
       return;
     }
     try {
-      const uri = await pickAndSetAvatar(
-        userId,
-        {
-          uri: asset.uri,
-          fileName: asset.fileName ?? undefined,
-          type: asset.type ?? undefined,
-        },
-        accessToken,
-      );
+      const uri = await pickAndSetAvatar(userId, asset, accessToken);
       setAvatarUri(uri);
       setProfile(prev => (prev ? { ...prev, ProfileImage: uri } : prev));
     } catch {
@@ -234,8 +231,9 @@ export function ProfileScreen({ navigation }: Props) {
   if (showSkeleton) {
     return shell(
       <ScrollView
+        style={styles.flex}
         showsVerticalScrollIndicator={false}
-        contentContainerStyle={{ flexGrow: 1 }}
+        contentContainerStyle={styles.skeletonContent}
         scrollEnabled={false}>
         <ProfileSkeleton />
       </ScrollView>,
@@ -769,6 +767,7 @@ export function ProfileScreen({ navigation }: Props) {
 const styles = StyleSheet.create({
   root: { flex: 1 },
   flex: { flex: 1 },
+  skeletonContent: { flexGrow: 1 },
   center: {
     flex: 1,
     alignItems: 'center',

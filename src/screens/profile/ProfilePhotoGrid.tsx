@@ -10,9 +10,12 @@ import {
   Text,
   View,
 } from 'react-native';
-import { launchImageLibrary } from 'react-native-image-picker';
 import { useLocale } from '../../i18n';
 import { useTheme } from '../../theme';
+import {
+  assetFromPickerResponse,
+  pickPhotoFromLibrary,
+} from '../../services/photos/pickImage';
 import {
   pickAndAddGalleryPhoto,
   ProfilePhoto,
@@ -48,7 +51,7 @@ export function ProfilePhotoGrid({
   }, []);
 
   const pickAsset = async () => {
-    const result = await launchImageLibrary({
+    const result = await pickPhotoFromLibrary({
       mediaType: 'photo',
       selectionLimit: 1,
       quality: 0.8,
@@ -58,16 +61,20 @@ export function ProfilePhotoGrid({
       Alert.alert(t('profile.photos'), t('profile.photo_permission'));
       return null;
     }
-    const asset = result.assets?.[0];
-    if (!asset?.uri) {
+    if (result.errorMessage === 'NATIVE_MODULE_MISSING') {
+      Alert.alert(t('profile.photos'), t('profile.photo_native_missing'));
+      return null;
+    }
+    if (result.errorCode) {
       Alert.alert(t('profile.photos'), t('profile.photo_error'));
       return null;
     }
-    return {
-      uri: asset.uri,
-      fileName: asset.fileName ?? undefined,
-      type: asset.type ?? undefined,
-    };
+    const asset = assetFromPickerResponse(result);
+    if (!asset) {
+      Alert.alert(t('profile.photos'), t('profile.photo_error'));
+      return null;
+    }
+    return asset;
   };
 
   const onAdd = async () => {

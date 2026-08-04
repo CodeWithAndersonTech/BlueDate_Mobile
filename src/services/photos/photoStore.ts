@@ -73,7 +73,17 @@ export async function loadProfilePhotos(
     if (avatarItem) {
       remoteAvatar = (await resolveMediaUrl(avatarItem.Url)) ?? avatarItem.Url;
     }
-  } catch {
+
+    if (__DEV__) {
+      console.log(
+        `[photos] user=${userId} gallery=${remoteGallery.length} avatar=${remoteAvatar ? 'yes' : 'no'}`,
+        remoteGallery.map(p => p.uri),
+      );
+    }
+  } catch (error) {
+    if (__DEV__) {
+      console.warn('[photos] load failed, using local fallback', error);
+    }
     /* offline / API down — use local only */
   }
 

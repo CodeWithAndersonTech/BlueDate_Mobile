@@ -157,6 +157,8 @@ const FALLBACK_TRANSLATIONS: Record<string, string> = {
   'profile.delete_photo': 'Delete photo',
   'profile.photo_permission': 'Photo library permission is required.',
   'profile.photo_error': 'Could not add photo. Try again.',
+  'profile.photo_native_missing':
+    'Photo picker needs a full app rebuild. Stop Metro, run yarn ios, then try again.',
   'profile.stat_photos': 'Photos',
   'profile.friends': 'Friends',
   'profile.friends_empty': 'No friends to show yet.',
@@ -415,6 +417,8 @@ const LOCAL_TRANSLATIONS_TR: Record<string, string> = {
   'profile.delete_photo': 'Fotoğrafı sil',
   'profile.photo_permission': 'Fotoğraf kütüphanesi izni gerekli.',
   'profile.photo_error': 'Fotoğraf eklenemedi. Tekrar dene.',
+  'profile.photo_native_missing':
+    'Fotoğraf seçici için uygulamayı yeniden derlemen gerekiyor. Metro’yu durdur, yarn ios çalıştır, sonra tekrar dene.',
   'profile.stat_photos': 'Fotoğraf',
   'profile.friends': 'Arkadaşlar',
   'profile.friends_empty': 'Henüz gösterilecek arkadaş yok.',
