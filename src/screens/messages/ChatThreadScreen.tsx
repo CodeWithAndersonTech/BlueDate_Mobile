@@ -6,6 +6,7 @@ import {
   KeyboardAvoidingView,
   Platform,
   Pressable,
+  StatusBar,
   StyleSheet,
   Text,
   TextInput,
@@ -15,13 +16,15 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import Swipeable, {
   SwipeableMethods,
 } from 'react-native-gesture-handler/ReanimatedSwipeable';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import {
+  SafeAreaView,
+  useSafeAreaInsets,
+} from 'react-native-safe-area-context';
 import {
   Avatar,
   EmptyState,
   Icon,
   IconButton,
-  Screen,
   Typography,
 } from '../../components';
 import { useLocale } from '../../i18n';
@@ -78,13 +81,15 @@ export function ChatThreadScreen({ navigation, route }: Props) {
 
   if (!conversation) {
     return (
-      <Screen edges={['top', 'bottom']}>
+      <SafeAreaView
+        edges={['top', 'bottom']}
+        style={[styles.root, { backgroundColor: theme.colors.background }]}>
         <EmptyState
           icon="message"
           title={t('messages.thread_not_found_title')}
           description={t('messages.thread_not_found_desc')}
         />
-      </Screen>
+      </SafeAreaView>
     );
   }
 
@@ -116,7 +121,15 @@ export function ChatThreadScreen({ navigation, route }: Props) {
   };
 
   return (
-    <Screen edges={['top']} style={styles.flex}>
+    <SafeAreaView
+      edges={['top']}
+      style={[styles.root, { backgroundColor: theme.colors.background }]}>
+      <StatusBar
+        barStyle={theme.isDark ? 'light-content' : 'dark-content'}
+        backgroundColor="transparent"
+        translucent
+      />
+
       <View
         style={[
           styles.topBar,
@@ -161,13 +174,13 @@ export function ChatThreadScreen({ navigation, route }: Props) {
       </View>
 
       <KeyboardAvoidingView
-        style={styles.flex}
+        style={styles.body}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         keyboardVerticalOffset={0}>
-        <GestureHandlerRootView style={styles.flex}>
+        <GestureHandlerRootView style={styles.body}>
           <FlatList
             ref={listRef}
-            style={styles.flex}
+            style={styles.list}
             data={messages}
             keyExtractor={item => item.id}
             contentContainerStyle={styles.thread}
@@ -271,7 +284,7 @@ export function ChatThreadScreen({ navigation, route }: Props) {
             style={[
               styles.composer,
               {
-                paddingBottom: Math.max(insets.bottom, 10),
+                paddingBottom: Math.max(insets.bottom, 12),
                 borderTopColor: theme.colors.border,
                 backgroundColor: theme.colors.background,
               },
@@ -317,12 +330,15 @@ export function ChatThreadScreen({ navigation, route }: Props) {
           </View>
         </GestureHandlerRootView>
       </KeyboardAvoidingView>
-    </Screen>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  flex: { flex: 1 },
+  root: { flex: 1 },
+  /** minHeight:0 lets the chat column shrink inside Material Top Tabs. */
+  body: { flex: 1, minHeight: 0 },
+  list: { flex: 1, minHeight: 0 },
   topBar: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -330,6 +346,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 8,
     borderBottomWidth: StyleSheet.hairlineWidth,
+    flexShrink: 0,
   },
   peer: {
     flex: 1,
@@ -342,9 +359,9 @@ const styles = StyleSheet.create({
   peerText: { flex: 1, gap: 1, minWidth: 0 },
   thread: {
     paddingHorizontal: 16,
-    paddingVertical: 16,
+    paddingTop: 16,
+    paddingBottom: 12,
     flexGrow: 1,
-    justifyContent: 'flex-end',
   },
   bubbleRow: {
     flexDirection: 'row',
@@ -381,6 +398,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingTop: 10,
     borderTopWidth: StyleSheet.hairlineWidth,
+    flexShrink: 0,
   },
   inputWrap: {
     flex: 1,
