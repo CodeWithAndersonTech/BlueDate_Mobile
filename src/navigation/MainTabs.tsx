@@ -29,7 +29,7 @@ export function MainTabs() {
         swipeEnabled: true,
         animationEnabled: true,
         lazy: true,
-        sceneStyle: { backgroundColor: 'transparent' },
+        sceneStyle: { flex: 1, backgroundColor: 'transparent' },
       }}>
       <Tab.Screen name="Home" component={HomeStack} />
       <Tab.Screen name="Friends" component={FriendsStack} />

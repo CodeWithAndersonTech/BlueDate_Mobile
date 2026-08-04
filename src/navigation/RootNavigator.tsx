@@ -2,9 +2,9 @@ import { NavigationContainer } from '@react-navigation/native';
 import React from 'react';
 import { SplashScreen } from '../screens/auth/SplashScreen';
 import { useTheme } from '../theme';
+import { AppStack } from './AppStack';
 import { AuthStack } from './AuthStack';
 import { useAuth } from './AuthContext';
-import { MainTabs } from './MainTabs';
 import { toNavigationTheme } from './navigationTheme';
 
 export function RootNavigator() {
@@ -16,7 +16,7 @@ export function RootNavigator() {
       {status === 'bootstrapping' ? (
         <SplashScreen />
       ) : status === 'signedIn' ? (
-        <MainTabs />
+        <AppStack />
       ) : (
         <AuthStack />
       )}

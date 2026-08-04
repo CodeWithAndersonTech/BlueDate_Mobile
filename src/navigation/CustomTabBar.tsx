@@ -125,7 +125,7 @@ export function CustomTabBar({
   }, [position, state.routes, tabCount, tabWidth, indicatorWidth]);
 
   if (hide) {
-    return null;
+    return <View style={styles.hiddenHost} />;
   }
 
   const staticIndicatorOffset =
@@ -273,6 +273,10 @@ function TabItem({
 }
 
 const styles = StyleSheet.create({
+  hiddenHost: {
+    height: 0,
+    overflow: 'hidden',
+  },
   wrapper: {
     position: 'absolute',
     left: 0,

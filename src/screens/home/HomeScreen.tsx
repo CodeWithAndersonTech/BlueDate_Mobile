@@ -163,12 +163,17 @@ export function HomeScreen({ navigation }: Props) {
           <View style={styles.headerActions}>
             <IconButton
               name="message"
-              onPress={() => navigation.navigate('Messages')}
+              onPress={() =>
+                // Bubbles to AppStack above tabs — full-screen, no tab bar.
+                navigation.navigate('Messages' as never)
+              }
               accessibilityLabel={t('home.messages')}
             />
             <IconButton
               name="bell"
-              onPress={() => navigation.navigate('Notifications')}
+              onPress={() =>
+                navigation.navigate('Notifications' as never)
+              }
               accessibilityLabel={t('notifications.title')}
             />
           </View>

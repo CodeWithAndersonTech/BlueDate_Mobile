@@ -28,8 +28,7 @@ import {
   Typography,
 } from '../../components';
 import { useLocale } from '../../i18n';
-import { useLockTabSwipe } from '../../navigation/useLockTabSwipe';
-import { HomeStackParamList } from '../../navigation/types';
+import { AppStackParamList } from '../../navigation/types';
 import { useTheme } from '../../theme';
 import {
   ChatMessage,
@@ -37,10 +36,9 @@ import {
   getMessagesForConversation,
 } from '../../utils';
 
-type Props = NativeStackScreenProps<HomeStackParamList, 'ChatThread'>;
+type Props = NativeStackScreenProps<AppStackParamList, 'ChatThread'>;
 
 export function ChatThreadScreen({ navigation, route }: Props) {
-  useLockTabSwipe();
   const theme = useTheme();
   const { t } = useLocale();
   const insets = useSafeAreaInsets();
@@ -120,225 +118,232 @@ export function ChatThreadScreen({ navigation, route }: Props) {
     });
   };
 
+  const composerPad = Math.max(insets.bottom, 10);
+
   return (
-    <SafeAreaView
-      edges={['top']}
-      style={[styles.root, { backgroundColor: theme.colors.background }]}>
+    <View style={[styles.root, { backgroundColor: theme.colors.background }]}>
       <StatusBar
         barStyle={theme.isDark ? 'light-content' : 'dark-content'}
         backgroundColor="transparent"
         translucent
       />
 
-      <View
-        style={[
-          styles.topBar,
-          {
-            borderBottomColor: theme.colors.border,
-            backgroundColor: theme.colors.background,
-          },
-        ]}>
-        <Pressable
-          style={styles.peer}
-          onPress={() =>
-            navigation.navigate('UserProfile', { userId: conversation.userId })
-          }>
-          <Avatar
-            uri={conversation.avatar}
-            name={conversation.name}
-            size="sm"
-            online={conversation.online}
-            premium={conversation.premium}
-          />
-          <View style={styles.peerText}>
-            <Typography variant="bodyStrong" numberOfLines={1}>
-              {conversation.name}
-            </Typography>
-            <Typography
-              variant="caption"
-              tint={
-                conversation.online || conversation.statusKey === 'typing'
-                  ? theme.colors.online
-                  : theme.colors.textMuted
-              }>
-              {statusLabel}
-            </Typography>
-          </View>
-        </Pressable>
-        <IconButton
-          name="more"
-          variant="plain"
-          onPress={() => {}}
-          accessibilityLabel={t('messages.more')}
-        />
-      </View>
-
-      <KeyboardAvoidingView
-        style={styles.body}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        keyboardVerticalOffset={0}>
-        <GestureHandlerRootView style={styles.body}>
-          <FlatList
-            ref={listRef}
-            style={styles.list}
-            data={messages}
-            keyExtractor={item => item.id}
-            contentContainerStyle={styles.thread}
-            showsVerticalScrollIndicator={false}
-            keyboardShouldPersistTaps="handled"
-            keyboardDismissMode="interactive"
-            onContentSizeChange={() =>
-              listRef.current?.scrollToEnd({ animated: false })
-            }
-            renderItem={({ item, index }) => {
-              const mine = item.senderId === 'me';
-              const prev = messages[index - 1];
-              const showTime =
-                !prev ||
-                prev.senderId !== item.senderId ||
-                prev.sentAt !== item.sentAt;
-
-              return (
-                <Swipeable
-                  ref={methods => {
-                    if (methods) {
-                      swipeableRefs.current.set(item.id, methods);
-                    } else {
-                      swipeableRefs.current.delete(item.id);
-                    }
-                  }}
-                  friction={2}
-                  overshootLeft={false}
-                  overshootRight={false}
-                  leftThreshold={40}
-                  onSwipeableOpenStartDrag={() => {
-                    swipeableRefs.current.forEach((methods, id) => {
-                      if (id !== item.id) {
-                        methods.close();
-                      }
-                    });
-                  }}
-                  renderLeftActions={(_progress, _translation, methods) => (
-                    <Pressable
-                      onPress={() => {
-                        methods.close();
-                        confirmDelete(item.id);
-                      }}
-                      style={[
-                        styles.deleteAction,
-                        { backgroundColor: theme.colors.danger },
-                      ]}
-                      accessibilityRole="button"
-                      accessibilityLabel={t('messages.delete')}>
-                      <Text style={styles.deleteActionText}>
-                        {t('messages.delete')}
-                      </Text>
-                    </Pressable>
-                  )}>
-                  <View
-                    style={[
-                      styles.bubbleRow,
-                      mine ? styles.bubbleRowMine : styles.bubbleRowTheirs,
-                      { backgroundColor: theme.colors.background },
-                    ]}>
-                    <View
-                      style={[
-                        styles.bubble,
-                        mine
-                          ? {
-                              backgroundColor: theme.colors.primary,
-                              borderBottomRightRadius: 6,
-                            }
-                          : {
-                              backgroundColor: theme.colors.surfaceAlt,
-                              borderBottomLeftRadius: 6,
-                            },
-                      ]}>
-                      <Typography
-                        variant="body"
-                        tint={
-                          mine ? theme.colors.onPrimary : theme.colors.text
-                        }>
-                        {item.text}
-                      </Typography>
-                      {showTime ? (
-                        <Typography
-                          variant="overline"
-                          tint={
-                            mine
-                              ? 'rgba(255,255,255,0.72)'
-                              : theme.colors.textMuted
-                          }
-                          style={styles.time}>
-                          {item.sentAt}
-                        </Typography>
-                      ) : null}
-                    </View>
-                  </View>
-                </Swipeable>
-              );
-            }}
-          />
-
+      <SafeAreaView edges={['top']} style={styles.root}>
+        <KeyboardAvoidingView
+          style={styles.root}
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          keyboardVerticalOffset={0}>
           <View
             style={[
-              styles.composer,
+              styles.topBar,
               {
-                paddingBottom: Math.max(insets.bottom, 12),
-                borderTopColor: theme.colors.border,
+                borderBottomColor: theme.colors.border,
                 backgroundColor: theme.colors.background,
               },
             ]}>
+            <Pressable
+              style={styles.peer}
+              onPress={() =>
+                navigation.navigate('UserProfile', {
+                  userId: conversation.userId,
+                })
+              }>
+              <Avatar
+                uri={conversation.avatar}
+                name={conversation.name}
+                size="sm"
+                online={conversation.online}
+                premium={conversation.premium}
+              />
+              <View style={styles.peerText}>
+                <Typography variant="bodyStrong" numberOfLines={1}>
+                  {conversation.name}
+                </Typography>
+                <Typography
+                  variant="caption"
+                  tint={
+                    conversation.online || conversation.statusKey === 'typing'
+                      ? theme.colors.online
+                      : theme.colors.textMuted
+                  }>
+                  {statusLabel}
+                </Typography>
+              </View>
+            </Pressable>
+            <IconButton
+              name="more"
+              variant="plain"
+              onPress={() => {}}
+              accessibilityLabel={t('messages.more')}
+            />
+          </View>
+
+          <GestureHandlerRootView style={styles.flexFill}>
+            <FlatList
+              ref={listRef}
+              style={styles.flexFill}
+              data={messages}
+              keyExtractor={item => item.id}
+              contentContainerStyle={[
+                styles.thread,
+                { paddingBottom: 12 },
+              ]}
+              showsVerticalScrollIndicator={false}
+              keyboardShouldPersistTaps="handled"
+              keyboardDismissMode="interactive"
+              onContentSizeChange={() =>
+                listRef.current?.scrollToEnd({ animated: false })
+              }
+              renderItem={({ item, index }) => {
+                const mine = item.senderId === 'me';
+                const prev = messages[index - 1];
+                const showTime =
+                  !prev ||
+                  prev.senderId !== item.senderId ||
+                  prev.sentAt !== item.sentAt;
+
+                return (
+                  <Swipeable
+                    ref={methods => {
+                      if (methods) {
+                        swipeableRefs.current.set(item.id, methods);
+                      } else {
+                        swipeableRefs.current.delete(item.id);
+                      }
+                    }}
+                    friction={2}
+                    overshootLeft={false}
+                    overshootRight={false}
+                    leftThreshold={40}
+                    onSwipeableOpenStartDrag={() => {
+                      swipeableRefs.current.forEach((methods, id) => {
+                        if (id !== item.id) {
+                          methods.close();
+                        }
+                      });
+                    }}
+                    renderLeftActions={(_progress, _translation, methods) => (
+                      <Pressable
+                        onPress={() => {
+                          methods.close();
+                          confirmDelete(item.id);
+                        }}
+                        style={[
+                          styles.deleteAction,
+                          { backgroundColor: theme.colors.danger },
+                        ]}
+                        accessibilityRole="button"
+                        accessibilityLabel={t('messages.delete')}>
+                        <Text style={styles.deleteActionText}>
+                          {t('messages.delete')}
+                        </Text>
+                      </Pressable>
+                    )}>
+                    <View
+                      style={[
+                        styles.bubbleRow,
+                        mine ? styles.bubbleRowMine : styles.bubbleRowTheirs,
+                        { backgroundColor: theme.colors.background },
+                      ]}>
+                      <View
+                        style={[
+                          styles.bubble,
+                          mine
+                            ? {
+                                backgroundColor: theme.colors.primary,
+                                borderBottomRightRadius: 6,
+                              }
+                            : {
+                                backgroundColor: theme.colors.surfaceAlt,
+                                borderBottomLeftRadius: 6,
+                              },
+                        ]}>
+                        <Typography
+                          variant="body"
+                          tint={
+                            mine ? theme.colors.onPrimary : theme.colors.text
+                          }>
+                          {item.text}
+                        </Typography>
+                        {showTime ? (
+                          <Typography
+                            variant="overline"
+                            tint={
+                              mine
+                                ? 'rgba(255,255,255,0.72)'
+                                : theme.colors.textMuted
+                            }
+                            style={styles.time}>
+                            {item.sentAt}
+                          </Typography>
+                        ) : null}
+                      </View>
+                    </View>
+                  </Swipeable>
+                );
+              }}
+            />
+
             <View
               style={[
-                styles.inputWrap,
+                styles.composer,
                 {
-                  backgroundColor: theme.colors.surfaceAlt,
-                  borderColor: theme.colors.border,
+                  paddingBottom: composerPad,
+                  borderTopColor: theme.colors.border,
+                  backgroundColor: theme.colors.background,
                 },
               ]}>
-              <TextInput
-                value={draft}
-                onChangeText={setDraft}
-                placeholder={t('messages.composer_placeholder')}
-                placeholderTextColor={theme.colors.textMuted}
-                style={[styles.input, { color: theme.colors.text }]}
-                multiline
-                maxLength={1000}
-              />
+              <View
+                style={[
+                  styles.inputWrap,
+                  {
+                    backgroundColor: theme.colors.surfaceAlt,
+                    borderColor: theme.colors.border,
+                  },
+                ]}>
+                <TextInput
+                  value={draft}
+                  onChangeText={setDraft}
+                  placeholder={t('messages.composer_placeholder')}
+                  placeholderTextColor={theme.colors.textMuted}
+                  style={[styles.input, { color: theme.colors.text }]}
+                  multiline
+                  maxLength={1000}
+                />
+              </View>
+              <Pressable
+                onPress={send}
+                disabled={!draft.trim()}
+                style={({ pressed }) => [
+                  styles.sendBtn,
+                  {
+                    backgroundColor: draft.trim()
+                      ? theme.colors.primary
+                      : theme.colors.surfaceAlt,
+                    opacity: pressed ? 0.9 : 1,
+                  },
+                ]}>
+                <Icon
+                  name="send"
+                  size={18}
+                  color={
+                    draft.trim()
+                      ? theme.colors.onPrimary
+                      : theme.colors.textMuted
+                  }
+                />
+              </Pressable>
             </View>
-            <Pressable
-              onPress={send}
-              disabled={!draft.trim()}
-              style={({ pressed }) => [
-                styles.sendBtn,
-                {
-                  backgroundColor: draft.trim()
-                    ? theme.colors.primary
-                    : theme.colors.surfaceAlt,
-                  opacity: pressed ? 0.9 : 1,
-                },
-              ]}>
-              <Icon
-                name="send"
-                size={18}
-                color={
-                  draft.trim() ? theme.colors.onPrimary : theme.colors.textMuted
-                }
-              />
-            </Pressable>
-          </View>
-        </GestureHandlerRootView>
-      </KeyboardAvoidingView>
-    </SafeAreaView>
+          </GestureHandlerRootView>
+        </KeyboardAvoidingView>
+      </SafeAreaView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   root: { flex: 1 },
-  /** minHeight:0 lets the chat column shrink inside Material Top Tabs. */
-  body: { flex: 1, minHeight: 0 },
-  list: { flex: 1, minHeight: 0 },
+  flexFill: { flex: 1 },
   topBar: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -346,7 +351,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 8,
     borderBottomWidth: StyleSheet.hairlineWidth,
-    flexShrink: 0,
   },
   peer: {
     flex: 1,
@@ -360,7 +364,6 @@ const styles = StyleSheet.create({
   thread: {
     paddingHorizontal: 16,
     paddingTop: 16,
-    paddingBottom: 12,
     flexGrow: 1,
   },
   bubbleRow: {
@@ -398,7 +401,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingTop: 10,
     borderTopWidth: StyleSheet.hairlineWidth,
-    flexShrink: 0,
   },
   inputWrap: {
     flex: 1,

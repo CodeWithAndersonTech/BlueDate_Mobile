@@ -11,8 +11,7 @@ import {
   Typography,
 } from '../../components';
 import { useLocale } from '../../i18n';
-import { useLockTabSwipe } from '../../navigation/useLockTabSwipe';
-import { HomeStackParamList } from '../../navigation/types';
+import { AppStackParamList } from '../../navigation/types';
 import { useTheme } from '../../theme';
 import {
   AppNotification,
@@ -20,7 +19,7 @@ import {
   appNotifications,
 } from '../../utils';
 
-type Props = NativeStackScreenProps<HomeStackParamList, 'Notifications'>;
+type Props = NativeStackScreenProps<AppStackParamList, 'Notifications'>;
 
 const TYPE_ICON: Record<AppNotificationType, IconName> = {
   like: 'heart',
@@ -41,7 +40,6 @@ const TYPE_COPY_KEY: Record<AppNotificationType, string> = {
 };
 
 export function NotificationsScreen({ navigation }: Props) {
-  useLockTabSwipe();
   const theme = useTheme();
   const { t } = useLocale();
   const [items, setItems] = useState<AppNotification[]>(appNotifications);

@@ -10,15 +10,13 @@ import {
   Typography,
 } from '../../components';
 import { useLocale } from '../../i18n';
-import { useLockTabSwipe } from '../../navigation/useLockTabSwipe';
-import { HomeStackParamList } from '../../navigation/types';
+import { AppStackParamList } from '../../navigation/types';
 import { useTheme } from '../../theme';
 import { ChatConversation, chatConversations } from '../../utils';
 
-type Props = NativeStackScreenProps<HomeStackParamList, 'Messages'>;
+type Props = NativeStackScreenProps<AppStackParamList, 'Messages'>;
 
 export function MessagesScreen({ navigation }: Props) {
-  useLockTabSwipe();
   const theme = useTheme();
   const { t } = useLocale();
   const [query, setQuery] = useState('');

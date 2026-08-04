@@ -14,9 +14,6 @@ export type AuthStackParamList = {
 
 export type HomeStackParamList = {
   HomeFeed: undefined;
-  Messages: undefined;
-  Notifications: undefined;
-  ChatThread: { conversationId: string };
   Settings: undefined;
   Filter: undefined;
   UserProfile: { userId: string };
@@ -48,6 +45,15 @@ export type MainTabParamList = {
   Friends: NavigatorScreenParams<FriendsStackParamList>;
   Premium: undefined;
   Profile: NavigatorScreenParams<ProfileStackParamList>;
+};
+
+/** Full-screen overlays above tabs (chat, notifications, …). */
+export type AppStackParamList = {
+  MainTabs: NavigatorScreenParams<MainTabParamList> | undefined;
+  Messages: undefined;
+  Notifications: undefined;
+  ChatThread: { conversationId: string };
+  UserProfile: { userId: string };
 };
 
 export type RootStackParamList = {

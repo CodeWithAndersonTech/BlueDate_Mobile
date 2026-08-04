@@ -1,5 +1,6 @@
 export * from './types';
 export * from './AuthContext';
+export * from './AppStack';
 export * from './RootNavigator';
 export * from './useLockTabSwipe';
 export {
