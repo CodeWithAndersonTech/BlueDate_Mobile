@@ -16,7 +16,8 @@ export function SettingsGroup({ children, style }: SettingsGroupProps) {
         styles.group,
         {
           backgroundColor: theme.colors.card,
-          borderRadius: 20,
+          borderColor: theme.colors.border,
+          borderRadius: 16,
         },
         theme.shadows.sm,
         style,
@@ -36,7 +37,7 @@ export function SettingsSep() {
 const styles = StyleSheet.create({
   group: {
     overflow: 'hidden',
-    paddingVertical: 2,
+    borderWidth: StyleSheet.hairlineWidth,
   },
   sep: {
     height: StyleSheet.hairlineWidth,

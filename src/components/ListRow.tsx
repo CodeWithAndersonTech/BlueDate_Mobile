@@ -38,17 +38,17 @@ export function ListRow({
   const titleColor = destructive ? theme.colors.danger : theme.colors.text;
 
   const content = (
-    <View style={[styles.row, { paddingVertical: 12 }, style]}>
+    <View style={[styles.row, style]}>
       {icon && (
         <View
           style={[
             styles.iconChip,
             {
               backgroundColor: iconBackground ?? theme.colors.surfaceAlt,
-              borderRadius: 16,
+              borderRadius: 12,
             },
           ]}>
-          <Icon name={icon} size={20} color={iconColor ?? theme.colors.primary} />
+          <Icon name={icon} size={18} color={iconColor ?? theme.colors.primary} />
         </View>
       )}
       <View style={styles.texts}>
@@ -68,7 +68,7 @@ export function ListRow({
       )}
       {right}
       {showChevron && onPress && !right && (
-        <Icon name="chevron-right" size={20} color={theme.colors.textMuted} />
+        <Icon name="chevron-right" size={18} color={theme.colors.textMuted} />
       )}
     </View>
   );
@@ -89,11 +89,12 @@ const styles = StyleSheet.create({
   row: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 14,
+    gap: 12,
+    paddingVertical: 11,
   },
   iconChip: {
-    width: 40,
-    height: 40,
+    width: 34,
+    height: 34,
     alignItems: 'center',
     justifyContent: 'center',
   },

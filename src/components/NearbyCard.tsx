@@ -4,6 +4,7 @@ import {
   Pressable,
   StyleProp,
   StyleSheet,
+  Text,
   View,
   ViewStyle,
 } from 'react-native';
@@ -15,7 +16,6 @@ import Animated, {
 } from 'react-native-reanimated';
 import { useTheme } from '../theme';
 import { Icon } from './Icon';
-import { Typography } from './Typography';
 
 export interface NearbyUser {
   id: string;
@@ -60,16 +60,19 @@ export function NearbyCard({
     transform: [{ scale: scale.value }],
   }));
 
+  const pressIn = () => {
+    scale.value = withSpring(0.97, { damping: 16, stiffness: 320 });
+  };
+  const pressOut = () => {
+    scale.value = withSpring(1, { damping: 14, stiffness: 260 });
+  };
+
   if (variant === 'rail') {
     return (
       <Pressable
         onPress={onPress}
-        onPressIn={() => {
-          scale.value = withSpring(0.96, { damping: 16, stiffness: 320 });
-        }}
-        onPressOut={() => {
-          scale.value = withSpring(1, { damping: 14, stiffness: 260 });
-        }}
+        onPressIn={pressIn}
+        onPressOut={pressOut}
         style={style}>
         <Animated.View style={[styles.rail, animated]}>
           <View
@@ -78,7 +81,7 @@ export function NearbyCard({
               {
                 borderColor: user.online
                   ? theme.colors.primary
-                  : theme.colors.border,
+                  : theme.colors.borderStrong,
               },
             ]}>
             {user.photo ? (
@@ -89,18 +92,31 @@ export function NearbyCard({
                 style={styles.fill}
               />
             )}
+            {user.online ? (
+              <View
+                style={[
+                  styles.railOnline,
+                  {
+                    backgroundColor: theme.colors.online,
+                    borderColor: theme.colors.background,
+                  },
+                ]}
+              />
+            ) : null}
           </View>
-          <Typography variant="caption" weight="600" numberOfLines={1} align="center">
+          <Text
+            style={[styles.railName, { color: theme.colors.text }]}
+            numberOfLines={1}>
             {user.name.split(' ')[0]}
-          </Typography>
+          </Text>
           <View
             style={[
-              styles.distBadge,
+              styles.railDist,
               { backgroundColor: theme.colors.surfaceAlt },
             ]}>
-            <Typography variant="overline" color="textMuted">
+            <Text style={[styles.railDistText, { color: theme.colors.textMuted }]}>
               {formatDistance(user.distanceKm)}
-            </Typography>
+            </Text>
           </View>
         </Animated.View>
       </Pressable>
@@ -110,20 +126,19 @@ export function NearbyCard({
   return (
     <Pressable
       onPress={onPress}
-      onPressIn={() => {
-        scale.value = withSpring(0.97, { damping: 16, stiffness: 320 });
-      }}
-      onPressOut={() => {
-        scale.value = withSpring(1, { damping: 14, stiffness: 260 });
-      }}
-      style={style}>
+      onPressIn={pressIn}
+      onPressOut={pressOut}
+      style={style}
+      accessibilityRole="button"
+      accessibilityLabel={`${user.name}, ${user.age}`}>
       <Animated.View
         style={[
           styles.gridCard,
           {
             backgroundColor: theme.colors.card,
-            ...theme.shadows.sm,
+            borderColor: theme.colors.border,
           },
+          theme.shadows.sm,
           animated,
         ]}>
         <View style={styles.photoWrap}>
@@ -137,62 +152,68 @@ export function NearbyCard({
               style={styles.fill}
             />
           )}
+
           <LinearGradient
-            colors={['transparent', 'rgba(0,0,0,0.55)']}
+            colors={['transparent', 'rgba(0,0,0,0.25)', 'rgba(0,0,0,0.72)']}
+            locations={[0.35, 0.65, 1]}
             style={styles.photoFade}
           />
 
-          <View
-            style={[
-              styles.badge,
-              { backgroundColor: 'rgba(0,0,0,0.45)' },
-            ]}>
-            <Icon name="map-pin" size={11} color="#fff" />
-            <Typography variant="overline" tint="#fff">
-              {formatDistance(user.distanceKm)}
-            </Typography>
+          <View style={styles.topRow}>
+            <View style={styles.distBadge}>
+              <Icon name="map-pin" size={10} color="#fff" />
+              <Text style={styles.distText}>{formatDistance(user.distanceKm)}</Text>
+            </View>
+            <View style={styles.topRight}>
+              {user.premium ? (
+                <View style={styles.crown}>
+                  <Icon name="crown" size={11} color="#3A2A00" filled />
+                </View>
+              ) : null}
+              {user.online ? (
+                <View
+                  style={[
+                    styles.online,
+                    {
+                      backgroundColor: theme.colors.online,
+                      borderColor: '#fff',
+                    },
+                  ]}
+                />
+              ) : null}
+            </View>
           </View>
 
-          {user.online && (
-            <View
-              style={[
-                styles.online,
-                {
-                  backgroundColor: theme.colors.online,
-                  borderColor: theme.colors.card,
-                },
-              ]}
-            />
-          )}
-
-          {user.premium && (
-            <View style={[styles.crown, { backgroundColor: '#F5D76E' }]}>
-              <Icon name="crown" size={11} color="#3A2A00" filled />
+          <View style={styles.bottomRow}>
+            <View style={styles.nameBlock}>
+              <Text style={styles.name} numberOfLines={1}>
+                {user.name}
+                <Text style={styles.age}>  {user.age}</Text>
+              </Text>
             </View>
-          )}
 
-          <Pressable
-            onPress={onAdd}
-            hitSlop={8}
-            style={[
-              styles.addFab,
-              { backgroundColor: theme.colors.card },
-            ]}>
-            <Icon
-              name={added ? 'user-check' : 'user-plus'}
-              size={16}
-              color={added ? theme.colors.success : theme.colors.primary}
-            />
-          </Pressable>
-        </View>
-
-        <View style={styles.meta}>
-          <Typography variant="bodyStrong" numberOfLines={1}>
-            {user.name}
-          </Typography>
-          <Typography variant="caption" color="textMuted">
-            {user.age} yaş
-          </Typography>
+            {onAdd ? (
+              <Pressable
+                onPress={onAdd}
+                hitSlop={8}
+                accessibilityRole="button"
+                accessibilityLabel={added ? 'Added' : 'Add'}
+                style={[
+                  styles.addFab,
+                  {
+                    backgroundColor: added
+                      ? theme.colors.success
+                      : 'rgba(255,255,255,0.95)',
+                  },
+                ]}>
+                <Icon
+                  name={added ? 'user-check' : 'user-plus'}
+                  size={15}
+                  color={added ? '#fff' : theme.colors.primary}
+                />
+              </Pressable>
+            ) : null}
+          </View>
         </View>
       </Animated.View>
     </Pressable>
@@ -205,76 +226,114 @@ const styles = StyleSheet.create({
     width: 68,
     height: 68,
     borderRadius: 34,
-    borderWidth: 2,
+    borderWidth: 2.5,
     overflow: 'hidden',
-    padding: 2,
+    position: 'relative',
   },
-  distBadge: {
+  railOnline: {
+    position: 'absolute',
+    right: 2,
+    bottom: 2,
+    width: 14,
+    height: 14,
+    borderRadius: 7,
+    borderWidth: 2.5,
+  },
+  railName: { fontSize: 12, fontWeight: '600', maxWidth: 72 },
+  railDist: {
     paddingHorizontal: 8,
     paddingVertical: 3,
     borderRadius: 999,
   },
+  railDistText: { fontSize: 10, fontWeight: '600' },
   gridCard: {
-    borderRadius: 20,
+    borderRadius: 18,
+    borderWidth: StyleSheet.hairlineWidth,
     overflow: 'hidden',
   },
   photoWrap: {
     width: '100%',
-    aspectRatio: 0.82,
+    aspectRatio: 0.72,
     position: 'relative',
   },
   fill: { width: '100%', height: '100%' },
   photoFade: {
     position: 'absolute',
+    top: 0,
     left: 0,
     right: 0,
     bottom: 0,
-    height: '45%',
   },
-  badge: {
+  topRow: {
     position: 'absolute',
     top: 10,
     left: 10,
+    right: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  topRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  distBadge: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
     paddingHorizontal: 8,
-    paddingVertical: 4,
+    paddingVertical: 5,
     borderRadius: 999,
+    backgroundColor: 'rgba(0,0,0,0.42)',
+  },
+  distText: {
+    color: '#fff',
+    fontSize: 10,
+    fontWeight: '700',
+    letterSpacing: 0.2,
   },
   online: {
-    position: 'absolute',
-    top: 12,
-    right: 12,
     width: 12,
     height: 12,
     borderRadius: 6,
     borderWidth: 2,
   },
   crown: {
-    position: 'absolute',
-    top: 10,
-    right: 10,
     width: 22,
     height: 22,
     borderRadius: 11,
     alignItems: 'center',
     justifyContent: 'center',
+    backgroundColor: '#F5D76E',
+  },
+  bottomRow: {
+    position: 'absolute',
+    left: 12,
+    right: 10,
+    bottom: 12,
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    gap: 8,
+  },
+  nameBlock: { flex: 1, gap: 2 },
+  name: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '700',
+    letterSpacing: -0.2,
+  },
+  age: {
+    color: 'rgba(255,255,255,0.88)',
+    fontSize: 15,
+    fontWeight: '600',
   },
   addFab: {
-    position: 'absolute',
-    right: 10,
-    bottom: 10,
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    width: 34,
+    height: 34,
+    borderRadius: 17,
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  meta: {
-    paddingHorizontal: 12,
-    paddingVertical: 12,
-    gap: 2,
   },
 });
 

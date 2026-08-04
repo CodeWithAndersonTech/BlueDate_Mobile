@@ -15,11 +15,11 @@ import {
   IconButton,
   IconName,
   NearbyCard,
+  TabScreenScrollView,
   Typography,
 } from '../../components';
 import { getUserProfile } from '../../api';
 import { useAuth } from '../../navigation/AuthContext';
-import { useTabBarClearance } from '../../navigation/CustomTabBar';
 import { HomeStackParamList } from '../../navigation/types';
 import { ThemeColors, useTheme } from '../../theme';
 import { recentActivity, suggestedUsers } from '../../utils';
@@ -55,7 +55,6 @@ const ACTIVITY_META: Record<
 export function HomeScreen({ navigation }: Props) {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
-  const tabClearance = useTabBarClearance(24);
   const { userId, accessToken } = useAuth();
   const [firstName, setFirstName] = useState('');
   const [fullName, setFullName] = useState('');
@@ -85,14 +84,10 @@ export function HomeScreen({ navigation }: Props) {
 
   return (
     <View style={[styles.flex, { backgroundColor: theme.colors.background }]}>
-      <ScrollView
-        showsVerticalScrollIndicator={false}
+      <TabScreenScrollView
         contentContainerStyle={[
           styles.content,
-          {
-            paddingTop: insets.top + 8,
-            paddingBottom: tabClearance,
-          },
+          { paddingTop: insets.top + 8 },
         ]}>
         {/* Header */}
         <View style={styles.header}>
@@ -254,7 +249,7 @@ export function HomeScreen({ navigation }: Props) {
             })}
           </View>
         </View>
-      </ScrollView>
+      </TabScreenScrollView>
     </View>
   );
 }

@@ -35,13 +35,19 @@ export interface PremiumPlan {
   perMonth?: string;
   highlight?: string;
   popular?: boolean;
+  /** Short tagline under the plan name. */
+  tagline?: string;
+  /** Feature ids included in this plan. */
+  perkIds: string[];
 }
 
 export interface PremiumPerk {
   id: string;
-  icon: 'zap' | 'heart' | 'eye' | 'shield' | 'star' | 'sparkles';
+  icon: 'zap' | 'heart' | 'eye' | 'eye-off' | 'shield' | 'star' | 'sparkles';
   title: string;
   description: string;
+  /** If true, only Premium+ includes this perk. */
+  plusOnly?: boolean;
 }
 
 export interface UserProfile {
@@ -109,18 +115,65 @@ export const sentRequests: FriendRequest[] = [
 ];
 
 export const premiumPlans: PremiumPlan[] = [
-  { id: 'p1', name: 'Aylık', price: '₺149', period: '/ay', highlight: 'Esnek' },
-  { id: 'p2', name: '3 Aylık', price: '₺349', period: '/3ay', perMonth: '₺116/ay', popular: true, highlight: '%22 indirim' },
-  { id: 'p3', name: 'Yıllık', price: '₺999', period: '/yıl', perMonth: '₺83/ay', highlight: '%44 indirim' },
+  {
+    id: 'standard',
+    name: 'Premium',
+    price: '₺149',
+    period: '/ay',
+    tagline: 'Standart',
+    highlight: 'Temel paket',
+    perkIds: ['visitors', 'treats', 'adfree', 'featured'],
+  },
+  {
+    id: 'plus',
+    name: 'Premium+',
+    price: '₺249',
+    period: '/ay',
+    perMonth: 'Tüm Standart özellikler +',
+    tagline: 'Plus',
+    popular: true,
+    highlight: 'Hayalet Modu',
+    perkIds: ['visitors', 'treats', 'adfree', 'featured', 'ghost'],
+  },
 ];
 
 export const premiumPerks: PremiumPerk[] = [
-  { id: 'pp1', icon: 'zap', title: 'Sınırsız Eşleşme', description: 'Günlük limit olmadan beğen ve eşleş.' },
-  { id: 'pp2', icon: 'eye', title: 'Seni Kimler Gördü', description: 'Profilini ziyaret edenleri gör.' },
-  { id: 'pp3', icon: 'star', title: 'Öne Çıkan Profil', description: 'Yakındakilerde üst sıralarda görün.' },
-  { id: 'pp4', icon: 'shield', title: 'Gizli Mod', description: 'İstediğinde profilini gizle, kontrol sende.' },
-  { id: 'pp5', icon: 'heart', title: 'Süper Beğeni', description: 'Her hafta 5 süper beğeni hakkı.' },
-  { id: 'pp6', icon: 'sparkles', title: 'Reklamsız Deneyim', description: 'Kesintisiz, akıcı bir kullanım.' },
+  {
+    id: 'visitors',
+    icon: 'eye',
+    title: 'Profilini ziyaret edenleri gör',
+    description:
+      'Profilini ziyaret eden kullanıcıları gör. Seninle ilgilenenleri fark edip doğru zamanda etkileşime geç.',
+  },
+  {
+    id: 'treats',
+    icon: 'sparkles',
+    title: 'Sınırsız ısmarlama',
+    description:
+      'Karşı tarafın favori yemek, tatlı, kahve ve içeceklerine sınırsız ısmarlama gönder. Ek ücret veya limit yok.',
+  },
+  {
+    id: 'adfree',
+    icon: 'zap',
+    title: 'Reklamsız deneyim',
+    description:
+      'Uygulama tamamen reklamsız çalışır; daha hızlı, kesintisiz ve akıcı bir deneyim.',
+  },
+  {
+    id: 'featured',
+    icon: 'star',
+    title: 'Öne çıkma',
+    description:
+      'Mesafe sınırı olmadan yakındakiler arasında daima en üstte görün.',
+  },
+  {
+    id: 'ghost',
+    icon: 'eye-off',
+    title: 'Hayalet Modu',
+    description:
+      'Çevrendekileri gör ve profillerini incele; ilk etkileşimi sen başlatana kadar tamamen görünmez kal.',
+    plusOnly: true,
+  },
 ];
 
 export interface ActivityItem {

@@ -6,7 +6,7 @@ import Animated, {
   useSharedValue,
   withTiming,
 } from 'react-native-reanimated';
-import { useTabBarClearance } from '../../navigation/CustomTabBar';
+import { useTabBarClearance } from '../../navigation/tabBarLayout';
 import { useTheme } from '../../theme';
 import {
   SkeletonBlock,

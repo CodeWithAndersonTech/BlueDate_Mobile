@@ -2,6 +2,7 @@ import type { MaterialTopTabBarProps } from '@react-navigation/material-top-tabs
 import React, { useEffect, useMemo } from 'react';
 import {
   Animated as RNAnimated,
+  Image,
   Pressable,
   StyleSheet,
   useWindowDimensions,
@@ -13,8 +14,18 @@ import Animated, {
   withSpring,
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { images } from '../assets';
 import { Icon, IconName } from '../components';
 import { useTheme } from '../theme';
+import { FLOATING_TAB_BAR_HEIGHT } from './tabBarLayout';
+
+// Layout hooks live in ./tabBarLayout (single source of truth for clearance
+// math); re-exported here so existing imports keep working.
+export {
+  FLOATING_TAB_BAR_HEIGHT,
+  useFloatingTabOffset,
+  useTabBarClearance,
+} from './tabBarLayout';
 
 const TAB_ICONS: Record<string, IconName> = {
   Home: 'home',
@@ -33,20 +44,11 @@ const TAB_A11Y_LABELS: Record<string, string> = {
 };
 
 const SPRING = { damping: 18, stiffness: 200, mass: 0.7 };
-const BAR_HEIGHT = 56;
+const BAR_HEIGHT = FLOATING_TAB_BAR_HEIGHT;
 const PILL_MARGIN_H = 20;
 const PILL_RADIUS = 34;
 const PILL_PADDING_H = 6;
 const INDICATOR_INSET = 5;
-
-/**
- * Bottom padding so scroll content clears the floating pill tab bar.
- * Only for tab-root screens — nested stack screens hide the tab bar.
- */
-export function useTabBarClearance(extra = 16) {
-  const insets = useSafeAreaInsets();
-  return BAR_HEIGHT + Math.max(insets.bottom, 12) + extra;
-}
 
 /** Root screens of each tab stack — tab bar stays visible only on these. */
 const TAB_ROOT_SCREENS = new Set([
@@ -194,6 +196,7 @@ export function CustomTabBar({
                   key={route.key}
                   focused={focused}
                   icon={TAB_ICONS[route.name] ?? 'home'}
+                  useAppLogo={route.name === 'Nearby'}
                   accessibilityLabel={
                     TAB_A11Y_LABELS[route.name] ?? route.name
                   }
@@ -211,11 +214,18 @@ export function CustomTabBar({
 interface TabItemProps {
   focused: boolean;
   icon: IconName;
+  useAppLogo?: boolean;
   accessibilityLabel: string;
   onPress: () => void;
 }
 
-function TabItem({ focused, icon, accessibilityLabel, onPress }: TabItemProps) {
+function TabItem({
+  focused,
+  icon,
+  useAppLogo = false,
+  accessibilityLabel,
+  onPress,
+}: TabItemProps) {
   const theme = useTheme();
   const progress = useSharedValue(focused ? 1 : 0);
   const press = useSharedValue(1);
@@ -225,8 +235,8 @@ function TabItem({ focused, icon, accessibilityLabel, onPress }: TabItemProps) {
   }, [focused, progress]);
 
   const iconStyle = useAnimatedStyle(() => ({
-    transform: [{ scale: press.value * (1 + 0.1 * progress.value) }],
-    opacity: 0.5 + 0.5 * progress.value,
+    transform: [{ scale: press.value * (1 + 0.12 * progress.value) }],
+    opacity: useAppLogo ? 0.75 + 0.25 * progress.value : 0.5 + 0.5 * progress.value,
   }));
 
   const iconColor = focused ? theme.colors.text : theme.colors.textMuted;
@@ -241,7 +251,22 @@ function TabItem({ focused, icon, accessibilityLabel, onPress }: TabItemProps) {
       accessibilityState={{ selected: focused }}
       style={styles.item}>
       <Animated.View style={iconStyle}>
-        <Icon name={icon} size={26} color={iconColor} filled={focused} />
+        {useAppLogo ? (
+          <Image
+            source={images.appLogo}
+            style={[
+              styles.appLogo,
+              {
+                opacity: focused ? 1 : 0.72,
+                borderColor: focused
+                  ? theme.colors.primary
+                  : 'transparent',
+              },
+            ]}
+          />
+        ) : (
+          <Icon name={icon} size={26} color={iconColor} filled={focused} />
+        )}
       </Animated.View>
     </Pressable>
   );
@@ -286,6 +311,12 @@ const styles = StyleSheet.create({
     height: '100%',
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  appLogo: {
+    width: 30,
+    height: 30,
+    borderRadius: 9,
+    borderWidth: 1.5,
   },
 });
 

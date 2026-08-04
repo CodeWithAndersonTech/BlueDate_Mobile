@@ -22,7 +22,7 @@ const DEV_PORT = 5135;
  * Mac'in Wi‑Fi IP'si — fiziksel telefon/tablet için gerekli.
  * Terminal: ipconfig getifaddr en0
  */
-const DEV_MAC_HOST = '10.40.7.54';
+const DEV_MAC_HOST = '172.16.4.117';
 
 let resolvedDevUrl: string | null = null;
 

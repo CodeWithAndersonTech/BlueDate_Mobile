@@ -1,20 +1,30 @@
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import React, { useState } from 'react';
-import { Alert, Pressable, ScrollView, StyleSheet, View } from 'react-native';
-import LinearGradient from 'react-native-linear-gradient';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
-  Header,
+  Alert,
+  Pressable,
+  ScrollView,
+  StatusBar,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
+import LinearGradient from 'react-native-linear-gradient';
+import {
+  SafeAreaView,
+  useSafeAreaInsets,
+} from 'react-native-safe-area-context';
+import {
   Icon,
+  FALLBACK_LANGUAGES,
   ListRow,
-  Screen,
   SegmentedControl,
   SettingsGroup,
   SettingsSep,
   Switch,
-  Typography,
 } from '../../components';
+import { useLocale } from '../../i18n';
 import { useAuth } from '../../navigation/AuthContext';
 import { useLockTabSwipe } from '../../navigation/useLockTabSwipe';
 import { ProfileStackParamList } from '../../navigation/types';
@@ -34,6 +44,7 @@ export function SettingsScreen() {
     useNavigation<NativeStackNavigationProp<ProfileStackParamList>>();
   const theme = useTheme();
   const insets = useSafeAreaInsets();
+  const { t, languageCode, languages, setLanguage } = useLocale();
   const { preference, setPreference, accentKey, setAccent } =
     useThemeController();
   const { signOut } = useAuth();
@@ -48,16 +59,16 @@ export function SettingsScreen() {
     setNotif(prev => ({ ...prev, [key]: value }));
 
   const modeItems = [
-    { key: 'light', label: 'Açık' },
-    { key: 'dark', label: 'Koyu' },
-    { key: 'system', label: 'Sistem' },
+    { key: 'light', label: t('settings.theme_light') },
+    { key: 'dark', label: t('settings.theme_dark') },
+    { key: 'system', label: t('settings.theme_system') },
   ];
 
   const handleSignOut = () => {
-    Alert.alert('Çıkış Yap', 'Hesabından çıkmak istediğine emin misin?', [
-      { text: 'Vazgeç', style: 'cancel' },
+    Alert.alert(t('settings.sign_out'), t('settings.sign_out_confirm'), [
+      { text: t('settings.cancel'), style: 'cancel' },
       {
-        text: 'Çıkış Yap',
+        text: t('settings.sign_out'),
         style: 'destructive',
         onPress: () => {
           void signOut();
@@ -66,19 +77,56 @@ export function SettingsScreen() {
     ]);
   };
 
+  const openPremium = () => {
+    navigation.getParent()?.navigate('Premium' as never);
+  };
+
+  const languageOptions = languages.length ? languages : FALLBACK_LANGUAGES;
+  const activeLanguage =
+    languageOptions.find(
+      lang => lang.Code.toLowerCase() === languageCode.toLowerCase(),
+    ) ?? languageOptions[0];
+
+  const cycleLanguage = () => {
+    const index = languageOptions.findIndex(
+      lang => lang.Code.toLowerCase() === activeLanguage.Code.toLowerCase(),
+    );
+    const next = languageOptions[(index + 1) % languageOptions.length];
+    if (next) {
+      void setLanguage(next.Code);
+    }
+  };
+
   return (
-    <Screen edges={['top']}>
-      <Header onBack={() => navigation.goBack()} title="Ayarlar" />
+    <SafeAreaView
+      edges={['top']}
+      style={[styles.root, { backgroundColor: theme.colors.background }]}>
+      <StatusBar
+        barStyle={theme.isDark ? 'light-content' : 'dark-content'}
+        backgroundColor="transparent"
+        translucent
+      />
+
+      <View style={styles.header}>
+        <Text
+          style={[styles.headerTitle, { color: theme.colors.text }]}
+          numberOfLines={1}>
+          {t('settings.title')}
+        </Text>
+      </View>
+
       <ScrollView
         showsVerticalScrollIndicator={false}
         contentContainerStyle={[
           styles.content,
-          { paddingBottom: Math.max(insets.bottom, 12) + 32 },
+          { paddingBottom: Math.max(insets.bottom, 12) + 28 },
         ]}>
-        <SectionLabel label="Görünüm" />
+        <SectionLabel label={t('settings.appearance')} />
         <SettingsGroup>
           <View style={styles.block}>
-            <Typography variant="bodyStrong">Tema</Typography>
+            <Text style={[styles.blockTitle, { color: theme.colors.text }]}>
+              {t('settings.theme')}
+            </Text>
             <SegmentedControl
               items={modeItems}
               value={preference}
@@ -88,10 +136,13 @@ export function SettingsScreen() {
           <SettingsSep />
           <View style={styles.block}>
             <View style={styles.rowBetween}>
-              <Typography variant="bodyStrong">Renk</Typography>
-              <Typography variant="caption" color="textMuted">
+              <Text style={[styles.blockTitle, { color: theme.colors.text }]}>
+                {t('settings.color')}
+              </Text>
+              <Text
+                style={[styles.blockMeta, { color: theme.colors.textMuted }]}>
                 {accents[accentKey].label}
-              </Typography>
+              </Text>
             </View>
             <View style={styles.swatches}>
               {accentOrder.map(key => (
@@ -106,45 +157,58 @@ export function SettingsScreen() {
           </View>
         </SettingsGroup>
 
-        <SectionLabel label="Keşfet" />
+        <SectionLabel label={t('settings.discover')} />
         <SettingsGroup>
           <ListRow
             icon="sliders"
-            title="Filtreleme"
-            subtitle="Yaş, görünürlük"
+            title={t('settings.filter')}
+            subtitle={t('settings.filter_desc')}
             onPress={() => navigation.navigate('Filter')}
+            style={styles.rowPad}
           />
         </SettingsGroup>
 
-        <SectionLabel label="Hesap" />
+        <SectionLabel label={t('settings.account')} />
         <SettingsGroup>
-          <ListRow icon="user" title="Hesap bilgileri" onPress={() => {}} />
+          <ListRow
+            icon="user"
+            title={t('settings.account_info')}
+            onPress={() => navigation.navigate('EditProfile')}
+            style={styles.rowPad}
+          />
           <SettingsSep />
-          <ListRow icon="lock" title="Şifre ve güvenlik" onPress={() => {}} />
+          <ListRow
+            icon="lock"
+            title={t('settings.password')}
+            onPress={() => {}}
+            style={styles.rowPad}
+          />
           <SettingsSep />
           <ListRow
             icon="crown"
             iconColor={theme.colors.warning}
-            title="Premium"
-            value="Aktif"
-            onPress={() => {}}
+            title={t('settings.premium')}
+            value={t('settings.premium_active')}
+            onPress={openPremium}
+            style={styles.rowPad}
           />
         </SettingsGroup>
 
-        <SectionLabel label="Bildirimler" />
+        <SectionLabel label={t('settings.notifications')} />
         <SettingsGroup>
           <ListRow
             icon="bell"
-            title="Anlık bildirimler"
+            title={t('settings.notif_push')}
             showChevron={false}
             right={
               <Switch value={notif.push} onValueChange={setNotifKey('push')} />
             }
+            style={styles.rowPad}
           />
           <SettingsSep />
           <ListRow
             icon="sparkles"
-            title="Eşleşmeler"
+            title={t('settings.notif_matches')}
             showChevron={false}
             right={
               <Switch
@@ -152,11 +216,12 @@ export function SettingsScreen() {
                 onValueChange={setNotifKey('matches')}
               />
             }
+            style={styles.rowPad}
           />
           <SettingsSep />
           <ListRow
             icon="message"
-            title="Mesajlar"
+            title={t('settings.notif_messages')}
             showChevron={false}
             right={
               <Switch
@@ -164,11 +229,12 @@ export function SettingsScreen() {
                 onValueChange={setNotifKey('messages')}
               />
             }
+            style={styles.rowPad}
           />
           <SettingsSep />
           <ListRow
             icon="zap"
-            title="Kampanyalar"
+            title={t('settings.notif_marketing')}
             showChevron={false}
             right={
               <Switch
@@ -176,20 +242,32 @@ export function SettingsScreen() {
                 onValueChange={setNotifKey('marketing')}
               />
             }
+            style={styles.rowPad}
           />
         </SettingsGroup>
 
-        <SectionLabel label="Gizlilik & Destek" />
+        <SectionLabel label={t('settings.privacy_support')} />
         <SettingsGroup>
-          <ListRow icon="shield" title="Gizlilik" onPress={() => {}} />
+          <ListRow
+            icon="shield"
+            title={t('settings.privacy')}
+            onPress={() => {}}
+            style={styles.rowPad}
+          />
           <SettingsSep />
-          <ListRow icon="help" title="Yardım" onPress={() => {}} />
+          <ListRow
+            icon="help"
+            title={t('settings.help')}
+            onPress={() => {}}
+            style={styles.rowPad}
+          />
           <SettingsSep />
           <ListRow
             icon="globe"
-            title="Dil"
-            value="Türkçe"
-            onPress={() => {}}
+            title={t('settings.language')}
+            value={activeLanguage?.Name}
+            onPress={cycleLanguage}
+            style={styles.rowPad}
           />
         </SettingsGroup>
 
@@ -198,30 +276,30 @@ export function SettingsScreen() {
             <ListRow
               icon="logout"
               iconColor={theme.colors.danger}
-              title="Çıkış Yap"
+              title={t('settings.sign_out')}
               destructive
               showChevron={false}
               onPress={handleSignOut}
+              style={styles.rowPad}
             />
           </SettingsGroup>
         </View>
 
-        <Typography variant="caption" color="textMuted" align="center">
-          Meerk · v0.1.0
-        </Typography>
+        <Text
+          style={[styles.version, { color: theme.colors.textMuted }]}>
+          {t('settings.version')}
+        </Text>
       </ScrollView>
-    </Screen>
+    </SafeAreaView>
   );
 }
 
 function SectionLabel({ label }: { label: string }) {
+  const theme = useTheme();
   return (
-    <Typography
-      variant="overline"
-      color="textMuted"
-      style={styles.sectionLabel}>
+    <Text style={[styles.sectionLabel, { color: theme.colors.textMuted }]}>
       {label}
-    </Typography>
+    </Text>
   );
 }
 
@@ -237,56 +315,90 @@ function AccentSwatch({
   const theme = useTheme();
   const accent = accents[accentKey];
   return (
-    <Pressable style={styles.swatchItem} onPress={onPress}>
+    <Pressable
+      style={styles.swatchItem}
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityState={{ selected }}
+      accessibilityLabel={accent.label}>
       <LinearGradient
         colors={accent.gradient}
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 1 }}
         style={[
           styles.swatch,
-          { borderColor: selected ? theme.colors.text : 'transparent' },
+          {
+            borderColor: selected ? theme.colors.text : 'transparent',
+          },
         ]}>
-        {selected && (
+        {selected ? (
           <Icon
             name="check"
             size={18}
             color={accent.onPrimary}
             strokeWidth={3}
           />
-        )}
+        ) : null}
       </LinearGradient>
     </Pressable>
   );
 }
 
 const styles = StyleSheet.create({
+  root: { flex: 1 },
+  header: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 20,
+    paddingTop: 0,
+    paddingBottom: 4,
+    minHeight: 36,
+  },
+  headerTitle: {
+    textAlign: 'center',
+    fontSize: 17,
+    fontWeight: '600',
+  },
   content: {
     paddingHorizontal: 20,
     gap: 8,
-    paddingTop: 4,
+    paddingTop: 8,
   },
   sectionLabel: {
-    marginTop: 18,
+    marginTop: 16,
     marginBottom: 8,
     marginLeft: 4,
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 1.1,
+    textTransform: 'uppercase',
   },
-  block: { padding: 16, gap: 12 },
+  block: { paddingHorizontal: 16, paddingVertical: 14, gap: 12 },
+  blockTitle: { fontSize: 15, fontWeight: '600' },
+  blockMeta: { fontSize: 13, fontWeight: '500' },
   rowBetween: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
   },
-  swatches: { flexDirection: 'row', gap: 12 },
+  rowPad: { paddingHorizontal: 16 },
+  swatches: { flexDirection: 'row', gap: 10 },
   swatchItem: { flex: 1, alignItems: 'center' },
   swatch: {
     width: '100%',
-    height: 48,
-    borderRadius: 14,
+    height: 44,
+    borderRadius: 12,
     borderWidth: 2,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  logoutWrap: { marginTop: 24, marginBottom: 8 },
+  logoutWrap: { marginTop: 20, marginBottom: 4 },
+  version: {
+    marginTop: 8,
+    textAlign: 'center',
+    fontSize: 12,
+    fontWeight: '500',
+  },
 });
 
 export default SettingsScreen;

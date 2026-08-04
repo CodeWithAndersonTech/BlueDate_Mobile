@@ -4,6 +4,7 @@ export * from './Loading';
 export * from './skeleton';
 export * from './Typography';
 export * from './Screen';
+export * from './TabScreenScrollView';
 export * from './Button';
 export * from './Input';
 export * from './auth/AuthInputs';

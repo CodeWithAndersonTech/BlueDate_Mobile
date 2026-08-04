@@ -20,6 +20,7 @@ function renderTabBar(props: MaterialTopTabBarProps) {
 export function MainTabs() {
   return (
     <Tab.Navigator
+      initialRouteName="Nearby"
       tabBarPosition="bottom"
       tabBar={renderTabBar}
       screenOptions={{

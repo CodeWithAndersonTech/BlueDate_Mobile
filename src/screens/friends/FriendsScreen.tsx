@@ -1,6 +1,6 @@
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import React, { useState } from 'react';
-import { ScrollView, StyleSheet, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 import {
   Button,
   EmptyState,
@@ -8,10 +8,10 @@ import {
   IconButton,
   Screen,
   SegmentedControl,
+  TabScreenScrollView,
   UserListItem,
 } from '../../components';
 import { FriendsStackParamList } from '../../navigation/types';
-import { useTabBarClearance } from '../../navigation/CustomTabBar';
 import { friends, incomingRequests, sentRequests } from '../../utils';
 
 type Props = NativeStackScreenProps<FriendsStackParamList, 'FriendsMain'>;
@@ -19,7 +19,6 @@ type Props = NativeStackScreenProps<FriendsStackParamList, 'FriendsMain'>;
 type Tab = 'friends' | 'incoming' | 'sent';
 
 export function FriendsScreen({ navigation }: Props) {
-  const tabClearance = useTabBarClearance(24);
   const [tab, setTab] = useState<Tab>('friends');
 
   const segments = [
@@ -45,9 +44,7 @@ export function FriendsScreen({ navigation }: Props) {
         />
       </View>
 
-      <ScrollView
-        showsVerticalScrollIndicator={false}
-        contentContainerStyle={[styles.content, { paddingBottom: tabClearance }]}>
+      <TabScreenScrollView contentContainerStyle={styles.content}>
         {tab === 'friends' &&
           (friends.length === 0 ? (
             <EmptyState
@@ -130,7 +127,7 @@ export function FriendsScreen({ navigation }: Props) {
               />
             ))
           ))}
-      </ScrollView>
+      </TabScreenScrollView>
     </Screen>
   );
 }

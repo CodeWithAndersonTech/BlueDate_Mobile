@@ -26,9 +26,9 @@ import {
   InterestTypeItem,
   UserProfileResponse,
 } from '../../api';
+import { TabScreenScrollView } from '../../components';
 import { useLocale } from '../../i18n';
 import { useAuth } from '../../navigation/AuthContext';
-import { useTabBarClearance } from '../../navigation/CustomTabBar';
 import { ProfileStackParamList } from '../../navigation/types';
 import { useTheme } from '../../theme';
 import { ProfileSkeleton } from './ProfileSkeleton';
@@ -71,8 +71,6 @@ function interestEmoji(type: InterestTypeItem): string {
 
 export function ProfileScreen({ navigation }: Props) {
   const theme = useTheme();
-  // Floating pill tab bar + one interest-tile row of breathing room.
-  const bottomPad = useTabBarClearance(TILE_HEIGHT);
   const { t } = useLocale();
   const { userId, accessToken } = useAuth();
 
@@ -212,9 +210,9 @@ export function ProfileScreen({ navigation }: Props) {
 
   return shell(
     <Animated.View style={[styles.flex, contentFadeStyle]}>
-      <ScrollView
-        showsVerticalScrollIndicator={false}
-        contentContainerStyle={{ paddingBottom: bottomPad }}
+      <TabScreenScrollView
+        // One interest-tile row of breathing room under the last tile.
+        bottomSpacing={TILE_HEIGHT}
         onScrollBeginDrag={closeVerifyTip}
         scrollEventThrottle={16}
         keyboardShouldPersistTaps="handled"
@@ -683,7 +681,7 @@ export function ProfileScreen({ navigation }: Props) {
             )}
           </View>
         </View>
-      </ScrollView>
+      </TabScreenScrollView>
     </Animated.View>,
   );
 }
@@ -817,7 +815,11 @@ const styles = StyleSheet.create({
   notVerifiedIcon: { fontSize: 12, fontWeight: '600' },
   notVerifiedLabel: { fontSize: 11, fontWeight: '600' },
   verifyTipDismiss: {
-    ...StyleSheet.absoluteFillObject,
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
     zIndex: 1,
   },
   verifyTipCaret: {

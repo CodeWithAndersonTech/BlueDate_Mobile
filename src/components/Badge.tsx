@@ -48,7 +48,7 @@ export function Badge({ label, tone = 'neutral', size = 'sm', icon, style }: Bad
           colors={theme.gradients.premium}
           start={{ x: 0, y: 0 }}
           end={{ x: 1, y: 0 }}
-          style={StyleSheet.absoluteFillObject}
+          style={StyleSheet.absoluteFill}
         />
         <Icon name={icon ?? 'crown'} size={iconSize} color="#3A2A00" filled />
         <Typography variant="overline" tint="#3A2A00" style={styles.text}>
