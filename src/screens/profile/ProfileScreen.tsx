@@ -523,7 +523,9 @@ export function ProfileScreen({ navigation }: Props) {
           </Text>
           {hasBio ? (
             <Pressable
-              onPress={() => navigation.navigate('EditProfile')}
+              onPress={() =>
+                navigation.navigate('EditProfile', { focus: 'bio' })
+              }
               style={[
                 styles.bioField,
                 {
@@ -537,7 +539,9 @@ export function ProfileScreen({ navigation }: Props) {
             </Pressable>
           ) : (
             <Pressable
-              onPress={() => navigation.navigate('EditProfile')}
+              onPress={() =>
+                navigation.navigate('EditProfile', { focus: 'bio' })
+              }
               style={[
                 styles.bioField,
                 styles.bioFieldEmpty,
@@ -585,7 +589,12 @@ export function ProfileScreen({ navigation }: Props) {
                   return (
                     <Pressable
                       key={type.Id}
-                      onPress={() => navigation.navigate('EditProfile')}
+                      onPress={() =>
+                        navigation.navigate('EditProfile', {
+                          focus: 'interests',
+                          interestTypeId: type.Id,
+                        })
+                      }
                       accessibilityRole="button"
                       accessibilityLabel={`${type.Name}: ${
                         selected ? value : t('edit.add_interest')
@@ -674,7 +683,15 @@ export function ProfileScreen({ navigation }: Props) {
                 {interests.map(item => (
                   <Pressable
                     key={item.Id}
-                    onPress={() => navigation.navigate('EditProfile')}
+                    onPress={() =>
+                      navigation.navigate('EditProfile', {
+                        focus: 'interests',
+                        interestTypeId:
+                          item.InterestTypeId != null
+                            ? Number(item.InterestTypeId)
+                            : undefined,
+                      })
+                    }
                     style={styles.tileWrap}>
                     <View
                       style={[
@@ -729,7 +746,9 @@ export function ProfileScreen({ navigation }: Props) {
               </View>
             ) : (
               <Pressable
-                onPress={() => navigation.navigate('EditProfile')}
+                onPress={() =>
+                  navigation.navigate('EditProfile', { focus: 'interests' })
+                }
                 style={[
                   styles.promptCard,
                   {

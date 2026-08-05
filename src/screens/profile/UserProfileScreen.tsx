@@ -20,6 +20,7 @@ import {
   getFriendshipStatus,
   getLikeCount,
   getLikeStatus,
+  getOrCreateDirectConversation,
   getUserProfile,
   likeUser,
   resolveMediaUrl,
@@ -30,6 +31,7 @@ import {
 } from '../../api';
 import { useLocale } from '../../i18n';
 import { useAuth } from '../../navigation/AuthContext';
+import { useChat } from '../../navigation/ChatContext';
 import { useLockTabSwipe } from '../../navigation/useLockTabSwipe';
 import {
   loadProfilePhotos,
@@ -78,6 +80,7 @@ function mapInterest(item: UserProfileInterest) {
 export function UserProfileScreen({ navigation, route }: Props) {
   useLockTabSwipe();
   const theme = useTheme();
+  const { refreshInbox } = useChat();
   const { t } = useLocale();
   const insets = useSafeAreaInsets();
   const { userId: meId, accessToken } = useAuth();
@@ -207,6 +210,42 @@ export function UserProfileScreen({ navigation, route }: Props) {
     } catch (error) {
       Alert.alert(
         t('user_profile.like'),
+        error instanceof Error ? error.message : t('user_profile.action_error'),
+      );
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const onMessagePress = async () => {
+    if (!meId || busy || meId === targetId) return;
+    if (relation !== FriendshipRelation.Friends) {
+      Alert.alert(
+        t('user_profile.message'),
+        t('user_profile.message_friends_only'),
+      );
+      return;
+    }
+
+    setBusy(true);
+    try {
+      const res = await getOrCreateDirectConversation(
+        meId,
+        targetId,
+        accessToken,
+      );
+      if (!res.conversationId) {
+        throw new Error(t('user_profile.action_error'));
+      }
+      await refreshInbox();
+      const params = { conversationId: String(res.conversationId) };
+      // Bubble to AppStack overlay above tabs when available.
+      const root = navigation.getParent() ?? navigation;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (root as any).navigate('ChatThread', params);
+    } catch (error) {
+      Alert.alert(
+        t('user_profile.message'),
         error instanceof Error ? error.message : t('user_profile.action_error'),
       );
     } finally {
@@ -531,13 +570,15 @@ export function UserProfileScreen({ navigation, route }: Props) {
             },
           ]}>
           <Pressable
-            onPress={() => {}}
+            onPress={onMessagePress}
+            disabled={busy}
             style={[
               styles.actionBtn,
               styles.actionBtnSecondary,
               {
                 backgroundColor: theme.colors.surfaceAlt,
                 borderColor: theme.colors.border,
+                opacity: busy ? 0.7 : 1,
               },
             ]}>
             <Text style={[styles.actionBtnLabel, { color: theme.colors.text }]}>

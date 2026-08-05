@@ -16,6 +16,7 @@ import {
   useSafeAreaInsets,
 } from 'react-native-safe-area-context';
 import {
+  CountryFlag,
   Icon,
   FALLBACK_LANGUAGES,
   ListRow,
@@ -24,6 +25,7 @@ import {
   SettingsSep,
   Switch,
 } from '../../components';
+import { usePremium } from '../../hooks/usePremium';
 import { useLocale } from '../../i18n';
 import { useAuth } from '../../navigation/AuthContext';
 import { useLockTabSwipe } from '../../navigation/useLockTabSwipe';
@@ -48,6 +50,7 @@ export function SettingsScreen() {
   const { preference, setPreference, accentKey, setAccent } =
     useThemeController();
   const { signOut } = useAuth();
+  const { isPremium } = usePremium();
 
   const [notif, setNotif] = useState({
     push: true,
@@ -82,20 +85,6 @@ export function SettingsScreen() {
   };
 
   const languageOptions = languages.length ? languages : FALLBACK_LANGUAGES;
-  const activeLanguage =
-    languageOptions.find(
-      lang => lang.Code.toLowerCase() === languageCode.toLowerCase(),
-    ) ?? languageOptions[0];
-
-  const cycleLanguage = () => {
-    const index = languageOptions.findIndex(
-      lang => lang.Code.toLowerCase() === activeLanguage.Code.toLowerCase(),
-    );
-    const next = languageOptions[(index + 1) % languageOptions.length];
-    if (next) {
-      void setLanguage(next.Code);
-    }
-  };
 
   return (
     <SafeAreaView
@@ -119,7 +108,7 @@ export function SettingsScreen() {
         showsVerticalScrollIndicator={false}
         contentContainerStyle={[
           styles.content,
-          { paddingBottom: Math.max(insets.bottom, 12) + 28 },
+          { paddingBottom: Math.max(insets.bottom, 16) + 56 },
         ]}>
         <SectionLabel label={t('settings.appearance')} />
         <SettingsGroup>
@@ -171,16 +160,9 @@ export function SettingsScreen() {
         <SectionLabel label={t('settings.account')} />
         <SettingsGroup>
           <ListRow
-            icon="user"
-            title={t('settings.account_info')}
-            onPress={() => navigation.navigate('EditProfile')}
-            style={styles.rowPad}
-          />
-          <SettingsSep />
-          <ListRow
             icon="lock"
             title={t('settings.password')}
-            onPress={() => {}}
+            onPress={() => navigation.navigate('ChangePassword')}
             style={styles.rowPad}
           />
           <SettingsSep />
@@ -188,7 +170,11 @@ export function SettingsScreen() {
             icon="crown"
             iconColor={theme.colors.warning}
             title={t('settings.premium')}
-            value={t('settings.premium_active')}
+            value={
+              isPremium
+                ? t('settings.premium_active')
+                : t('settings.premium_inactive')
+            }
             onPress={openPremium}
             style={styles.rowPad}
           />
@@ -251,24 +237,80 @@ export function SettingsScreen() {
           <ListRow
             icon="shield"
             title={t('settings.privacy')}
-            onPress={() => {}}
+            subtitle={t('settings.privacy_desc')}
+            onPress={() => navigation.navigate('Privacy')}
             style={styles.rowPad}
           />
           <SettingsSep />
           <ListRow
             icon="help"
             title={t('settings.help')}
-            onPress={() => {}}
+            subtitle={t('settings.help_desc')}
+            onPress={() => navigation.navigate('Help')}
             style={styles.rowPad}
           />
           <SettingsSep />
-          <ListRow
-            icon="globe"
-            title={t('settings.language')}
-            value={activeLanguage?.Name}
-            onPress={cycleLanguage}
-            style={styles.rowPad}
-          />
+          <View style={styles.block}>
+            <View style={styles.rowBetween}>
+              <Text style={[styles.blockTitle, { color: theme.colors.text }]}>
+                {t('settings.language')}
+              </Text>
+              <Text
+                style={[styles.blockMeta, { color: theme.colors.textMuted }]}>
+                {t('settings.language_hint')}
+              </Text>
+            </View>
+            <View style={styles.langRow}>
+              {languageOptions.map(lang => {
+                const selected =
+                  lang.Code.toLowerCase() === languageCode.toLowerCase();
+                return (
+                  <Pressable
+                    key={lang.Code}
+                    onPress={() => {
+                      void setLanguage(lang.Code);
+                    }}
+                    accessibilityRole="button"
+                    accessibilityState={{ selected }}
+                    accessibilityLabel={lang.Name}
+                    style={[
+                      styles.langChip,
+                      {
+                        backgroundColor: selected
+                          ? theme.colors.primarySoft
+                          : theme.colors.surfaceAlt,
+                        borderColor: selected
+                          ? theme.colors.primary
+                          : theme.colors.border,
+                      },
+                    ]}>
+                    <CountryFlag code={lang.Code} size={28} />
+                    <Text
+                      style={[
+                        styles.langName,
+                        {
+                          color: selected
+                            ? theme.colors.primary
+                            : theme.colors.text,
+                        },
+                      ]}>
+                      {lang.Name}
+                    </Text>
+                    {selected ? (
+                      <Icon
+                        name="check"
+                        size={16}
+                        color={theme.colors.primary}
+                        strokeWidth={2.5}
+                      />
+                    ) : (
+                      <View style={styles.langCheckSpacer} />
+                    )}
+                  </Pressable>
+                );
+              })}
+            </View>
+          </View>
         </SettingsGroup>
 
         <View style={styles.logoutWrap}>
@@ -284,11 +326,6 @@ export function SettingsScreen() {
             />
           </SettingsGroup>
         </View>
-
-        <Text
-          style={[styles.version, { color: theme.colors.textMuted }]}>
-          {t('settings.version')}
-        </Text>
       </ScrollView>
     </SafeAreaView>
   );
@@ -392,13 +429,19 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  logoutWrap: { marginTop: 20, marginBottom: 4 },
-  version: {
-    marginTop: 8,
-    textAlign: 'center',
-    fontSize: 12,
-    fontWeight: '500',
+  logoutWrap: { marginTop: 20, marginBottom: 12 },
+  langRow: { gap: 10 },
+  langChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    borderRadius: 14,
+    borderWidth: 1.5,
   },
+  langName: { flex: 1, fontSize: 15, fontWeight: '600' },
+  langCheckSpacer: { width: 16, height: 16 },
 });
 
 export default SettingsScreen;

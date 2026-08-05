@@ -7,6 +7,7 @@ export * from './Screen';
 export * from './TabScreenScrollView';
 export * from './Button';
 export * from './Input';
+export * from './AgePicker';
 export * from './auth/AuthInputs';
 export * from './Card';
 export * from './Avatar';

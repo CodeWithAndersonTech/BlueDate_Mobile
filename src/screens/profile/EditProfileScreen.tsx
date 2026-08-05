@@ -85,13 +85,15 @@ function interestEmoji(type: InterestTypeItem): string {
   return '✨';
 }
 
-export function EditProfileScreen({ navigation }: Props) {
+export function EditProfileScreen({ navigation, route }: Props) {
   useLockTabSwipe();
 
   const theme = useTheme();
   const insets = useSafeAreaInsets();
   const { userId, accessToken } = useAuth();
   const { t } = useLocale();
+  const focusTarget = route.params?.focus;
+  const focusInterestTypeId = route.params?.interestTypeId;
 
   const [loading, setLoading] = useState(true);
   const [loadFailed, setLoadFailed] = useState(false);
@@ -113,8 +115,15 @@ export function EditProfileScreen({ navigation }: Props) {
   const [interestIds, setInterestIds] = useState<Record<number, number>>({});
   const [sheetType, setSheetType] = useState<InterestTypeItem | null>(null);
   const [sheetValue, setSheetValue] = useState('');
+  const [bioFocused, setBioFocused] = useState(false);
+  const [interestsHighlighted, setInterestsHighlighted] = useState(false);
   const contentOpacity = useSharedValue(0);
   const hasLoadedRef = useRef(false);
+  const scrollRef = useRef<ScrollView>(null);
+  const bioInputRef = useRef<TextInput>(null);
+  const bioOffsetY = useRef(0);
+  const interestsOffsetY = useRef(0);
+  const focusAppliedKey = useRef<string | null>(null);
 
   const savedTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(
@@ -235,6 +244,11 @@ export function EditProfileScreen({ navigation }: Props) {
   useFocusEffect(
     useCallback(() => {
       load();
+      return () => {
+        focusAppliedKey.current = null;
+        setBioFocused(false);
+        setInterestsHighlighted(false);
+      };
     }, [load]),
   );
 
@@ -253,10 +267,65 @@ export function EditProfileScreen({ navigation }: Props) {
     opacity: contentOpacity.value,
   }));
 
-  const openInterestSheet = (type: InterestTypeItem) => {
-    setSheetType(type);
-    setSheetValue(answers[type.Id] ?? '');
-  };
+  const openInterestSheet = useCallback(
+    (type: InterestTypeItem) => {
+      setSheetType(type);
+      setSheetValue(answers[type.Id] ?? '');
+    },
+    [answers],
+  );
+
+  useEffect(() => {
+    if (loading || loadFailed || !focusTarget) {
+      return;
+    }
+
+    const key = `${focusTarget}:${focusInterestTypeId ?? ''}`;
+    if (focusAppliedKey.current === key) {
+      return;
+    }
+    focusAppliedKey.current = key;
+
+    const timer = setTimeout(() => {
+      if (focusTarget === 'bio') {
+        scrollRef.current?.scrollTo({
+          y: Math.max(0, bioOffsetY.current - 20),
+          animated: true,
+        });
+        setBioFocused(true);
+        setTimeout(() => bioInputRef.current?.focus(), 280);
+        return;
+      }
+
+      if (focusTarget === 'interests') {
+        scrollRef.current?.scrollTo({
+          y: Math.max(0, interestsOffsetY.current - 20),
+          animated: true,
+        });
+        setInterestsHighlighted(true);
+        setTimeout(() => setInterestsHighlighted(false), 1600);
+
+        const targetType =
+          focusInterestTypeId != null
+            ? interestTypes.find(
+                type => Number(type.Id) === Number(focusInterestTypeId),
+              )
+            : interestTypes[0];
+        if (targetType) {
+          setTimeout(() => openInterestSheet(targetType), 320);
+        }
+      }
+    }, 120);
+
+    return () => clearTimeout(timer);
+  }, [
+    loading,
+    loadFailed,
+    focusTarget,
+    focusInterestTypeId,
+    interestTypes,
+    openInterestSheet,
+  ]);
 
   const applyInterestSheet = () => {
     if (!sheetType) return;
@@ -384,6 +453,7 @@ export function EditProfileScreen({ navigation }: Props) {
       ) : (
         <Animated.View style={[styles.body, contentFadeStyle]}>
           <ScrollView
+            ref={scrollRef}
             style={styles.flex}
             showsVerticalScrollIndicator={false}
             keyboardShouldPersistTaps="handled"
@@ -443,38 +513,63 @@ export function EditProfileScreen({ navigation }: Props) {
             </Text>
 
             {/* Bio */}
-            <Text
-              style={[
-                styles.sectionLabel,
-                { color: theme.colors.textMuted, marginTop: 22 },
-              ]}>
-              {t('profile.bio')}
-            </Text>
-            <TextInput
-              value={bio}
-              onChangeText={text =>
-                setBio(text.length <= BIO_MAX ? text : text.slice(0, BIO_MAX))
-              }
-              multiline
-              placeholder={t('profile.add_bio_desc')}
-              placeholderTextColor={theme.colors.textMuted}
-              accessibilityLabel={t('profile.bio')}
-              style={[
-                styles.bioInput,
-                {
-                  color: theme.colors.text,
-                  backgroundColor: theme.colors.card,
-                  borderColor: theme.colors.border,
-                },
-              ]}
-            />
-            <Text
-              style={[styles.bioCounter, { color: theme.colors.textMuted }]}>
-              {bio.trim().length}/{BIO_MAX}
-            </Text>
+            <View
+              onLayout={e => {
+                bioOffsetY.current = e.nativeEvent.layout.y;
+              }}>
+              <Text
+                style={[
+                  styles.sectionLabel,
+                  { color: theme.colors.textMuted, marginTop: 22 },
+                ]}>
+                {t('profile.bio')}
+              </Text>
+              <TextInput
+                ref={bioInputRef}
+                value={bio}
+                onChangeText={text =>
+                  setBio(text.length <= BIO_MAX ? text : text.slice(0, BIO_MAX))
+                }
+                onFocus={() => setBioFocused(true)}
+                onBlur={() => setBioFocused(false)}
+                multiline
+                placeholder={t('profile.add_bio_desc')}
+                placeholderTextColor={theme.colors.textMuted}
+                accessibilityLabel={t('profile.bio')}
+                style={[
+                  styles.bioInput,
+                  {
+                    color: theme.colors.text,
+                    backgroundColor: theme.colors.card,
+                    borderColor: bioFocused
+                      ? theme.colors.primary
+                      : theme.colors.border,
+                  },
+                ]}
+              />
+              <Text
+                style={[styles.bioCounter, { color: theme.colors.textMuted }]}>
+                {bio.trim().length}/{BIO_MAX}
+              </Text>
+            </View>
 
             {/* Interests */}
-            <View style={[styles.sectionHead, { marginTop: 18 }]}>
+            <View
+              onLayout={e => {
+                interestsOffsetY.current = e.nativeEvent.layout.y;
+              }}
+              style={[
+                styles.sectionHead,
+                { marginTop: 18 },
+                interestsHighlighted
+                  ? {
+                      borderRadius: 16,
+                      padding: 10,
+                      marginHorizontal: -6,
+                      backgroundColor: theme.colors.primarySoft,
+                    }
+                  : null,
+              ]}>
               <View style={styles.sectionHeadText}>
                 <Text
                   style={[

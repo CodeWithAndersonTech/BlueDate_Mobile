@@ -16,15 +16,24 @@ export type HomeStackParamList = {
   HomeFeed: undefined;
   Settings: undefined;
   Filter: undefined;
+  ChangePassword: undefined;
+  Privacy: undefined;
+  Help: undefined;
   UserProfile: { userId: string };
 };
 
 export type ProfileStackParamList = {
   ProfileMain: undefined;
-  EditProfile: undefined;
+  EditProfile: {
+    focus?: 'bio' | 'interests';
+    interestTypeId?: number;
+  };
   Settings: undefined;
   FriendsList: undefined;
   Filter: undefined;
+  ChangePassword: undefined;
+  Privacy: undefined;
+  Help: undefined;
   UserProfile: { userId: string };
 };
 

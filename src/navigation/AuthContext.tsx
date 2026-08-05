@@ -19,6 +19,8 @@ type RegisterPayload = {
   email: string;
   password: string;
   gender: number;
+  /** ISO date `YYYY-MM-DD` */
+  birthDate: string;
 };
 
 type RegisterResult = {
@@ -133,7 +135,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       });
 
       const nextUserId = response.UserId ?? null;
-      await persistSession(response.AccessToken ?? null, nextUserId);
+      const token =
+        response.AccessToken ??
+        (response as { accessToken?: string }).accessToken ??
+        null;
+      await persistSession(token, nextUserId);
 
       if (nextUserId != null) {
         try {
@@ -157,6 +163,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         Email: payload.email,
         Password: payload.password,
         Gender: payload.gender,
+        BirthDate: payload.birthDate,
       });
 
       if (!response.IsSuccess || !response.UserId) {

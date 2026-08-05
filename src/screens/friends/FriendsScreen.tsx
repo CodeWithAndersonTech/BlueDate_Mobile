@@ -27,10 +27,48 @@ import { useLocale } from '../../i18n';
 import { useAuth } from '../../navigation/AuthContext';
 import { FriendsStackParamList } from '../../navigation/types';
 import { useTheme } from '../../theme';
+import {
+  FriendRequest,
+  incomingRequests as mockIncoming,
+  sentRequests as mockSent,
+} from '../../utils/mockData';
 
 type Props = NativeStackScreenProps<FriendsStackParamList, 'FriendsMain'>;
 
 type Tab = 'friends' | 'incoming' | 'sent';
+
+/** Negative ids mark local UI mocks — skip API on accept/reject/cancel. */
+function toMockFriendshipItem(
+  req: FriendRequest,
+  friendshipId: number,
+  statusCode: string,
+): FriendshipListItem {
+  const parts = req.name.trim().split(/\s+/);
+  const firstName = parts[0] ?? req.name;
+  const lastName = parts.slice(1).join(' ');
+  return {
+    FriendshipId: friendshipId,
+    StatusId: 0,
+    StatusCode: statusCode,
+    StatusName: statusCode,
+    CreatedDate: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(),
+    User: {
+      UserId: friendshipId,
+      FirstName: firstName,
+      LastName: lastName,
+      Username: req.username.replace(/^@/, ''),
+      ProfileImage: req.avatar ?? null,
+      IsVerified: Boolean(req.premium),
+    },
+  };
+}
+
+const MOCK_INCOMING: FriendshipListItem[] = mockIncoming.map((r, i) =>
+  toMockFriendshipItem(r, -(1000 + i), 'pending'),
+);
+const MOCK_SENT: FriendshipListItem[] = mockSent.map((r, i) =>
+  toMockFriendshipItem(r, -(2000 + i), 'pending'),
+);
 
 export function FriendsScreen({ navigation }: Props) {
   const { t } = useLocale();
@@ -47,6 +85,8 @@ export function FriendsScreen({ navigation }: Props) {
 
   const load = useCallback(async () => {
     if (!userId) {
+      setIncomingRequests(MOCK_INCOMING);
+      setSentRequests(MOCK_SENT);
       setLoading(false);
       return;
     }
@@ -58,9 +98,14 @@ export function FriendsScreen({ navigation }: Props) {
         getSentFriendRequests(userId, accessToken),
       ]);
       setFriends(friendsRes.Items ?? []);
-      setIncomingRequests(incomingRes.Items ?? []);
-      setSentRequests(sentRes.Items ?? []);
+      const incoming = incomingRes.Items ?? [];
+      const sent = sentRes.Items ?? [];
+      setIncomingRequests(incoming.length ? incoming : MOCK_INCOMING);
+      setSentRequests(sent.length ? sent : MOCK_SENT);
     } catch (error) {
+      // Keep UI reviewable even when API fails.
+      setIncomingRequests(MOCK_INCOMING);
+      setSentRequests(MOCK_SENT);
       Alert.alert(
         t('friends.title'),
         error instanceof Error ? error.message : t('user_profile.action_error'),
@@ -101,6 +146,13 @@ export function FriendsScreen({ navigation }: Props) {
     if (!userId) return;
     setBusyId(item.FriendshipId);
     try {
+      if (item.FriendshipId < 0) {
+        setIncomingRequests(prev =>
+          prev.filter(r => r.FriendshipId !== item.FriendshipId),
+        );
+        setTab('friends');
+        return;
+      }
       await acceptFriendRequest(userId, item.FriendshipId, accessToken);
       await load();
       setTab('friends');
@@ -118,6 +170,12 @@ export function FriendsScreen({ navigation }: Props) {
     if (!userId) return;
     setBusyId(item.FriendshipId);
     try {
+      if (item.FriendshipId < 0) {
+        setIncomingRequests(prev =>
+          prev.filter(r => r.FriendshipId !== item.FriendshipId),
+        );
+        return;
+      }
       await rejectFriendRequest(userId, item.FriendshipId, accessToken);
       await load();
     } catch (error) {
@@ -134,6 +192,12 @@ export function FriendsScreen({ navigation }: Props) {
     if (!userId) return;
     setBusyId(item.FriendshipId);
     try {
+      if (item.FriendshipId < 0) {
+        setSentRequests(prev =>
+          prev.filter(r => r.FriendshipId !== item.FriendshipId),
+        );
+        return;
+      }
       await cancelFriendRequest(userId, item.FriendshipId, accessToken);
       await load();
     } catch (error) {

@@ -26,7 +26,9 @@ import {
   resolveMediaUrl,
 } from '../../api';
 import { useLocale } from '../../i18n';
+import { usePremium } from '../../hooks/usePremium';
 import { useAuth } from '../../navigation/AuthContext';
+import { useChat } from '../../navigation/ChatContext';
 import { HomeStackParamList } from '../../navigation/types';
 import { loadProfilePhotos } from '../../services/photos/photoStore';
 import { ThemeColors, useTheme } from '../../theme';
@@ -69,6 +71,8 @@ export function HomeScreen({ navigation }: Props) {
   const { t } = useLocale();
   const insets = useSafeAreaInsets();
   const { userId, accessToken } = useAuth();
+  const { unreadCount, refreshUnread } = useChat();
+  const { isPremium, refresh: refreshPremium } = usePremium();
   const [firstName, setFirstName] = useState('');
   const [fullName, setFullName] = useState('');
   const [avatarUri, setAvatarUri] = useState<string | undefined>();
@@ -79,6 +83,8 @@ export function HomeScreen({ navigation }: Props) {
     useCallback(() => {
       if (!userId) return;
       let cancelled = false;
+      refreshUnread();
+      void refreshPremium();
 
       (async () => {
         try {
@@ -131,7 +137,7 @@ export function HomeScreen({ navigation }: Props) {
       return () => {
         cancelled = true;
       };
-    }, [userId, accessToken]),
+    }, [userId, accessToken, refreshUnread, refreshPremium]),
   );
 
   return (
@@ -150,7 +156,7 @@ export function HomeScreen({ navigation }: Props) {
               uri={avatarUri}
               name={fullName || firstName || '?'}
               size="md"
-              premium
+              premium={isPremium}
               online
             />
             <View style={styles.greetingText}>
@@ -163,6 +169,7 @@ export function HomeScreen({ navigation }: Props) {
           <View style={styles.headerActions}>
             <IconButton
               name="message"
+              badge={unreadCount}
               onPress={() =>
                 // Bubbles to AppStack above tabs — full-screen, no tab bar.
                 navigation.navigate('Messages' as never)
@@ -179,49 +186,50 @@ export function HomeScreen({ navigation }: Props) {
           </View>
         </View>
 
-        {/* Premium — compact gold strip (same palette as PremiumScreen) */}
-        <Pressable
-          onPress={() => goToTab('Premium')}
-          style={({ pressed }) => [
-            styles.premiumCard,
-            {
-              opacity: pressed ? 0.94 : 1,
-              transform: [{ scale: pressed ? 0.985 : 1 }],
-            },
-            theme.shadows.sm,
-          ]}>
-          <LinearGradient
-            colors={GOLD}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-            style={StyleSheet.absoluteFill}
-          />
-          <View style={styles.premiumContent}>
-            <View style={styles.premiumTextCol}>
-              <View style={styles.premiumBadge}>
-                <Icon name="crown" size={12} color={ON_GOLD} filled />
-                <Typography variant="overline" tint={ON_GOLD}>
-                  {t('home.hero_badge')}
+        {!isPremium ? (
+          <Pressable
+            onPress={() => goToTab('Premium')}
+            style={({ pressed }) => [
+              styles.premiumCard,
+              {
+                opacity: pressed ? 0.94 : 1,
+                transform: [{ scale: pressed ? 0.985 : 1 }],
+              },
+              theme.shadows.sm,
+            ]}>
+            <LinearGradient
+              colors={GOLD}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={StyleSheet.absoluteFill}
+            />
+            <View style={styles.premiumContent}>
+              <View style={styles.premiumTextCol}>
+                <View style={styles.premiumBadge}>
+                  <Icon name="crown" size={12} color={ON_GOLD} filled />
+                  <Typography variant="overline" tint={ON_GOLD}>
+                    {t('home.hero_badge')}
+                  </Typography>
+                </View>
+                <Typography variant="title" tint={ON_GOLD} numberOfLines={2}>
+                  {t('home.hero_title').replace(/\n/g, ' ')}
+                </Typography>
+                <Typography
+                  variant="caption"
+                  tint="rgba(44,33,0,0.72)"
+                  numberOfLines={2}>
+                  {t('home.hero_subtitle')}
                 </Typography>
               </View>
-              <Typography variant="title" tint={ON_GOLD} numberOfLines={2}>
-                {t('home.hero_title').replace(/\n/g, ' ')}
-              </Typography>
-              <Typography
-                variant="caption"
-                tint="rgba(44,33,0,0.72)"
-                numberOfLines={2}>
-                {t('home.hero_subtitle')}
-              </Typography>
+              <View style={styles.premiumCta}>
+                <Typography variant="caption" tint={ON_GOLD}>
+                  {t('home.hero_cta')}
+                </Typography>
+                <Icon name="chevron-right" size={14} color={ON_GOLD} />
+              </View>
             </View>
-            <View style={styles.premiumCta}>
-              <Typography variant="caption" tint={ON_GOLD}>
-                {t('home.hero_cta')}
-              </Typography>
-              <Icon name="chevron-right" size={14} color={ON_GOLD} />
-            </View>
-          </View>
-        </Pressable>
+          </Pressable>
+        ) : null}
 
         {/* Nearby — same size card, Meerk logo + copy */}
         <Pressable

@@ -4,7 +4,10 @@ import { EditProfileScreen } from '../screens/profile/EditProfileScreen';
 import { FriendsListScreen } from '../screens/profile/FriendsListScreen';
 import { ProfileScreen } from '../screens/profile/ProfileScreen';
 import { UserProfileScreen } from '../screens/profile/UserProfileScreen';
+import { ChangePasswordScreen } from '../screens/settings/ChangePasswordScreen';
 import { FilterScreen } from '../screens/settings/FilterScreen';
+import { HelpScreen } from '../screens/settings/HelpScreen';
+import { PrivacyScreen } from '../screens/settings/PrivacyScreen';
 import { SettingsScreen } from '../screens/settings/SettingsScreen';
 import { ProfileStackParamList } from './types';
 
@@ -38,6 +41,21 @@ export function ProfileStack() {
       <Stack.Screen
         name="Filter"
         component={FilterScreen}
+        options={nestedOptions}
+      />
+      <Stack.Screen
+        name="ChangePassword"
+        component={ChangePasswordScreen}
+        options={nestedOptions}
+      />
+      <Stack.Screen
+        name="Privacy"
+        component={PrivacyScreen}
+        options={nestedOptions}
+      />
+      <Stack.Screen
+        name="Help"
+        component={HelpScreen}
         options={nestedOptions}
       />
       <Stack.Screen

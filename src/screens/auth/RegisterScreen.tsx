@@ -9,6 +9,7 @@ import {
   View,
 } from 'react-native';
 import {
+  AgePicker,
   Button,
   Checkbox,
   Chip,
@@ -48,12 +49,25 @@ export function RegisterScreen({ navigation }: Props) {
   const [submitted, setSubmitted] = useState(false);
   const [loading, setLoading] = useState(false);
   const [gender, setGender] = useState<GenderValue | null>(null);
+  const [age, setAge] = useState<number>(25);
 
   const lastNameRef = useRef<TextInput>(null);
   const usernameRef = useRef<TextInput>(null);
   const emailRef = useRef<TextInput>(null);
   const passwordRef = useRef<TextInput>(null);
   const confirmRef = useRef<TextInput>(null);
+
+  const ageValid = age >= 18 && age <= 80;
+
+  /** Approximate DOB from age (today − age years) as YYYY-MM-DD. */
+  const birthDateFromAge = (years: number): string => {
+    const d = new Date();
+    d.setFullYear(d.getFullYear() - years);
+    const yyyy = d.getFullYear();
+    const mm = String(d.getMonth() + 1).padStart(2, '0');
+    const dd = String(d.getDate()).padStart(2, '0');
+    return `${yyyy}-${mm}-${dd}`;
+  };
 
   const update = (key: keyof typeof form) => (value: string) =>
     setForm(prev => ({ ...prev, [key]: value }));
@@ -86,13 +100,14 @@ export function RegisterScreen({ navigation }: Props) {
     form.lastName.trim().length > 0 &&
     usernameValid &&
     emailValid &&
+    ageValid &&
     isValidGender(gender) &&
     form.password.length >= 8 &&
     form.password === form.confirmPassword;
 
   const onRegister = async () => {
     setSubmitted(true);
-    if (!canSubmit || loading || !isValidGender(gender)) {
+    if (!canSubmit || loading || !isValidGender(gender) || !ageValid) {
       return;
     }
 
@@ -105,6 +120,7 @@ export function RegisterScreen({ navigation }: Props) {
         email: form.email.trim(),
         password: form.password,
         gender,
+        birthDate: birthDateFromAge(age),
       });
 
       navigation.navigate('EmailVerification', {
@@ -186,6 +202,19 @@ export function RegisterScreen({ navigation }: Props) {
             onChangeText={text => update('email')(text.trim())}
             onSubmitEditing={() => passwordRef.current?.focus()}
             error={emailError}
+          />
+
+          <AgePicker
+            label={t('auth.age')}
+            unitLabel={t('auth.age_unit')}
+            value={age}
+            min={18}
+            max={80}
+            onChange={setAge}
+            hint={t('auth.age_hint')}
+            error={
+              submitted && !ageValid ? t('auth.age_required') : undefined
+            }
           />
 
           <View style={styles.genderBlock}>

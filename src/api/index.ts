@@ -6,4 +6,6 @@ export * from './user';
 export * from './social';
 export * from './photos';
 export * from './proximity';
+export * from './chat';
 export * from './languageHeader';
+export * from './userPremium';

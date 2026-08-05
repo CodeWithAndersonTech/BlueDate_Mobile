@@ -9,7 +9,7 @@ import { StyleSheet } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { LocaleProvider } from './src/i18n';
-import { AuthProvider, RootNavigator } from './src/navigation';
+import { AuthProvider, ChatProvider, RootNavigator } from './src/navigation';
 import { ThemeProvider } from './src/theme';
 
 function App() {
@@ -19,7 +19,9 @@ function App() {
         <ThemeProvider initialPreference="dark" initialAccent="cosmic">
           <LocaleProvider>
             <AuthProvider>
-              <RootNavigator />
+              <ChatProvider>
+                <RootNavigator />
+              </ChatProvider>
             </AuthProvider>
           </LocaleProvider>
         </ThemeProvider>

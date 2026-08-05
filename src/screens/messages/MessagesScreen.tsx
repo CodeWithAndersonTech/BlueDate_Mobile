@@ -1,6 +1,14 @@
+import { useFocusEffect } from '@react-navigation/native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
-import React, { useMemo, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import React, { useCallback, useMemo, useState } from 'react';
+import {
+  ActivityIndicator,
+  Pressable,
+  RefreshControl,
+  ScrollView,
+  StyleSheet,
+  View,
+} from 'react-native';
 import {
   Avatar,
   EmptyState,
@@ -10,17 +18,24 @@ import {
   Typography,
 } from '../../components';
 import { useLocale } from '../../i18n';
+import { useChat } from '../../navigation/ChatContext';
 import { AppStackParamList } from '../../navigation/types';
 import { useTheme } from '../../theme';
-import { ChatConversation, chatConversations } from '../../utils';
 
 type Props = NativeStackScreenProps<AppStackParamList, 'Messages'>;
 
 export function MessagesScreen({ navigation }: Props) {
   const theme = useTheme();
   const { t } = useLocale();
+  const { conversations, loadingInbox, refreshInbox, unreadCount } = useChat();
   const [query, setQuery] = useState('');
-  const [conversations] = useState<ChatConversation[]>(chatConversations);
+  const [refreshing, setRefreshing] = useState(false);
+
+  useFocusEffect(
+    useCallback(() => {
+      refreshInbox();
+    }, [refreshInbox]),
+  );
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -33,7 +48,14 @@ export function MessagesScreen({ navigation }: Props) {
     );
   }, [conversations, query]);
 
-  const unreadTotal = conversations.reduce((n, c) => n + c.unreadCount, 0);
+  const onRefresh = async () => {
+    setRefreshing(true);
+    try {
+      await refreshInbox();
+    } finally {
+      setRefreshing(false);
+    }
+  };
 
   return (
     <Screen edges={['top']}>
@@ -41,10 +63,10 @@ export function MessagesScreen({ navigation }: Props) {
         large
         title={t('messages.title')}
         subtitle={
-          unreadTotal > 0
+          unreadCount > 0
             ? t('messages.subtitle_unread').replace(
                 '{count}',
-                String(unreadTotal),
+                String(unreadCount),
               )
             : t('messages.subtitle')
         }
@@ -60,103 +82,122 @@ export function MessagesScreen({ navigation }: Props) {
         />
       </View>
 
-      <ScrollView
-        showsVerticalScrollIndicator={false}
-        contentContainerStyle={styles.content}
-        keyboardShouldPersistTaps="handled">
-        {filtered.length === 0 ? (
-          <EmptyState
-            icon="message"
-            title={
-              query.trim()
-                ? t('messages.no_results_title')
-                : t('messages.empty_title')
-            }
-            description={
-              query.trim()
-                ? t('messages.no_results_desc').replace('{query}', query)
-                : t('messages.empty_desc')
-            }
-          />
-        ) : (
-          filtered.map(item => {
-            const unread = item.unreadCount > 0;
-            return (
-              <Pressable
-                key={item.id}
-                onPress={() =>
-                  navigation.navigate('ChatThread', {
-                    conversationId: item.id,
-                  })
-                }
-                style={({ pressed }) => [
-                  styles.row,
-                  {
-                    backgroundColor: pressed
-                      ? theme.colors.surfaceAlt
-                      : 'transparent',
-                  },
-                ]}>
-                <Avatar
-                  uri={item.avatar}
-                  name={item.name}
-                  size="md"
-                  online={item.online}
-                  premium={item.premium}
-                />
-                <View style={styles.texts}>
-                  <View style={styles.topLine}>
-                    <Typography
-                      variant="bodyStrong"
-                      numberOfLines={1}
-                      style={styles.name}>
-                      {item.name}
-                    </Typography>
-                    <Typography
-                      variant="caption"
-                      color={unread ? 'primary' : 'textMuted'}>
-                      {item.lastMessageAt}
-                    </Typography>
-                  </View>
-                  <View style={styles.bottomLine}>
-                    <Typography
-                      variant="caption"
-                      color={unread ? 'text' : 'textMuted'}
-                      numberOfLines={1}
-                      style={[styles.preview, unread && styles.previewUnread]}>
-                      {item.lastMessage}
-                    </Typography>
-                    {unread ? (
-                      <View
+      {loadingInbox && conversations.length === 0 ? (
+        <View style={styles.loading}>
+          <ActivityIndicator color={theme.colors.primary} />
+        </View>
+      ) : (
+        <ScrollView
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={styles.content}
+          keyboardShouldPersistTaps="handled"
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={onRefresh}
+              tintColor={theme.colors.primary}
+            />
+          }>
+          {filtered.length === 0 ? (
+            <EmptyState
+              icon="message"
+              title={
+                query.trim()
+                  ? t('messages.no_results_title')
+                  : t('messages.empty_title')
+              }
+              description={
+                query.trim()
+                  ? t('messages.no_results_desc').replace('{query}', query)
+                  : t('messages.empty_desc')
+              }
+            />
+          ) : (
+            filtered.map(item => {
+              const unread = item.unreadCount > 0;
+              return (
+                <Pressable
+                  key={item.id}
+                  onPress={() =>
+                    navigation.navigate('ChatThread', {
+                      conversationId: item.id,
+                    })
+                  }
+                  style={({ pressed }) => [
+                    styles.row,
+                    {
+                      backgroundColor: pressed
+                        ? theme.colors.surfaceAlt
+                        : 'transparent',
+                    },
+                  ]}>
+                  <Avatar
+                    uri={item.avatar}
+                    name={item.name}
+                    size="md"
+                    online={item.online}
+                  />
+                  <View style={styles.texts}>
+                    <View style={styles.topLine}>
+                      <Typography
+                        variant="bodyStrong"
+                        numberOfLines={1}
+                        style={styles.name}>
+                        {item.name}
+                      </Typography>
+                      <Typography
+                        variant="caption"
+                        color={unread ? 'primary' : 'textMuted'}>
+                        {item.lastMessageAt}
+                      </Typography>
+                    </View>
+                    <View style={styles.bottomLine}>
+                      <Typography
+                        variant="caption"
+                        color={unread ? 'text' : 'textMuted'}
+                        numberOfLines={1}
                         style={[
-                          styles.badge,
-                          { backgroundColor: theme.colors.primary },
+                          styles.preview,
+                          unread && styles.previewUnread,
                         ]}>
-                        <Typography
-                          variant="overline"
-                          tint={theme.colors.onPrimary}>
-                          {item.unreadCount > 9 ? '9+' : String(item.unreadCount)}
-                        </Typography>
-                      </View>
-                    ) : null}
+                        {item.lastMessage || t('messages.no_messages_yet')}
+                      </Typography>
+                      {unread ? (
+                        <View
+                          style={[
+                            styles.badge,
+                            { backgroundColor: theme.colors.primary },
+                          ]}>
+                          <Typography
+                            variant="overline"
+                            tint={theme.colors.onPrimary}>
+                            {item.unreadCount > 9
+                              ? '9+'
+                              : String(item.unreadCount)}
+                          </Typography>
+                        </View>
+                      ) : null}
+                    </View>
                   </View>
-                </View>
-              </Pressable>
-            );
-          })
-        )}
-      </ScrollView>
+                </Pressable>
+              );
+            })
+          )}
+        </ScrollView>
+      )}
     </Screen>
   );
 }
 
 const styles = StyleSheet.create({
   searchWrap: { paddingHorizontal: 20, paddingBottom: 8 },
+  loading: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   content: {
     paddingHorizontal: 12,
     paddingTop: 4,
     paddingBottom: 24,
     gap: 2,
+    flexGrow: 1,
   },
   row: {
     flexDirection: 'row',

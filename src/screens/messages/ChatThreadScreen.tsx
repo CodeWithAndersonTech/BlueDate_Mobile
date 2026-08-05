@@ -1,6 +1,7 @@
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
-import React, { useCallback, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
+  ActivityIndicator,
   Alert,
   FlatList,
   KeyboardAvoidingView,
@@ -21,6 +22,12 @@ import {
   useSafeAreaInsets,
 } from 'react-native-safe-area-context';
 import {
+  ChatMessageUi,
+  deleteMessage,
+  fetchMessages,
+  toMessageUi,
+} from '../../api/chat';
+import {
   Avatar,
   EmptyState,
   Icon,
@@ -28,13 +35,10 @@ import {
   Typography,
 } from '../../components';
 import { useLocale } from '../../i18n';
+import { useAuth } from '../../navigation/AuthContext';
+import { useChat } from '../../navigation/ChatContext';
 import { AppStackParamList } from '../../navigation/types';
 import { useTheme } from '../../theme';
-import {
-  ChatMessage,
-  getConversationById,
-  getMessagesForConversation,
-} from '../../utils';
 
 type Props = NativeStackScreenProps<AppStackParamList, 'ChatThread'>;
 
@@ -42,22 +46,105 @@ export function ChatThreadScreen({ navigation, route }: Props) {
   const theme = useTheme();
   const { t } = useLocale();
   const insets = useSafeAreaInsets();
-  const listRef = useRef<FlatList<ChatMessage>>(null);
+  const { userId, accessToken } = useAuth();
+  const {
+    conversations,
+    joinConversation,
+    leaveConversation,
+    sendChatMessage,
+    markRead,
+    subscribeMessages,
+  } = useChat();
+
+  const conversationId = Number(route.params.conversationId);
+  const listRef = useRef<FlatList<ChatMessageUi>>(null);
   const swipeableRefs = useRef(new Map<string, SwipeableMethods>());
 
   const conversation = useMemo(
-    () => getConversationById(route.params.conversationId),
-    [route.params.conversationId],
+    () => conversations.find(c => c.id === String(conversationId)),
+    [conversations, conversationId],
   );
 
-  const [messages, setMessages] = useState<ChatMessage[]>(() =>
-    getMessagesForConversation(route.params.conversationId),
-  );
+  const [messages, setMessages] = useState<ChatMessageUi[]>([]);
   const [draft, setDraft] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [sending, setSending] = useState(false);
 
-  const removeMessage = useCallback((id: string) => {
-    setMessages(prev => prev.filter(m => m.id !== id));
-  }, []);
+  useEffect(() => {
+    if (!userId || !conversationId) return;
+
+    let cancelled = false;
+
+    (async () => {
+      setLoading(true);
+      try {
+        await joinConversation(conversationId);
+        const rows = await fetchMessages(conversationId, userId, {
+          token: accessToken,
+        });
+        if (cancelled) return;
+        const ui = rows.map(m => toMessageUi(m, userId));
+        setMessages(ui);
+
+        const lastId = rows.length ? rows[rows.length - 1].Id : null;
+        await markRead(conversationId, lastId);
+      } catch (e) {
+        console.warn('[ChatThread] load failed', e);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+
+    const unsub = subscribeMessages(conversationId, dto => {
+      if (!userId) return;
+      const ui = toMessageUi(dto, userId);
+      setMessages(prev => {
+        if (prev.some(m => m.id === ui.id)) return prev;
+        if (
+          ui.clientMessageId &&
+          prev.some(m => m.clientMessageId === ui.clientMessageId)
+        ) {
+          return prev.map(m =>
+            m.clientMessageId === ui.clientMessageId ? ui : m,
+          );
+        }
+        return [...prev, ui];
+      });
+
+      if (dto.SenderId !== userId) {
+        markRead(conversationId, dto.Id);
+      }
+    });
+
+    return () => {
+      cancelled = true;
+      unsub();
+      leaveConversation(conversationId);
+    };
+  }, [
+    userId,
+    accessToken,
+    conversationId,
+    joinConversation,
+    leaveConversation,
+    markRead,
+    subscribeMessages,
+  ]);
+
+  const removeMessage = useCallback(
+    async (id: string) => {
+      if (!userId) return;
+      const numericId = Number(id);
+      setMessages(prev => prev.filter(m => m.id !== id));
+      if (!Number.isFinite(numericId) || numericId <= 0) return;
+      try {
+        await deleteMessage(numericId, userId, accessToken);
+      } catch (e) {
+        console.warn('[ChatThread] delete failed', e);
+      }
+    },
+    [userId, accessToken],
+  );
 
   const confirmDelete = useCallback(
     (id: string) => {
@@ -69,7 +156,9 @@ export function ChatThreadScreen({ navigation, route }: Props) {
           {
             text: t('messages.delete'),
             style: 'destructive',
-            onPress: () => removeMessage(id),
+            onPress: () => {
+              removeMessage(id);
+            },
           },
         ],
       );
@@ -77,7 +166,59 @@ export function ChatThreadScreen({ navigation, route }: Props) {
     [removeMessage, t],
   );
 
-  if (!conversation) {
+  const send = async () => {
+    const text = draft.trim();
+    if (!text || !userId || sending) return;
+
+    const clientMessageId = `c-${Date.now()}-${Math.random()
+      .toString(36)
+      .slice(2, 8)}`;
+    const now = new Date();
+    const optimistic: ChatMessageUi = {
+      id: clientMessageId,
+      conversationId: String(conversationId),
+      senderId: 'me',
+      text,
+      sentAt: now.toLocaleTimeString([], {
+        hour: '2-digit',
+        minute: '2-digit',
+      }),
+      sentAtIso: now.toISOString(),
+      clientMessageId,
+    };
+
+    setMessages(prev => [...prev, optimistic]);
+    setDraft('');
+    setSending(true);
+
+    try {
+      const dto = await sendChatMessage(
+        conversationId,
+        text,
+        clientMessageId,
+      );
+      if (dto) {
+        const ui = toMessageUi(dto, userId);
+        setMessages(prev => {
+          const withoutTemp = prev.filter(
+            m => m.clientMessageId !== clientMessageId && m.id !== ui.id,
+          );
+          return [...withoutTemp, ui];
+        });
+      }
+      requestAnimationFrame(() => {
+        listRef.current?.scrollToEnd({ animated: true });
+      });
+    } catch (e) {
+      console.warn('[ChatThread] send failed', e);
+      setMessages(prev => prev.filter(m => m.clientMessageId !== clientMessageId));
+      Alert.alert(t('messages.send_failed_title'), t('messages.send_failed_desc'));
+    } finally {
+      setSending(false);
+    }
+  };
+
+  if (!conversationId || Number.isNaN(conversationId)) {
     return (
       <SafeAreaView
         edges={['top', 'bottom']}
@@ -91,33 +232,10 @@ export function ChatThreadScreen({ navigation, route }: Props) {
     );
   }
 
-  const statusLabel =
-    conversation.statusKey === 'typing'
-      ? t('messages.status_typing')
-      : conversation.online
-        ? t('messages.status_online')
-        : t('messages.status_offline');
-
-  const send = () => {
-    const text = draft.trim();
-    if (!text) return;
-    const now = new Date();
-    const next: ChatMessage = {
-      id: `local-${now.getTime()}`,
-      conversationId: conversation.id,
-      senderId: 'me',
-      text,
-      sentAt: now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-      sentAtIso: now.toISOString(),
-      read: true,
-    };
-    setMessages(prev => [...prev, next]);
-    setDraft('');
-    requestAnimationFrame(() => {
-      listRef.current?.scrollToEnd({ animated: true });
-    });
-  };
-
+  const peerName = conversation?.name || t('messages.title');
+  const statusLabel = conversation?.online
+    ? t('messages.status_online')
+    : t('messages.status_offline');
   const composerPad = Math.max(insets.bottom, 10);
 
   return (
@@ -143,26 +261,27 @@ export function ChatThreadScreen({ navigation, route }: Props) {
             ]}>
             <Pressable
               style={styles.peer}
-              onPress={() =>
-                navigation.navigate('UserProfile', {
-                  userId: conversation.userId,
-                })
-              }>
+              onPress={() => {
+                if (conversation?.userId) {
+                  navigation.navigate('UserProfile', {
+                    userId: conversation.userId,
+                  });
+                }
+              }}>
               <Avatar
-                uri={conversation.avatar}
-                name={conversation.name}
+                uri={conversation?.avatar}
+                name={peerName}
                 size="sm"
-                online={conversation.online}
-                premium={conversation.premium}
+                online={conversation?.online}
               />
               <View style={styles.peerText}>
                 <Typography variant="bodyStrong" numberOfLines={1}>
-                  {conversation.name}
+                  {peerName}
                 </Typography>
                 <Typography
                   variant="caption"
                   tint={
-                    conversation.online || conversation.statusKey === 'typing'
+                    conversation?.online
                       ? theme.colors.online
                       : theme.colors.textMuted
                   }>
@@ -178,163 +297,179 @@ export function ChatThreadScreen({ navigation, route }: Props) {
             />
           </View>
 
-          <GestureHandlerRootView style={styles.flexFill}>
-            <FlatList
-              ref={listRef}
-              style={styles.flexFill}
-              data={messages}
-              keyExtractor={item => item.id}
-              contentContainerStyle={[
-                styles.thread,
-                { paddingBottom: 12 },
-              ]}
-              showsVerticalScrollIndicator={false}
-              keyboardShouldPersistTaps="handled"
-              keyboardDismissMode="interactive"
-              onContentSizeChange={() =>
-                listRef.current?.scrollToEnd({ animated: false })
-              }
-              renderItem={({ item, index }) => {
-                const mine = item.senderId === 'me';
-                const prev = messages[index - 1];
-                const showTime =
-                  !prev ||
-                  prev.senderId !== item.senderId ||
-                  prev.sentAt !== item.sentAt;
+          {loading ? (
+            <View style={styles.loading}>
+              <ActivityIndicator color={theme.colors.primary} />
+            </View>
+          ) : (
+            <GestureHandlerRootView style={styles.flexFill}>
+              <FlatList
+                ref={listRef}
+                style={styles.flexFill}
+                data={messages}
+                keyExtractor={item => item.id}
+                contentContainerStyle={[styles.thread, { paddingBottom: 12 }]}
+                showsVerticalScrollIndicator={false}
+                keyboardShouldPersistTaps="handled"
+                keyboardDismissMode="interactive"
+                ListEmptyComponent={
+                  <EmptyState
+                    icon="message"
+                    title={t('messages.empty_thread_title')}
+                    description={t('messages.empty_thread_desc')}
+                  />
+                }
+                onContentSizeChange={() =>
+                  listRef.current?.scrollToEnd({ animated: false })
+                }
+                renderItem={({ item, index }) => {
+                  const mine = item.senderId === 'me';
+                  const prev = messages[index - 1];
+                  const showTime =
+                    !prev ||
+                    prev.senderId !== item.senderId ||
+                    prev.sentAt !== item.sentAt;
 
-                return (
-                  <Swipeable
-                    ref={methods => {
-                      if (methods) {
-                        swipeableRefs.current.set(item.id, methods);
-                      } else {
-                        swipeableRefs.current.delete(item.id);
-                      }
-                    }}
-                    friction={2}
-                    overshootLeft={false}
-                    overshootRight={false}
-                    leftThreshold={40}
-                    onSwipeableOpenStartDrag={() => {
-                      swipeableRefs.current.forEach((methods, id) => {
-                        if (id !== item.id) {
-                          methods.close();
+                  return (
+                    <Swipeable
+                      ref={methods => {
+                        if (methods) {
+                          swipeableRefs.current.set(item.id, methods);
+                        } else {
+                          swipeableRefs.current.delete(item.id);
                         }
-                      });
-                    }}
-                    renderLeftActions={(_progress, _translation, methods) => (
-                      <Pressable
-                        onPress={() => {
-                          methods.close();
-                          confirmDelete(item.id);
-                        }}
-                        style={[
-                          styles.deleteAction,
-                          { backgroundColor: theme.colors.danger },
-                        ]}
-                        accessibilityRole="button"
-                        accessibilityLabel={t('messages.delete')}>
-                        <Text style={styles.deleteActionText}>
-                          {t('messages.delete')}
-                        </Text>
-                      </Pressable>
-                    )}>
-                    <View
-                      style={[
-                        styles.bubbleRow,
-                        mine ? styles.bubbleRowMine : styles.bubbleRowTheirs,
-                        { backgroundColor: theme.colors.background },
-                      ]}>
+                      }}
+                      friction={2}
+                      overshootLeft={false}
+                      overshootRight={false}
+                      leftThreshold={40}
+                      onSwipeableOpenStartDrag={() => {
+                        swipeableRefs.current.forEach((methods, id) => {
+                          if (id !== item.id) {
+                            methods.close();
+                          }
+                        });
+                      }}
+                      renderLeftActions={(_progress, _translation, methods) =>
+                        mine ? (
+                          <Pressable
+                            onPress={() => {
+                              methods.close();
+                              confirmDelete(item.id);
+                            }}
+                            style={[
+                              styles.deleteAction,
+                              { backgroundColor: theme.colors.danger },
+                            ]}
+                            accessibilityRole="button"
+                            accessibilityLabel={t('messages.delete')}>
+                            <Text style={styles.deleteActionText}>
+                              {t('messages.delete')}
+                            </Text>
+                          </Pressable>
+                        ) : (
+                          <View />
+                        )
+                      }>
                       <View
                         style={[
-                          styles.bubble,
-                          mine
-                            ? {
-                                backgroundColor: theme.colors.primary,
-                                borderBottomRightRadius: 6,
-                              }
-                            : {
-                                backgroundColor: theme.colors.surfaceAlt,
-                                borderBottomLeftRadius: 6,
-                              },
+                          styles.bubbleRow,
+                          mine ? styles.bubbleRowMine : styles.bubbleRowTheirs,
+                          { backgroundColor: theme.colors.background },
                         ]}>
-                        <Typography
-                          variant="body"
-                          tint={
-                            mine ? theme.colors.onPrimary : theme.colors.text
-                          }>
-                          {item.text}
-                        </Typography>
-                        {showTime ? (
+                        <View
+                          style={[
+                            styles.bubble,
+                            mine
+                              ? {
+                                  backgroundColor: theme.colors.primary,
+                                  borderBottomRightRadius: 6,
+                                }
+                              : {
+                                  backgroundColor: theme.colors.surfaceAlt,
+                                  borderBottomLeftRadius: 6,
+                                },
+                          ]}>
                           <Typography
-                            variant="overline"
+                            variant="body"
                             tint={
                               mine
-                                ? 'rgba(255,255,255,0.72)'
-                                : theme.colors.textMuted
-                            }
-                            style={styles.time}>
-                            {item.sentAt}
+                                ? theme.colors.onPrimary
+                                : theme.colors.text
+                            }>
+                            {item.text}
                           </Typography>
-                        ) : null}
+                          {showTime ? (
+                            <Typography
+                              variant="overline"
+                              tint={
+                                mine
+                                  ? 'rgba(255,255,255,0.72)'
+                                  : theme.colors.textMuted
+                              }
+                              style={styles.time}>
+                              {item.sentAt}
+                            </Typography>
+                          ) : null}
+                        </View>
                       </View>
-                    </View>
-                  </Swipeable>
-                );
-              }}
-            />
+                    </Swipeable>
+                  );
+                }}
+              />
 
-            <View
-              style={[
-                styles.composer,
-                {
-                  paddingBottom: composerPad,
-                  borderTopColor: theme.colors.border,
-                  backgroundColor: theme.colors.background,
-                },
-              ]}>
               <View
                 style={[
-                  styles.inputWrap,
+                  styles.composer,
                   {
-                    backgroundColor: theme.colors.surfaceAlt,
-                    borderColor: theme.colors.border,
+                    paddingBottom: composerPad,
+                    borderTopColor: theme.colors.border,
+                    backgroundColor: theme.colors.background,
                   },
                 ]}>
-                <TextInput
-                  value={draft}
-                  onChangeText={setDraft}
-                  placeholder={t('messages.composer_placeholder')}
-                  placeholderTextColor={theme.colors.textMuted}
-                  style={[styles.input, { color: theme.colors.text }]}
-                  multiline
-                  maxLength={1000}
-                />
+                <View
+                  style={[
+                    styles.inputWrap,
+                    {
+                      backgroundColor: theme.colors.surfaceAlt,
+                      borderColor: theme.colors.border,
+                    },
+                  ]}>
+                  <TextInput
+                    value={draft}
+                    onChangeText={setDraft}
+                    placeholder={t('messages.composer_placeholder')}
+                    placeholderTextColor={theme.colors.textMuted}
+                    style={[styles.input, { color: theme.colors.text }]}
+                    multiline
+                    maxLength={1000}
+                  />
+                </View>
+                <Pressable
+                  onPress={send}
+                  disabled={!draft.trim() || sending}
+                  style={({ pressed }) => [
+                    styles.sendBtn,
+                    {
+                      backgroundColor: draft.trim()
+                        ? theme.colors.primary
+                        : theme.colors.surfaceAlt,
+                      opacity: pressed ? 0.9 : 1,
+                    },
+                  ]}>
+                  <Icon
+                    name="send"
+                    size={18}
+                    color={
+                      draft.trim()
+                        ? theme.colors.onPrimary
+                        : theme.colors.textMuted
+                    }
+                  />
+                </Pressable>
               </View>
-              <Pressable
-                onPress={send}
-                disabled={!draft.trim()}
-                style={({ pressed }) => [
-                  styles.sendBtn,
-                  {
-                    backgroundColor: draft.trim()
-                      ? theme.colors.primary
-                      : theme.colors.surfaceAlt,
-                    opacity: pressed ? 0.9 : 1,
-                  },
-                ]}>
-                <Icon
-                  name="send"
-                  size={18}
-                  color={
-                    draft.trim()
-                      ? theme.colors.onPrimary
-                      : theme.colors.textMuted
-                  }
-                />
-              </Pressable>
-            </View>
-          </GestureHandlerRootView>
+            </GestureHandlerRootView>
+          )}
         </KeyboardAvoidingView>
       </SafeAreaView>
     </View>
@@ -344,6 +479,7 @@ export function ChatThreadScreen({ navigation, route }: Props) {
 const styles = StyleSheet.create({
   root: { flex: 1 },
   flexFill: { flex: 1 },
+  loading: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   topBar: {
     flexDirection: 'row',
     alignItems: 'center',

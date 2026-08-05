@@ -109,7 +109,9 @@ export function NearbyScreen({ navigation }: Props) {
   const closeScanTip = () => setScanTipOpen(false);
   const cardW = (windowWidth - H_PAD * 2 - GAP) / 2;
 
-  const scanning =
+  // Empty-state / cold-start scan: show the branded radar overlay (not the
+  // native RefreshControl spinner). List pull-to-refresh keeps the native one.
+  const showScanOverlay =
     state.status === 'starting' ||
     (state.refreshing && users.length === 0);
 
@@ -286,7 +288,7 @@ export function NearbyScreen({ navigation }: Props) {
               onScrollBeginDrag={closeScanTip}
               refreshControl={
                 <RefreshControl
-                  refreshing={state.refreshing}
+                  refreshing={false}
                   onRefresh={onRefresh}
                   tintColor={theme.colors.primary}
                 />
@@ -332,7 +334,7 @@ export function NearbyScreen({ navigation }: Props) {
       )}
 
       <NearbyScanOverlay
-        visible={scanning && !state.refreshing}
+        visible={showScanOverlay}
         onCancel={() => {
           /* scanning is continuous while BLE runs */
         }}

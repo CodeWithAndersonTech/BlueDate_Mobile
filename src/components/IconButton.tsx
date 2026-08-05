@@ -1,5 +1,5 @@
 import React from 'react';
-import { Pressable, StyleProp, ViewStyle } from 'react-native';
+import { Pressable, StyleProp, StyleSheet, Text, View, ViewStyle } from 'react-native';
 import Animated, {
   useAnimatedStyle,
   useSharedValue,
@@ -16,6 +16,8 @@ export interface IconButtonProps {
   /** Render a circular surface behind the icon. */
   variant?: 'plain' | 'surface' | 'outline';
   disabled?: boolean;
+  /** Unread / count badge (0 or undefined hides). */
+  badge?: number;
   /** Screen-reader description — required for icon-only affordances. */
   accessibilityLabel?: string;
   style?: StyleProp<ViewStyle>;
@@ -28,12 +30,14 @@ export function IconButton({
   color,
   variant = 'surface',
   disabled = false,
+  badge,
   accessibilityLabel,
   style,
 }: IconButtonProps) {
   const theme = useTheme();
   const scale = useSharedValue(1);
   const dim = size + 22;
+  const showBadge = typeof badge === 'number' && badge > 0;
 
   const animatedStyle = useAnimatedStyle(() => ({
     transform: [{ scale: scale.value }],
@@ -54,7 +58,11 @@ export function IconButton({
       onPressOut={() => (scale.value = withSpring(1, { damping: 11, stiffness: 260 }))}
       hitSlop={6}
       accessibilityRole="button"
-      accessibilityLabel={accessibilityLabel}
+      accessibilityLabel={
+        showBadge
+          ? `${accessibilityLabel ?? name}, ${badge}`
+          : accessibilityLabel
+      }
       accessibilityState={{ disabled }}>
       <Animated.View
         style={[
@@ -71,9 +79,39 @@ export function IconButton({
           style,
         ]}>
         <Icon name={name} size={size} color={color ?? theme.colors.text} />
+        {showBadge ? (
+          <View
+            style={[
+              styles.badge,
+              { backgroundColor: theme.colors.primary },
+            ]}>
+            <Text style={[styles.badgeText, { color: theme.colors.onPrimary }]}>
+              {badge > 9 ? '9+' : String(badge)}
+            </Text>
+          </View>
+        ) : null}
       </Animated.View>
     </Pressable>
   );
 }
+
+const styles = StyleSheet.create({
+  badge: {
+    position: 'absolute',
+    top: 2,
+    right: 2,
+    minWidth: 16,
+    height: 16,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 3,
+  },
+  badgeText: {
+    fontSize: 9,
+    fontWeight: '700',
+    lineHeight: 11,
+  },
+});
 
 export default IconButton;

@@ -9,6 +9,8 @@ export type RegisterRequest = {
   Password: string;
   /** 1 = Men, 2 = Woman, 3 = Other */
   Gender: number;
+  /** ISO date `YYYY-MM-DD` — required */
+  BirthDate: string;
 };
 
 export type RegisterResponse = ApiEnvelope & {
@@ -37,5 +39,24 @@ export function loginUser(payload: LoginRequest) {
   return apiRequest<LoginResponse>(API_PATHS.login, {
     method: 'POST',
     body: payload,
+  });
+}
+
+export type ChangePasswordRequest = {
+  UserId: number;
+  CurrentPassword: string;
+  NewPassword: string;
+};
+
+export type ChangePasswordResponse = ApiEnvelope;
+
+export function changePassword(
+  payload: ChangePasswordRequest,
+  token?: string | null,
+) {
+  return apiRequest<ChangePasswordResponse>(API_PATHS.changePassword, {
+    method: 'POST',
+    body: payload,
+    token,
   });
 }
