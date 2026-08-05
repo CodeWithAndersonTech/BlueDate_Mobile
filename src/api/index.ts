@@ -1,4 +1,5 @@
 export * from './client';
+export * from './sessionStore';
 export * from './device';
 export * from './languages';
 export * from './auth';

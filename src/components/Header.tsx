@@ -10,6 +10,8 @@ export interface HeaderAction {
   onPress: () => void;
   /** Screen-reader description for this icon-only action. */
   accessibilityLabel?: string;
+  color?: string;
+  filled?: boolean;
 }
 
 export interface HeaderProps {
@@ -53,6 +55,8 @@ export function Header({
               name={a.icon}
               onPress={a.onPress}
               accessibilityLabel={a.accessibilityLabel}
+              color={a.color}
+              filled={a.filled}
             />
           ))}
         </View>
@@ -91,6 +95,8 @@ export function Header({
             name={a.icon}
             onPress={a.onPress}
             accessibilityLabel={a.accessibilityLabel}
+            color={a.color}
+            filled={a.filled}
           />
         ))}
       </View>

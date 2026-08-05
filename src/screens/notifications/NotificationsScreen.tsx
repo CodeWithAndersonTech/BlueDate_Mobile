@@ -11,6 +11,7 @@ import {
   Typography,
 } from '../../components';
 import { useLocale } from '../../i18n';
+import { useScreenBottomPad } from '../../navigation/tabBarLayout';
 import { AppStackParamList } from '../../navigation/types';
 import { useTheme } from '../../theme';
 import {
@@ -42,6 +43,7 @@ const TYPE_COPY_KEY: Record<AppNotificationType, string> = {
 export function NotificationsScreen({ navigation }: Props) {
   const theme = useTheme();
   const { t } = useLocale();
+  const bottomPad = useScreenBottomPad(24);
   const [items, setItems] = useState<AppNotification[]>(appNotifications);
 
   const unreadTotal = useMemo(
@@ -71,7 +73,6 @@ export function NotificationsScreen({ navigation }: Props) {
   return (
     <Screen edges={['top']}>
       <Header
-        large
         title={t('notifications.title')}
         subtitle={
           unreadTotal > 0
@@ -81,6 +82,8 @@ export function NotificationsScreen({ navigation }: Props) {
               )
             : t('notifications.subtitle')
         }
+        onBack={() => navigation.goBack()}
+        backAccessibilityLabel={t('common.back')}
         actions={
           unreadTotal > 0
             ? [
@@ -96,9 +99,13 @@ export function NotificationsScreen({ navigation }: Props) {
 
       <ScrollView
         showsVerticalScrollIndicator={false}
-        contentContainerStyle={styles.content}>
+        contentContainerStyle={[
+          styles.content,
+          { paddingBottom: bottomPad, flexGrow: 1 },
+        ]}>
         {items.length === 0 ? (
           <EmptyState
+            fill
             icon="bell"
             title={t('notifications.empty_title')}
             description={t('notifications.empty_desc')}
@@ -182,7 +189,6 @@ const styles = StyleSheet.create({
   content: {
     paddingHorizontal: 12,
     paddingTop: 4,
-    paddingBottom: 24,
     gap: 2,
   },
   row: {

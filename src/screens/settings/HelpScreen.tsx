@@ -29,7 +29,7 @@ const FAQ_KEYS = [
   { q: 'help.faq_password_q', a: 'help.faq_password_a' },
 ] as const;
 
-export function HelpScreen(_props: Props) {
+export function HelpScreen({ navigation }: Props) {
   useLockTabSwipe();
   const theme = useTheme();
   const insets = useSafeAreaInsets();
@@ -38,7 +38,11 @@ export function HelpScreen(_props: Props) {
 
   return (
     <Screen edges={['top']}>
-      <Header title={t('help.title')} />
+      <Header
+        title={t('help.title')}
+        onBack={() => navigation.goBack()}
+        backAccessibilityLabel={t('common.back')}
+      />
       <ScrollView
         showsVerticalScrollIndicator={false}
         contentContainerStyle={[

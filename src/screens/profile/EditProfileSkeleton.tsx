@@ -115,7 +115,7 @@ export function EditProfileSkeleton({ visible = true }: Props) {
         style={[
           styles.saveBar,
           {
-            paddingBottom: insets.bottom + 40,
+            paddingBottom: Math.max(insets.bottom, 12),
             backgroundColor: theme.colors.surface,
             borderTopColor: theme.colors.border,
           },

@@ -44,7 +44,7 @@ const SECTIONS: Section[] = [
   },
 ];
 
-export function PrivacyScreen(_props: Props) {
+export function PrivacyScreen({ navigation }: Props) {
   useLockTabSwipe();
   const theme = useTheme();
   const insets = useSafeAreaInsets();
@@ -52,7 +52,11 @@ export function PrivacyScreen(_props: Props) {
 
   return (
     <Screen edges={['top']}>
-      <Header title={t('privacy.title')} />
+      <Header
+        title={t('privacy.title')}
+        onBack={() => navigation.goBack()}
+        backAccessibilityLabel={t('common.back')}
+      />
       <ScrollView
         showsVerticalScrollIndicator={false}
         contentContainerStyle={[

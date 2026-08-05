@@ -6,6 +6,9 @@ export * from './RootNavigator';
 export * from './useLockTabSwipe';
 export {
   FLOATING_TAB_BAR_HEIGHT,
+  TAB_ROOT_SCREENS,
   useFloatingTabOffset,
+  useScreenBottomPad,
+  useStickyDockLayout,
   useTabBarClearance,
 } from './tabBarLayout';

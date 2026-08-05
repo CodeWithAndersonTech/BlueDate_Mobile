@@ -28,6 +28,16 @@ export type LoginResponse = ApiEnvelope & {
   UserId?: number;
 };
 
+export type RefreshSessionRequest = {
+  RefreshToken: string;
+};
+
+export type RefreshSessionResponse = ApiEnvelope & {
+  AccessToken?: string;
+  RefreshToken?: string;
+  UserId?: number;
+};
+
 export function registerUser(payload: RegisterRequest) {
   return apiRequest<RegisterResponse>(API_PATHS.register, {
     method: 'POST',
@@ -39,6 +49,14 @@ export function loginUser(payload: LoginRequest) {
   return apiRequest<LoginResponse>(API_PATHS.login, {
     method: 'POST',
     body: payload,
+  });
+}
+
+export function refreshSession(payload: RefreshSessionRequest) {
+  return apiRequest<RefreshSessionResponse>(API_PATHS.refresh, {
+    method: 'POST',
+    body: payload,
+    skipAuthRefresh: true,
   });
 }
 

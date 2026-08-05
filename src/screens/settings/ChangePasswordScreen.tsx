@@ -79,7 +79,11 @@ export function ChangePasswordScreen({ navigation }: Props) {
 
   return (
     <Screen edges={['top']}>
-      <Header title={t('settings.password')} />
+      <Header
+        title={t('settings.password')}
+        onBack={() => navigation.goBack()}
+        backAccessibilityLabel={t('common.back')}
+      />
       <ScrollView
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"

@@ -16,6 +16,7 @@ import Animated, {
   withRepeat,
   withTiming,
 } from 'react-native-reanimated';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { images } from '../../assets';
 import { useLocale } from '../../i18n';
 import {
@@ -95,6 +96,7 @@ function RadarRing({
 export function NearbyScanOverlay({ visible, onCancel }: Props) {
   const theme = useTheme();
   const { t } = useLocale();
+  const insets = useSafeAreaInsets();
   const tabBarClearance = useTabBarClearance(16);
   const stopOffset = useFloatingTabOffset(12);
   const pulse = useSharedValue(0);
@@ -143,8 +145,10 @@ export function NearbyScanOverlay({ visible, onCancel }: Props) {
         pointerEvents="none"
       />
 
-      {/* Usable area above the floating tab bar — logo centers here */}
-      <View style={[styles.main, { bottom: tabBarClearance }]} pointerEvents="none">
+      {/* Usable area between status bar and tab bar — logo centers here */}
+      <View
+        style={[styles.main, { top: insets.top, bottom: tabBarClearance }]}
+        pointerEvents="none">
         <View style={styles.radar}>
           <RadarRing delay={0} color={ringColor} />
           <RadarRing delay={700} color={ringColor} />

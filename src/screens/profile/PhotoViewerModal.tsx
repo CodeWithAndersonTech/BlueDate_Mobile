@@ -33,6 +33,8 @@ const { height: SCREEN_H } = Dimensions.get('window');
 const DISMISS_Y = 140;
 const FRAME_PAD = 20;
 const FRAME_RADIUS = 22;
+/** Reserved space under the photo frame for the action row + labels. */
+const ACTION_AREA_HEIGHT = 110;
 
 type Props = {
   photos: ProfilePhoto[];
@@ -174,7 +176,7 @@ export function PhotoViewerModal({
                 styles.frameWrap,
                 {
                   paddingTop: insets.top + 28,
-                  paddingBottom: insets.bottom + 110,
+                  paddingBottom: insets.bottom + ACTION_AREA_HEIGHT,
                 },
                 frameStyle,
               ]}>

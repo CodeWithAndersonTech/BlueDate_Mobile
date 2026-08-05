@@ -12,11 +12,12 @@ import {
   Text,
   View,
 } from 'react-native';
-import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
-import { EmptyState } from '../../components';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { EmptyState, Header } from '../../components';
 import {
   acceptFriendRequest,
   FriendshipRelation,
+  getFriends,
   getFriendshipStatus,
   getLikeCount,
   getLikeStatus,
@@ -32,12 +33,22 @@ import {
 import { useLocale } from '../../i18n';
 import { useAuth } from '../../navigation/AuthContext';
 import { useChat } from '../../navigation/ChatContext';
+import {
+  DOCK_ACTION_HEIGHT,
+  DOCK_PAD_TOP,
+  useScreenBottomPad,
+  useStickyDockLayout,
+} from '../../navigation/tabBarLayout';
 import { useLockTabSwipe } from '../../navigation/useLockTabSwipe';
 import {
   loadProfilePhotos,
   ProfilePhoto,
 } from '../../services/photos/photoStore';
 import { useTheme } from '../../theme';
+import {
+  getMockUserProfile,
+  isMockProfileUserId,
+} from '../../utils/mockData';
 import { ProfilePhotoGrid } from './ProfilePhotoGrid';
 
 type UserProfileParams = { UserProfile: { userId: string } };
@@ -82,7 +93,12 @@ export function UserProfileScreen({ navigation, route }: Props) {
   const theme = useTheme();
   const { refreshInbox } = useChat();
   const { t } = useLocale();
-  const insets = useSafeAreaInsets();
+  const screenBottomPad = useScreenBottomPad(20);
+  // Friend profile sits inside Material Top Tabs — keep CTAs above the pill
+  // even when the tab bar hide heuristic flickers.
+  const dock = useStickyDockLayout(DOCK_ACTION_HEIGHT, {
+    forceAboveTabBar: true,
+  });
   const { userId: meId, accessToken } = useAuth();
   const targetId = Number(route.params.userId);
 
@@ -91,10 +107,12 @@ export function UserProfileScreen({ navigation, route }: Props) {
   const [avatarUri, setAvatarUri] = useState<string | undefined>();
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
-  const [relation, setRelation] = useState(FriendshipRelation.None);
+  const [relation, setRelation] = useState<number>(FriendshipRelation.None);
   const [friendshipId, setFriendshipId] = useState<number | null>(null);
   const [hasLiked, setHasLiked] = useState(false);
   const [likeCount, setLikeCount] = useState(0);
+  const [displayAge, setDisplayAge] = useState<number | null>(null);
+  const [friendCount, setFriendCount] = useState(0);
   const [busy, setBusy] = useState(false);
 
   const load = useCallback(async () => {
@@ -106,32 +124,83 @@ export function UserProfileScreen({ navigation, route }: Props) {
 
     setLoading(true);
     setNotFound(false);
-    try {
-      const [profileRes, photoBundle] = await Promise.all([
-        getUserProfile(targetId, accessToken),
-        loadProfilePhotos(targetId, accessToken).catch(() => ({
-          gallery: [] as ProfilePhoto[],
-          avatarUri: undefined as string | undefined,
+
+    // Incoming / Sent mock rows — render a full local profile preview.
+    if (isMockProfileUserId(targetId)) {
+      const mock = getMockUserProfile(targetId);
+      if (!mock) {
+        setProfile(null);
+        setNotFound(true);
+        setLoading(false);
+        return;
+      }
+
+      setProfile({
+        IsSuccess: true,
+        Id: mock.userId,
+        FirstName: mock.firstName,
+        LastName: mock.lastName,
+        Username: mock.username,
+        Email: '',
+        Bio: mock.bio,
+        ProfileImage: mock.profileImage ?? null,
+        Age: mock.age ?? null,
+        IsEmailVerified: true,
+        IsVerified: mock.isVerified,
+        Interests: mock.interests.map(item => ({
+          Id: item.id,
+          Value: item.value,
+          InterestTypeCode: item.code,
+          InterestTypeName: item.name,
         })),
-      ]);
+      });
+      setPhotos(
+        mock.photoUris.map((uri, index) => ({
+          id: `mock-photo-${mock.userId}-${index}`,
+          uri,
+          sortOrder: index,
+        })),
+      );
+      setAvatarUri(mock.profileImage ?? mock.photoUris[0]);
+      setRelation(mock.relation);
+      setFriendshipId(mock.friendshipId);
+      setHasLiked(false);
+      setLikeCount(mock.likeCount);
+      setDisplayAge(mock.age ?? null);
+      setFriendCount(mock.relation === 3 ? 36 : 12);
+      setLoading(false);
+      return;
+    }
+
+    try {
+      const [profileRes, photoBundle, friendsRes, likeCountRes] =
+        await Promise.all([
+          getUserProfile(targetId, accessToken),
+          loadProfilePhotos(targetId, accessToken).catch(() => ({
+            gallery: [] as ProfilePhoto[],
+            avatarUri: undefined as string | undefined,
+          })),
+          getFriends(targetId, accessToken).catch(() => ({ Items: [] })),
+          getLikeCount(targetId, accessToken).catch(() => ({ Count: 0 })),
+        ]);
       setProfile(profileRes);
       setPhotos(photoBundle.gallery);
+      setDisplayAge(
+        typeof profileRes.Age === 'number' ? profileRes.Age : null,
+      );
+      setFriendCount(friendsRes.Items?.length ?? 0);
+      setLikeCount(likeCountRes.Count ?? 0);
       const profileAvatar = await resolveMediaUrl(profileRes.ProfileImage);
       setAvatarUri(photoBundle.avatarUri ?? profileAvatar);
 
       if (meId && meId !== targetId) {
-        const [statusRes, likeStatusRes, likeCountRes] = await Promise.all([
+        const [statusRes, likeStatusRes] = await Promise.all([
           getFriendshipStatus(meId, targetId, accessToken),
           getLikeStatus(meId, targetId, accessToken),
-          getLikeCount(targetId, accessToken),
         ]);
         setRelation(statusRes.Relation ?? FriendshipRelation.None);
         setFriendshipId(statusRes.FriendshipId ?? null);
         setHasLiked(!!likeStatusRes.HasLiked);
-        setLikeCount(likeCountRes.Count ?? 0);
-      } else {
-        const likeCountRes = await getLikeCount(targetId, accessToken);
-        setLikeCount(likeCountRes.Count ?? 0);
       }
     } catch {
       setProfile(null);
@@ -169,7 +238,23 @@ export function UserProfileScreen({ navigation, route }: Props) {
   })();
 
   const onFriendAction = async () => {
-    if (!meId || !profile || busy) return;
+    if (!profile || busy) return;
+    // Mock profiles: update local UI only.
+    if (isMockProfileUserId(targetId)) {
+      if (relation === FriendshipRelation.PendingIncoming) {
+        setRelation(FriendshipRelation.Friends);
+      } else if (
+        relation === FriendshipRelation.None ||
+        relation === FriendshipRelation.Rejected ||
+        relation === FriendshipRelation.Cancelled
+      ) {
+        setRelation(FriendshipRelation.PendingOutgoing);
+        setFriendshipId(-(targetId));
+      }
+      return;
+    }
+
+    if (!meId) return;
     setBusy(true);
     try {
       if (relation === FriendshipRelation.PendingIncoming && friendshipId) {
@@ -195,7 +280,15 @@ export function UserProfileScreen({ navigation, route }: Props) {
   };
 
   const onToggleLike = async () => {
-    if (!meId || !profile || busy || meId === targetId) return;
+    if (!profile || busy || (meId != null && meId === targetId)) return;
+
+    if (isMockProfileUserId(targetId)) {
+      setHasLiked(prev => !prev);
+      setLikeCount(c => (hasLiked ? Math.max(0, c - 1) : c + 1));
+      return;
+    }
+
+    if (!meId) return;
     setBusy(true);
     try {
       if (hasLiked) {
@@ -219,7 +312,11 @@ export function UserProfileScreen({ navigation, route }: Props) {
 
   const onMessagePress = async () => {
     if (!meId || busy || meId === targetId) return;
-    if (relation !== FriendshipRelation.Friends) {
+    const canMessage =
+      relation === FriendshipRelation.Friends ||
+      relation === FriendshipRelation.PendingOutgoing ||
+      relation === FriendshipRelation.PendingIncoming;
+    if (!canMessage) {
       Alert.alert(
         t('user_profile.message'),
         t('user_profile.message_friends_only'),
@@ -257,7 +354,8 @@ export function UserProfileScreen({ navigation, route }: Props) {
     return (
       <SafeAreaView
         edges={['top', 'bottom']}
-        style={[styles.root, { backgroundColor: theme.colors.background }]}>
+        style={[styles.viewport, { backgroundColor: theme.colors.background }]}>
+        <Header title={t('user_profile.title')} />
         <View style={styles.loading}>
           <ActivityIndicator color={theme.colors.primary} />
         </View>
@@ -269,32 +367,15 @@ export function UserProfileScreen({ navigation, route }: Props) {
     return (
       <SafeAreaView
         edges={['top', 'bottom']}
-        style={[styles.root, { backgroundColor: theme.colors.background }]}>
+        style={[styles.viewport, { backgroundColor: theme.colors.background }]}>
         <StatusBar
           barStyle={theme.isDark ? 'light-content' : 'dark-content'}
           backgroundColor="transparent"
           translucent
         />
-        <View style={styles.topBar}>
-          <Pressable
-            onPress={() => navigation.goBack()}
-            hitSlop={8}
-            accessibilityRole="button"
-            accessibilityLabel={t('common.back')}
-            style={[
-              styles.topBarBtn,
-              { backgroundColor: theme.colors.surfaceAlt },
-            ]}>
-            <Text style={[styles.topBarGlyph, { color: theme.colors.text }]}>
-              ‹
-            </Text>
-          </Pressable>
-          <Text style={[styles.topBarTitle, { color: theme.colors.text }]}>
-            {t('user_profile.title')}
-          </Text>
-          <View style={styles.topBarBtnSpacer} />
-        </View>
+        <Header title={t('user_profile.title')} />
         <EmptyState
+          fill
           icon="user"
           title={t('user_profile.not_found_title')}
           description={t('user_profile.not_found_desc')}
@@ -305,145 +386,135 @@ export function UserProfileScreen({ navigation, route }: Props) {
 
   const hasBio = (profile.Bio ?? '').trim().length > 0;
   const isSelf = meId === targetId;
+  const scrollBottomPad = isSelf ? screenBottomPad : dock.scrollClearance;
 
   return (
-    <SafeAreaView
-      edges={['top']}
-      style={[styles.root, { backgroundColor: theme.colors.background }]}>
+    <View
+      style={[
+        styles.viewport,
+        { backgroundColor: theme.colors.background },
+      ]}>
       <StatusBar
         barStyle={theme.isDark ? 'light-content' : 'dark-content'}
         backgroundColor="transparent"
         translucent
       />
 
-      <ScrollView
-        showsVerticalScrollIndicator={false}
-        contentContainerStyle={{
-          paddingBottom: Math.max(insets.bottom, 16) + 88,
-        }}>
-        <View style={styles.header}>
-          <View style={styles.topBar}>
-            <Pressable
-              onPress={() => navigation.goBack()}
-              hitSlop={8}
-              accessibilityRole="button"
-              accessibilityLabel={t('common.back')}
-              style={[
-                styles.topBarBtn,
-                { backgroundColor: theme.colors.surfaceAlt },
-              ]}>
-              <Text style={[styles.topBarGlyph, { color: theme.colors.text }]}>
-                ‹
-              </Text>
-            </Pressable>
+      <SafeAreaView edges={['top']} style={styles.flex}>
+        <Header
+          title={t('user_profile.title')}
+          actions={
+            isSelf
+              ? []
+              : [
+                  {
+                    icon: 'heart',
+                    onPress: () => {
+                      void onToggleLike();
+                    },
+                    accessibilityLabel: hasLiked
+                      ? t('user_profile.liked')
+                      : t('user_profile.like'),
+                    color: hasLiked ? theme.colors.danger : undefined,
+                    filled: hasLiked,
+                  },
+                ]
+          }
+        />
 
-            <View style={styles.topBarActions}>
-              {!isSelf ? (
-                <Pressable
-                  onPress={onToggleLike}
-                  hitSlop={8}
-                  accessibilityRole="button"
-                  accessibilityLabel={
-                    hasLiked ? t('user_profile.liked') : t('user_profile.like')
-                  }
-                  style={[
-                    styles.topBarBtn,
-                    { backgroundColor: theme.colors.surfaceAlt },
-                  ]}>
-                  <Text
+        <ScrollView
+          style={styles.flex}
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={[
+            styles.scrollContent,
+            { paddingBottom: scrollBottomPad },
+          ]}>
+          <View style={styles.header}>
+            <View style={styles.headerTop}>
+              <View style={styles.avatarRing}>
+                {avatarUri ? (
+                  <Image
+                    source={{ uri: avatarUri }}
+                    style={[styles.avatar, { borderColor: theme.colors.border }]}
+                  />
+                ) : (
+                  <View
                     style={[
-                      styles.topBarGlyph,
+                      styles.avatar,
+                      styles.avatarFallback,
                       {
-                        color: hasLiked
-                          ? theme.colors.danger
-                          : theme.colors.text,
+                        backgroundColor: theme.colors.primarySoft,
+                        borderColor: theme.colors.border,
                       },
                     ]}>
-                    {hasLiked ? '♥' : '♡'}
-                  </Text>
-                </Pressable>
-              ) : (
-                <View style={styles.topBarBtnSpacer} />
-              )}
-            </View>
-          </View>
+                    <Text
+                      style={[
+                        styles.avatarInitials,
+                        { color: theme.colors.primary },
+                      ]}>
+                      {initialsFromName(name)}
+                    </Text>
+                  </View>
+                )}
+              </View>
 
-          <View style={styles.headerTop}>
-            <View style={styles.avatarRing}>
-              {avatarUri ? (
-                <Image
-                  source={{ uri: avatarUri }}
-                  style={[styles.avatar, { borderColor: theme.colors.border }]}
-                />
-              ) : (
-                <View
-                  style={[
-                    styles.avatar,
-                    styles.avatarFallback,
-                    {
-                      backgroundColor: theme.colors.primarySoft,
-                      borderColor: theme.colors.border,
-                    },
-                  ]}>
+              <View style={styles.statsRow}>
+                <View style={styles.statItem}>
+                  <Text style={[styles.statValue, { color: theme.colors.text }]}>
+                    {photos.length}
+                  </Text>
                   <Text
                     style={[
-                      styles.avatarInitials,
-                      { color: theme.colors.primary },
+                      styles.statLabel,
+                      { color: theme.colors.textMuted },
                     ]}>
-                    {initialsFromName(name)}
+                    {t('profile.stat_photos')}
                   </Text>
                 </View>
-              )}
-            </View>
-
-            <View style={styles.statsRow}>
-              <View style={styles.statItem}>
-                <Text style={[styles.statValue, { color: theme.colors.text }]}>
-                  {photos.length}
-                </Text>
-                <Text
-                  style={[styles.statLabel, { color: theme.colors.textMuted }]}>
-                  {t('profile.photos')}
-                </Text>
-              </View>
-              <View style={styles.statItem}>
-                <Text style={[styles.statValue, { color: theme.colors.text }]}>
-                  {likeCount}
-                </Text>
-                <Text
-                  style={[styles.statLabel, { color: theme.colors.textMuted }]}>
-                  {t('user_profile.like')}
-                </Text>
-              </View>
-              <View style={styles.statItem}>
-                <Text style={[styles.statValue, { color: theme.colors.text }]}>
-                  {profile.IsVerified ? '✓' : '—'}
-                </Text>
-                <Text
-                  style={[styles.statLabel, { color: theme.colors.textMuted }]}>
-                  {t('user_profile.stat_age')}
-                </Text>
+                <View style={styles.statItem}>
+                  <Text style={[styles.statValue, { color: theme.colors.text }]}>
+                    {friendCount}
+                  </Text>
+                  <Text
+                    style={[
+                      styles.statLabel,
+                      { color: theme.colors.textMuted },
+                    ]}>
+                    {t('profile.stat_friends')}
+                  </Text>
+                </View>
+                <View style={styles.statItem}>
+                  <Text style={[styles.statValue, { color: theme.colors.text }]}>
+                    {likeCount}
+                  </Text>
+                  <Text
+                    style={[
+                      styles.statLabel,
+                      { color: theme.colors.textMuted },
+                    ]}>
+                    {t('profile.stat_likes')}
+                  </Text>
+                </View>
               </View>
             </View>
-          </View>
 
-          <View style={styles.nameBlock}>
-            <Text
-              style={[styles.name, { color: theme.colors.text }]}
-              numberOfLines={1}>
-              {name}
-            </Text>
-            <View style={styles.usernameRow}>
+            <View style={styles.nameBlock}>
               <Text
-                style={[styles.username, { color: theme.colors.textMuted }]}
+                style={[styles.name, { color: theme.colors.text }]}
                 numberOfLines={1}>
-                {formatUsername(profile.Username)}
+                {displayAge != null ? `${name}, ${displayAge}` : name}
               </Text>
+              <View style={styles.usernameRow}>
+                <Text
+                  style={[styles.username, { color: theme.colors.textMuted }]}
+                  numberOfLines={1}>
+                  {formatUsername(profile.Username)}
+                </Text>
+              </View>
             </View>
           </View>
-        </View>
 
-        <View style={styles.body}>
+          <View style={styles.body}>
           <Text
             style={[styles.bioFieldLabel, { color: theme.colors.textMuted }]}>
             {t('profile.bio')}
@@ -557,14 +628,20 @@ export function UserProfileScreen({ navigation, route }: Props) {
             )}
           </View>
         </View>
-      </ScrollView>
+        </ScrollView>
+      </SafeAreaView>
 
       {!isSelf ? (
         <View
+          pointerEvents="box-none"
           style={[
-            styles.actionDock,
+            styles.stickyDock,
             {
-              paddingBottom: Math.max(insets.bottom, 12),
+              // Flush to the physical bottom so scroll content cannot peek
+              // through the gap under the CTAs; pad lifts the buttons above
+              // the floating tab pill.
+              bottom: 0,
+              paddingBottom: dock.dockBottom + dock.dockPaddingBottom,
               backgroundColor: theme.colors.background,
               borderTopColor: theme.colors.border,
             },
@@ -574,7 +651,6 @@ export function UserProfileScreen({ navigation, route }: Props) {
             disabled={busy}
             style={[
               styles.actionBtn,
-              styles.actionBtnSecondary,
               {
                 backgroundColor: theme.colors.surfaceAlt,
                 borderColor: theme.colors.border,
@@ -595,7 +671,6 @@ export function UserProfileScreen({ navigation, route }: Props) {
             }
             style={[
               styles.actionBtn,
-              styles.actionBtnPrimary,
               {
                 opacity: busy ? 0.7 : 1,
                 backgroundColor:
@@ -626,43 +701,34 @@ export function UserProfileScreen({ navigation, route }: Props) {
           </Pressable>
         </View>
       ) : null}
-    </SafeAreaView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1 },
-  loading: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  topBar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 12,
-    minHeight: 44,
-  },
-  topBarTitle: {
+  /** Fills the navigator scene and clips overflow so the dock cannot be pushed off-screen. */
+  viewport: {
     flex: 1,
-    textAlign: 'center',
-    fontSize: 16,
-    fontWeight: '700',
+    overflow: 'hidden',
   },
-  topBarActions: {
+  flex: { flex: 1, minHeight: 0 },
+  scrollContent: { paddingBottom: 20 },
+  stickyDock: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    zIndex: 40,
+    elevation: 40,
     flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
+    gap: 10,
+    paddingHorizontal: 16,
+    paddingTop: DOCK_PAD_TOP,
+    borderTopWidth: StyleSheet.hairlineWidth,
   },
-  topBarBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  topBarBtnSpacer: { width: 36, height: 36 },
-  topBarGlyph: { fontSize: 22, fontWeight: '500', marginTop: -1 },
+  loading: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   header: {
     paddingHorizontal: 16,
-    paddingTop: 4,
+    paddingTop: 8,
     paddingBottom: 12,
     gap: 12,
   },
@@ -670,7 +736,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
-    marginTop: 8,
+    marginTop: 4,
   },
   avatarRing: {
     width: AVATAR_SIZE,
@@ -778,27 +844,14 @@ const styles = StyleSheet.create({
     padding: 16,
   },
   emptyInterestsText: { fontSize: 13, lineHeight: 18 },
-  actionDock: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    bottom: 0,
-    flexDirection: 'row',
-    gap: 10,
-    paddingHorizontal: 16,
-    paddingTop: 12,
-    borderTopWidth: StyleSheet.hairlineWidth,
-  },
   actionBtn: {
     flex: 1,
-    height: 48,
+    height: DOCK_ACTION_HEIGHT,
     borderRadius: 999,
     borderWidth: StyleSheet.hairlineWidth,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  actionBtnSecondary: {},
-  actionBtnPrimary: {},
   actionBtnLabel: { fontSize: 14, fontWeight: '700' },
 });
 

@@ -13,6 +13,7 @@ export interface IconButtonProps {
   onPress?: () => void;
   size?: number;
   color?: string;
+  filled?: boolean;
   /** Render a circular surface behind the icon. */
   variant?: 'plain' | 'surface' | 'outline';
   disabled?: boolean;
@@ -28,6 +29,7 @@ export function IconButton({
   onPress,
   size = 22,
   color,
+  filled = false,
   variant = 'surface',
   disabled = false,
   badge,
@@ -78,7 +80,12 @@ export function IconButton({
           animatedStyle,
           style,
         ]}>
-        <Icon name={name} size={size} color={color ?? theme.colors.text} />
+        <Icon
+          name={name}
+          size={size}
+          color={color ?? theme.colors.text}
+          filled={filled}
+        />
         {showBadge ? (
           <View
             style={[

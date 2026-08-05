@@ -24,6 +24,8 @@ export interface EmptyStateProps {
   description?: string;
   actionLabel?: string;
   onAction?: () => void;
+  /** Grow to fill the parent and vertically center (needs parent flexGrow). */
+  fill?: boolean;
   style?: StyleProp<ViewStyle>;
 }
 
@@ -36,6 +38,7 @@ export function EmptyState({
   description,
   actionLabel,
   onAction,
+  fill = false,
   style,
 }: EmptyStateProps) {
   const theme = useTheme();
@@ -62,7 +65,7 @@ export function EmptyState({
   );
 
   return (
-    <View style={[styles.container, style]}>
+    <View style={[styles.container, fill && styles.fill, style]}>
       {onImagePress ? (
         <Pressable
           onPress={onImagePress}
@@ -103,6 +106,10 @@ const styles = StyleSheet.create({
     paddingVertical: 48,
     paddingHorizontal: 24,
     gap: 12,
+  },
+  fill: {
+    flex: 1,
+    minHeight: 280,
   },
   iconWrap: {
     width: 84,

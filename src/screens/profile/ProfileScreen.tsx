@@ -22,7 +22,9 @@ import {
 } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import {
+  getFriends,
   getInterestTypes,
+  getLikeCount,
   getUserProfile,
   InterestTypeItem,
   resolveMediaUrl,
@@ -31,6 +33,7 @@ import {
 import { TabScreenScrollView } from '../../components';
 import { useLocale } from '../../i18n';
 import { useAuth } from '../../navigation/AuthContext';
+import { useTabBarClearance } from '../../navigation/tabBarLayout';
 import { ProfileStackParamList } from '../../navigation/types';
 import {
   assetFromPickerResponse,
@@ -84,6 +87,7 @@ function interestEmoji(type: InterestTypeItem): string {
 export function ProfileScreen({ navigation }: Props) {
   const theme = useTheme();
   const { t } = useLocale();
+  const tabClearance = useTabBarClearance(24);
   const { userId, accessToken } = useAuth();
 
   const [profile, setProfile] = useState<UserProfileResponse | null>(null);
@@ -93,6 +97,8 @@ export function ProfileScreen({ navigation }: Props) {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [friendCount, setFriendCount] = useState(0);
+  const [likeCount, setLikeCount] = useState(0);
   const [verifyTipOpen, setVerifyTipOpen] = useState(false);
   // Start at 1 so skeleton → content never flashes a blank frame.
   const contentOpacity = useSharedValue(1);
@@ -117,15 +123,22 @@ export function ProfileScreen({ navigation }: Props) {
       setError(null);
 
       try {
-        const [profileResponse, interestTypesResponse, photoBundle] =
-          await Promise.all([
-            getUserProfile(userId, accessToken),
-            getInterestTypes(accessToken).catch(() => null),
-            loadProfilePhotos(userId, accessToken).catch(() => ({
-              gallery: [] as ProfilePhoto[],
-              avatarUri: undefined as string | undefined,
-            })),
-          ]);
+        const [
+          profileResponse,
+          interestTypesResponse,
+          photoBundle,
+          friendsRes,
+          likeCountRes,
+        ] = await Promise.all([
+          getUserProfile(userId, accessToken),
+          getInterestTypes(accessToken).catch(() => null),
+          loadProfilePhotos(userId, accessToken).catch(() => ({
+            gallery: [] as ProfilePhoto[],
+            avatarUri: undefined as string | undefined,
+          })),
+          getFriends(userId, accessToken).catch(() => ({ Items: [] })),
+          getLikeCount(userId, accessToken).catch(() => ({ Count: 0 })),
+        ]);
         setProfile(profileResponse);
         setInterestTypes(
           [
@@ -134,6 +147,8 @@ export function ProfileScreen({ navigation }: Props) {
           ].sort((a, b) => (a.SortOrder ?? 0) - (b.SortOrder ?? 0)),
         );
         setPhotos(photoBundle.gallery);
+        setFriendCount(friendsRes.Items?.length ?? 0);
+        setLikeCount(likeCountRes.Count ?? 0);
         const profileAvatar = await resolveMediaUrl(profileResponse.ProfileImage);
         setAvatarUri(photoBundle.avatarUri ?? profileAvatar);
         // Soft settle after skeleton — only when this was a cold load.
@@ -167,6 +182,10 @@ export function ProfileScreen({ navigation }: Props) {
   const fullName = profile
     ? `${profile.FirstName} ${profile.LastName}`.trim()
     : '';
+  const displayName =
+    fullName && typeof profile?.Age === 'number'
+      ? `${fullName}, ${profile.Age}`
+      : fullName;
   const bio = profile?.Bio?.trim() ?? '';
   const hasBio = bio.length > 0;
   const interests = profile?.Interests ?? [];
@@ -242,7 +261,7 @@ export function ProfileScreen({ navigation }: Props) {
 
   if (error && !profile) {
     return shell(
-      <View style={styles.center}>
+      <View style={[styles.center, { paddingBottom: tabClearance }]}>
         <Text style={[styles.errorText, { color: theme.colors.danger }]}>
           {error}
         </Text>
@@ -387,7 +406,7 @@ export function ProfileScreen({ navigation }: Props) {
               </View>
               <View style={styles.statItem}>
                 <Text style={[styles.statValue, { color: theme.colors.text }]}>
-                  0
+                  {friendCount}
                 </Text>
                 <Text
                   style={[styles.statLabel, { color: theme.colors.textMuted }]}>
@@ -396,7 +415,7 @@ export function ProfileScreen({ navigation }: Props) {
               </View>
               <View style={styles.statItem}>
                 <Text style={[styles.statValue, { color: theme.colors.text }]}>
-                  0
+                  {likeCount}
                 </Text>
                 <Text
                   style={[styles.statLabel, { color: theme.colors.textMuted }]}>
@@ -411,7 +430,7 @@ export function ProfileScreen({ navigation }: Props) {
               <Text
                 style={[styles.name, { color: theme.colors.text }]}
                 numberOfLines={1}>
-                {fullName}
+                {displayName}
               </Text>
               {isVerified ? (
                 <View

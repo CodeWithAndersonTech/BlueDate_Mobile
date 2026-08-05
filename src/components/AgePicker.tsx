@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef } from 'react';
 import {
   FlatList,
   NativeScrollEvent,
@@ -49,6 +49,9 @@ export function AgePicker({
   const theme = useTheme();
   const { width: windowWidth } = useWindowDimensions();
   const listRef = useRef<FlatList<number>>(null);
+  /** Ignore momentum/end events while we scroll from a tap / +/-. */
+  const ignoreScrollSync = useRef(false);
+  const ignoreTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const ages = useMemo(
     () => Array.from({ length: max - min + 1 }, (_, i) => min + i),
     [min, max],
@@ -57,33 +60,104 @@ export function AgePicker({
   const selected = value != null ? clamp(value, min, max) : null;
   const sidePad = Math.max(0, (windowWidth - 40 - ITEM_WIDTH) / 2);
 
-  // Keep the rail aligned when value changes via +/- or external set.
-  useEffect(() => {
-    if (selected == null) return;
-    const index = selected - min;
-    const id = requestAnimationFrame(() => {
+  const beginProgrammaticScroll = useCallback(() => {
+    ignoreScrollSync.current = true;
+    if (ignoreTimer.current) {
+      clearTimeout(ignoreTimer.current);
+    }
+    ignoreTimer.current = setTimeout(() => {
+      ignoreScrollSync.current = false;
+      ignoreTimer.current = null;
+    }, 450);
+  }, []);
+
+  const scrollToAge = useCallback(
+    (age: number, animated = true) => {
+      const index = clamp(age, min, max) - min;
+      beginProgrammaticScroll();
       listRef.current?.scrollToOffset({
         offset: index * ITEM_WIDTH,
-        animated: true,
+        animated,
       });
-    });
-    return () => cancelAnimationFrame(id);
-  }, [selected, min]);
+    },
+    [beginProgrammaticScroll, min, max],
+  );
 
-  const onMomentumEnd = (e: NativeSyntheticEvent<NativeScrollEvent>) => {
-    const index = Math.round(e.nativeEvent.contentOffset.x / ITEM_WIDTH);
+  const selectedRef = useRef(selected);
+  const didInitialScroll = useRef(false);
+
+  // First layout: jump rail to the current value (e.g. default 25), not min (18).
+  useEffect(() => {
+    if (selected == null || didInitialScroll.current) return;
+    didInitialScroll.current = true;
+    selectedRef.current = selected;
+    const index = selected - min;
+    beginProgrammaticScroll();
+    // Wait one frame so FlatList has measured, then jump without animation.
+    const timer = setTimeout(() => {
+      listRef.current?.scrollToOffset({
+        offset: index * ITEM_WIDTH,
+        animated: false,
+      });
+    }, 0);
+    return () => clearTimeout(timer);
+  }, [selected, min, beginProgrammaticScroll]);
+
+  // External value changes after mount.
+  useEffect(() => {
+    if (selected == null || !didInitialScroll.current) return;
+    if (selectedRef.current === selected) return;
+    selectedRef.current = selected;
+    scrollToAge(selected, true);
+  }, [selected, scrollToAge]);
+
+  useEffect(() => {
+    return () => {
+      if (ignoreTimer.current) {
+        clearTimeout(ignoreTimer.current);
+      }
+    };
+  }, []);
+
+  const syncFromOffset = (offsetX: number) => {
+    if (ignoreScrollSync.current) {
+      return;
+    }
+    const index = Math.round(offsetX / ITEM_WIDTH);
     const next = clamp(min + index, min, max);
-    if (next !== selected) onChange(next);
+    if (next !== selectedRef.current) {
+      selectedRef.current = next;
+      onChange(next);
+    }
   };
 
-  const step = (delta: number) => {
-    const base = selected ?? min;
-    const next = clamp(base + delta, min, max);
+  const onMomentumEnd = (e: NativeSyntheticEvent<NativeScrollEvent>) => {
+    syncFromOffset(e.nativeEvent.contentOffset.x);
+  };
+
+  const onScrollEndDrag = (e: NativeSyntheticEvent<NativeScrollEvent>) => {
+    // Tap/drag with no momentum still needs a snap sync.
+    if (e.nativeEvent.velocity?.x) {
+      return;
+    }
+    syncFromOffset(e.nativeEvent.contentOffset.x);
+  };
+
+  const selectAge = (age: number) => {
+    const next = clamp(age, min, max);
+    // Lock sync BEFORE onChange/re-render so a tap's scroll-end can't snap back.
+    beginProgrammaticScroll();
+    selectedRef.current = next;
     onChange(next);
     listRef.current?.scrollToOffset({
       offset: (next - min) * ITEM_WIDTH,
       animated: true,
     });
+  };
+
+  const step = (delta: number) => {
+    const base = selected ?? min;
+    selectAge(base + delta);
   };
 
   return (
@@ -112,7 +186,8 @@ export function AgePicker({
               {
                 backgroundColor: theme.colors.card,
                 borderColor: theme.colors.border,
-                opacity: selected != null && selected <= min ? 0.4 : pressed ? 0.85 : 1,
+                opacity:
+                  selected != null && selected <= min ? 0.4 : pressed ? 0.85 : 1,
               },
             ]}
             accessibilityRole="button"
@@ -140,7 +215,8 @@ export function AgePicker({
               {
                 backgroundColor: theme.colors.card,
                 borderColor: theme.colors.border,
-                opacity: selected != null && selected >= max ? 0.4 : pressed ? 0.85 : 1,
+                opacity:
+                  selected != null && selected >= max ? 0.4 : pressed ? 0.85 : 1,
               },
             ]}
             accessibilityRole="button"
@@ -167,8 +243,15 @@ export function AgePicker({
             keyExtractor={item => String(item)}
             showsHorizontalScrollIndicator={false}
             snapToInterval={ITEM_WIDTH}
+            snapToAlignment="start"
+            disableIntervalMomentum
             decelerationRate="fast"
             bounces
+            nestedScrollEnabled
+            directionalLockEnabled
+            keyboardShouldPersistTaps="handled"
+            removeClippedSubviews={false}
+            initialScrollIndex={selected != null ? selected - min : 0}
             contentContainerStyle={{ paddingHorizontal: sidePad }}
             getItemLayout={(_, index) => ({
               length: ITEM_WIDTH,
@@ -176,17 +259,13 @@ export function AgePicker({
               index,
             })}
             onMomentumScrollEnd={onMomentumEnd}
+            onScrollEndDrag={onScrollEndDrag}
             renderItem={({ item }) => {
               const active = item === selected;
               return (
                 <Pressable
-                  onPress={() => {
-                    onChange(item);
-                    listRef.current?.scrollToOffset({
-                      offset: (item - min) * ITEM_WIDTH,
-                      animated: true,
-                    });
-                  }}
+                  onPress={() => selectAge(item)}
+                  hitSlop={4}
                   style={styles.item}>
                   <Typography
                     variant={active ? 'title' : 'body'}

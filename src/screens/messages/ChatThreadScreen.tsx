@@ -308,12 +308,16 @@ export function ChatThreadScreen({ navigation, route }: Props) {
                 style={styles.flexFill}
                 data={messages}
                 keyExtractor={item => item.id}
-                contentContainerStyle={[styles.thread, { paddingBottom: 12 }]}
+                contentContainerStyle={[
+                  styles.thread,
+                  { paddingBottom: 12, flexGrow: 1 },
+                ]}
                 showsVerticalScrollIndicator={false}
                 keyboardShouldPersistTaps="handled"
                 keyboardDismissMode="interactive"
                 ListEmptyComponent={
                   <EmptyState
+                    fill
                     icon="message"
                     title={t('messages.empty_thread_title')}
                     description={t('messages.empty_thread_desc')}

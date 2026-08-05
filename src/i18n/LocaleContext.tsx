@@ -141,6 +141,7 @@ const FALLBACK_TRANSLATIONS: Record<string, string> = {
   'common.apple': 'Apple',
   'common.back': 'Back',
   'common.close': 'Close',
+  'common.error_generic': 'Something went wrong.',
   // Profile
   'profile.edit': 'Edit Profile',
   'profile.edit_action': 'Edit',
@@ -187,7 +188,8 @@ const FALLBACK_TRANSLATIONS: Record<string, string> = {
   'user_profile.not_found_title': 'User not found',
   'user_profile.not_found_desc': 'This profile is no longer available.',
   'user_profile.message': 'Send message',
-  'user_profile.message_friends_only': 'You can message friends only.',
+  'user_profile.message_friends_only':
+    'Send a friend request first to start messaging.',
   'user_profile.offline': 'Offline',
   'user_profile.stat_mutual': 'Mutual',
   'user_profile.stat_age': 'Age',
@@ -538,6 +540,7 @@ const LOCAL_TRANSLATIONS_TR: Record<string, string> = {
   'profile.retry': 'Tekrar dene',
   'common.back': 'Geri',
   'common.close': 'Kapat',
+  'common.error_generic': 'Bir hata oluştu.',
   'profile.loading': 'Profil yükleniyor...',
   'profile.session_missing': 'Oturum bilgisi bulunamadı.',
   'profile.load_failed': 'Profil yüklenemedi.',
@@ -547,7 +550,8 @@ const LOCAL_TRANSLATIONS_TR: Record<string, string> = {
   'user_profile.not_found_title': 'Kullanıcı bulunamadı',
   'user_profile.not_found_desc': 'Bu profil artık mevcut değil.',
   'user_profile.message': 'Mesaj gönder',
-  'user_profile.message_friends_only': 'Sadece arkadaşlarınla mesajlaşabilirsin.',
+  'user_profile.message_friends_only':
+    'Mesajlaşmak için önce arkadaşlık isteği göndermelisin.',
   'user_profile.offline': 'Çevrimdışı',
   'user_profile.stat_mutual': 'Ortak',
   'user_profile.stat_age': 'Yaş',
@@ -964,12 +968,29 @@ export function LocaleProvider({ children }: { children: React.ReactNode }) {
 
   const bindUser = useCallback(
     async (userId: number) => {
-      if (!device?.uniqueId) {
+      const info = await getDeviceLaunchInfo();
+      const uniqueId = device?.uniqueId || info.uniqueId;
+      if (!uniqueId) {
         return;
       }
 
+      // Ensure a device row exists (e.g. after DB wipe while app stayed in memory).
+      try {
+        await bootstrapDevice({
+          DeviceUniqueId: uniqueId,
+          Platform: info.platform,
+          OsVersion: info.osVersion,
+          LanguageCode: device?.languageCode || info.language,
+          CultureCode: device?.cultureCode || info.cultureCode,
+          Theme: device?.theme || (info.colorScheme === 'dark' ? 'dark' : 'light'),
+          PushToken: null,
+        });
+      } catch (bootstrapError) {
+        console.warn('[Locale] bootstrap before bind failed', bootstrapError);
+      }
+
       const bound = await bindDeviceUser({
-        DeviceUniqueId: device.uniqueId,
+        DeviceUniqueId: uniqueId,
         UserId: userId,
       });
 
@@ -977,12 +998,21 @@ export function LocaleProvider({ children }: { children: React.ReactNode }) {
         prev
           ? {
               ...prev,
+              uniqueId,
               userId: bound.UserId ?? userId,
             }
-          : prev,
+          : {
+              id: bound.Id,
+              uniqueId,
+              languageCode: info.language.split(/[-_]/)[0] || 'en',
+              cultureCode: info.cultureCode,
+              theme: info.colorScheme === 'dark' ? 'dark' : 'light',
+              userId: bound.UserId ?? userId,
+              isNew: false,
+            },
       );
     },
-    [device?.uniqueId],
+    [device],
   );
 
   const t = useCallback(

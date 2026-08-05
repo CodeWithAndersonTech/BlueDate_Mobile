@@ -29,6 +29,8 @@ export function MainTabs() {
         swipeEnabled: true,
         animationEnabled: true,
         lazy: true,
+        // Full-bleed scenes — floating tab bar overlays; nested docks use
+        // useStickyDockLayout() against safe-area + window metrics.
         sceneStyle: { flex: 1, backgroundColor: 'transparent' },
       }}>
       <Tab.Screen name="Home" component={HomeStack} />

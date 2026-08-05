@@ -8,6 +8,8 @@ import { NearbyUser } from '../components/NearbyCard';
 
 export interface Friend {
   id: string;
+  /** Stable numeric id used for UserProfile navigation (900000+ = mock). */
+  userId: number;
   name: string;
   username: string;
   avatar?: string;
@@ -15,16 +17,29 @@ export interface Friend {
   premium?: boolean;
   lastActive?: string;
   mutualFriends?: number;
+  bio?: string;
+  age?: number;
 }
 
 export interface FriendRequest {
   id: string;
+  /** Stable numeric id used for UserProfile navigation (900000+ = mock). */
+  userId: number;
   name: string;
   username: string;
   avatar?: string;
   mutualFriends: number;
   sentAt: string;
   premium?: boolean;
+  bio?: string;
+  age?: number;
+}
+
+/** Mock profile user ids live in this range so they never hit the real API. */
+export const MOCK_PROFILE_ID_MIN = 900000;
+
+export function isMockProfileUserId(userId: number): boolean {
+  return Number.isFinite(userId) && userId >= MOCK_PROFILE_ID_MIN;
 }
 
 export interface PremiumPlan {
@@ -89,19 +104,36 @@ export const currentUser: UserProfile = {
 /** Populated later from nearby/BLE API — no mock feed. */
 export const nearbyUsers: NearbyUser[] = [];
 
-/** Populated later from friends API — no mock feed. */
-export const friends: Friend[] = [];
+/** UI preview rows when Friends API is empty. */
+export const friends: Friend[] = [
+  {
+    id: 'mock-friend-1',
+    userId: 900003,
+    name: 'Zeynep Kara',
+    username: '@zeynepk',
+    avatar: avatar(47),
+    online: true,
+    premium: true,
+    mutualFriends: 5,
+    lastActive: 'now',
+    age: 24,
+    bio: 'Kitap, yoga ve sakin kahvaltılar. Hafta içi akşam yürüyüşüne açığım.',
+  },
+];
 
 /** UI preview rows when Incoming API is empty. */
 export const incomingRequests: FriendRequest[] = [
   {
     id: 'mock-incoming-1',
+    userId: 900001,
     name: 'Elif Demir',
     username: '@elifd',
     avatar: avatar(32),
     mutualFriends: 3,
     sentAt: '2h',
     premium: true,
+    age: 26,
+    bio: 'Tasarım, kahve ve akşam yürüyüşleri. Yeni yerler keşfetmeyi severim.',
   },
 ];
 
@@ -109,13 +141,39 @@ export const incomingRequests: FriendRequest[] = [
 export const sentRequests: FriendRequest[] = [
   {
     id: 'mock-sent-1',
+    userId: 900002,
     name: 'Can Yıldız',
     username: '@cany',
     avatar: avatar(15),
     mutualFriends: 1,
     sentAt: '1d',
+    age: 28,
+    bio: 'Spor, sinema ve iyi playlistler. Hafta sonu planına açığım.',
   },
 ];
+
+export type MockUserProfile = {
+  userId: number;
+  firstName: string;
+  lastName: string;
+  username: string;
+  bio: string;
+  profileImage?: string;
+  isVerified: boolean;
+  age?: number;
+  mutualFriends: number;
+  /** 1 = PendingOutgoing, 2 = PendingIncoming, 3 = Friends. */
+  relation: 1 | 2 | 3;
+  friendshipId: number;
+  interests: Array<{
+    id: number;
+    value: string;
+    code: string;
+    name: string;
+  }>;
+  photoUris: string[];
+  likeCount: number;
+};
 
 export const premiumPlans: PremiumPlan[] = [
   {
@@ -497,6 +555,36 @@ const INTEREST_PROFILES: Record<string, PublicInterest[]> = {
       value: 'Non-alcoholic · sparkling water',
     },
   ],
+  'mock-incoming-1': [
+    { key: 'food', label: 'Food', value: 'Avokadolu tost & brunch' },
+    { key: 'dessert', label: 'Dessert', value: 'Cheesecake' },
+    { key: 'coffee', label: 'Coffee', value: 'Flat white' },
+    {
+      key: 'beverage',
+      label: 'Alcoholic or non-alcoholic beverage',
+      value: 'Non-alcoholic · limonata',
+    },
+  ],
+  'mock-sent-1': [
+    { key: 'food', label: 'Food', value: 'Burger & ızgara' },
+    { key: 'dessert', label: 'Dessert', value: 'Brownie' },
+    { key: 'coffee', label: 'Coffee', value: 'Americano' },
+    {
+      key: 'beverage',
+      label: 'Alcoholic or non-alcoholic beverage',
+      value: 'Alcoholic · craft bira',
+    },
+  ],
+  'mock-friend-1': [
+    { key: 'food', label: 'Food', value: 'Akdeniz mutfağı' },
+    { key: 'dessert', label: 'Dessert', value: 'Yoğurtlu tatlı' },
+    { key: 'coffee', label: 'Coffee', value: 'Filter coffee' },
+    {
+      key: 'beverage',
+      label: 'Alcoholic or non-alcoholic beverage',
+      value: 'Non-alcoholic · bitki çayı',
+    },
+  ],
 };
 
 const DEFAULT_INTERESTS: PublicInterest[] = [
@@ -522,7 +610,90 @@ const DEFAULT_BIOS: Record<string, string> = {
   r3: 'Doğa, kamp ve akustik müzik.',
   s1: 'Asya mutfağı ve teknoloji meraklısı.',
   s2: 'Koşu, podcast ve brunch.',
+  'mock-incoming-1':
+    'Tasarım, kahve ve akşam yürüyüşleri. Yeni yerler keşfetmeyi severim.',
+  'mock-sent-1':
+    'Spor, sinema ve iyi playlistler. Hafta sonu planına açığım.',
+  'mock-friend-1':
+    'Kitap, yoga ve sakin kahvaltılar. Hafta içi akşam yürüyüşüne açığım.',
 };
+
+function personToMockProfile(
+  person: {
+    id: string;
+    userId: number;
+    name: string;
+    username: string;
+    avatar?: string;
+    premium?: boolean;
+    bio?: string;
+    age?: number;
+    mutualFriends?: number;
+  },
+  relation: 1 | 2 | 3,
+  friendshipId: number,
+): MockUserProfile {
+  const parts = person.name.trim().split(/\s+/);
+  const firstName = parts[0] ?? person.name;
+  const lastName = parts.slice(1).join(' ');
+  const interestSeed = INTEREST_PROFILES[person.id] ?? DEFAULT_INTERESTS;
+
+  return {
+    userId: person.userId,
+    firstName,
+    lastName,
+    username: person.username.replace(/^@/, ''),
+    bio:
+      person.bio ??
+      DEFAULT_BIOS[person.id] ??
+      'Henüz bir biyografi eklenmemiş.',
+    profileImage: person.avatar,
+    isVerified: Boolean(person.premium),
+    age: person.age,
+    mutualFriends: person.mutualFriends ?? 0,
+    relation,
+    friendshipId,
+    interests: interestSeed.map((item, index) => ({
+      id: person.userId * 10 + index,
+      value: item.value,
+      code: item.key,
+      name: item.label,
+    })),
+    photoUris: [
+      person.avatar ?? avatar(20),
+      avatar((person.userId % 70) + 1),
+      avatar(((person.userId + 8) % 70) + 1),
+    ],
+    likeCount: relation === 3 ? 64 : relation === 2 ? 42 : 18,
+  };
+}
+
+const MOCK_PROFILES: Record<number, MockUserProfile> = {
+  ...Object.fromEntries(
+    friends.map((f, i) => [
+      f.userId,
+      personToMockProfile(f, 3, -(3000 + i)),
+    ]),
+  ),
+  ...Object.fromEntries(
+    incomingRequests.map((r, i) => [
+      r.userId,
+      personToMockProfile(r, 2, -(1000 + i)),
+    ]),
+  ),
+  ...Object.fromEntries(
+    sentRequests.map((r, i) => [
+      r.userId,
+      personToMockProfile(r, 1, -(2000 + i)),
+    ]),
+  ),
+};
+
+export function getMockUserProfile(
+  userId: number,
+): MockUserProfile | undefined {
+  return MOCK_PROFILES[userId];
+}
 
 function buildPublicUser(base: {
   id: string;
@@ -550,7 +721,10 @@ function buildPublicUser(base: {
 }
 
 export function findPublicUser(userId: string): PublicUser | undefined {
-  const friend = friends.find(f => f.id === userId);
+  const numericId = Number(userId);
+  const friend = friends.find(
+    f => f.id === userId || f.userId === numericId,
+  );
   if (friend) {
     return buildPublicUser({
       id: friend.id,
@@ -558,6 +732,8 @@ export function findPublicUser(userId: string): PublicUser | undefined {
       username: friend.username,
       avatar: friend.avatar,
       online: friend.online,
+      bio: friend.bio,
+      age: friend.age,
       mutualFriends: friend.mutualFriends,
     });
   }
@@ -576,24 +752,32 @@ export function findPublicUser(userId: string): PublicUser | undefined {
     });
   }
 
-  const incoming = incomingRequests.find(r => r.id === userId);
+  const incoming = incomingRequests.find(
+    r => r.id === userId || r.userId === numericId,
+  );
   if (incoming) {
     return buildPublicUser({
       id: incoming.id,
       name: incoming.name,
       username: incoming.username,
       avatar: incoming.avatar,
+      bio: incoming.bio,
+      age: incoming.age,
       mutualFriends: incoming.mutualFriends,
     });
   }
 
-  const sent = sentRequests.find(r => r.id === userId);
+  const sent = sentRequests.find(
+    r => r.id === userId || r.userId === numericId,
+  );
   if (sent) {
     return buildPublicUser({
       id: sent.id,
       name: sent.name,
       username: sent.username,
       avatar: sent.avatar,
+      bio: sent.bio,
+      age: sent.age,
       mutualFriends: sent.mutualFriends,
     });
   }

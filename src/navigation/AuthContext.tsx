@@ -7,8 +7,13 @@ import React, {
   useState,
 } from 'react';
 import { loginUser, registerUser } from '../api';
+import {
+  clearSessionTokens,
+  hydrateSessionFromStorage,
+  persistSessionTokens,
+  subscribeSession,
+} from '../api/sessionStore';
 import { useLocale } from '../i18n';
-import { appStorage } from '../utils/appStorage';
 
 type AuthStatus = 'bootstrapping' | 'signedOut' | 'signedIn';
 
@@ -53,9 +58,6 @@ interface AuthContextValue {
   signOut: () => Promise<void>;
 }
 
-const TOKEN_KEY = '@bluedate/accessToken';
-const USER_ID_KEY = '@bluedate/userId';
-
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
@@ -63,6 +65,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [status, setStatus] = useState<AuthStatus>('bootstrapping');
   const [userId, setUserId] = useState<number | null>(null);
   const [accessToken, setAccessToken] = useState<string | null>(null);
+
+  useEffect(() => {
+    return subscribeSession(session => {
+      setAccessToken(session.accessToken);
+      setUserId(session.userId);
+      setStatus(prev => {
+        if (prev === 'bootstrapping') {
+          return prev;
+        }
+        return session.accessToken ? 'signedIn' : 'signedOut';
+      });
+    });
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -73,18 +88,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
 
       try {
-        const [token, storedUserId] = await Promise.all([
-          appStorage.getItem(TOKEN_KEY),
-          appStorage.getItem(USER_ID_KEY),
-        ]);
-
+        const session = await hydrateSessionFromStorage();
         if (cancelled) {
           return;
         }
 
-        if (token) {
-          setAccessToken(token);
-          setUserId(storedUserId ? Number(storedUserId) : null);
+        if (session.accessToken) {
+          setAccessToken(session.accessToken);
+          setUserId(session.userId);
           setStatus('signedIn');
         } else {
           setStatus('signedOut');
@@ -103,21 +114,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [localeStatus]);
 
   const persistSession = useCallback(
-    async (token: string | null, nextUserId: number | null) => {
+    async (
+      token: string | null,
+      nextUserId: number | null,
+      nextRefreshToken?: string | null,
+    ) => {
+      await persistSessionTokens({
+        accessToken: token,
+        refreshToken: nextRefreshToken,
+        userId: nextUserId,
+      });
       setAccessToken(token);
       setUserId(nextUserId);
-
-      if (token) {
-        await appStorage.setItem(TOKEN_KEY, token);
-      } else {
-        await appStorage.removeItem(TOKEN_KEY);
-      }
-
-      if (nextUserId != null) {
-        await appStorage.setItem(USER_ID_KEY, String(nextUserId));
-      } else {
-        await appStorage.removeItem(USER_ID_KEY);
-      }
     },
     [],
   );
@@ -139,7 +147,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         response.AccessToken ??
         (response as { accessToken?: string }).accessToken ??
         null;
-      await persistSession(token, nextUserId);
+      await persistSession(token, nextUserId, response.RefreshToken ?? null);
 
       if (nextUserId != null) {
         try {
@@ -170,42 +178,53 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         throw new Error(response.ErrorMessage?.[0] ?? 'Register failed');
       }
 
-      await bindUser(response.UserId);
-
+      // Bind requires JWT now — deferred until login/verification completes.
       return {
         userId: response.UserId,
         email: payload.email,
         password: payload.password,
       };
     },
-    [bindUser],
+    [],
   );
 
   const completeEmailVerification = useCallback(
     async (payload: CompleteVerificationPayload) => {
-      try {
-        const loginResponse = await loginUser({
-          Email: payload.email,
-          Password: payload.password,
-        });
+      const loginResponse = await loginUser({
+        Email: payload.email,
+        Password: payload.password,
+      });
 
-        await persistSession(
-          loginResponse.AccessToken ?? null,
-          loginResponse.UserId ?? payload.userId,
+      if (!loginResponse.AccessToken) {
+        throw new Error(
+          loginResponse.ErrorMessage?.[0] ?? 'Login after verification failed',
         );
-      } catch {
-        // Design/demo path: OTP accepted — continue even if login API is flaky.
-        await persistSession(`demo-token-${payload.userId}`, payload.userId);
       }
+
+      await persistSession(
+        loginResponse.AccessToken,
+        loginResponse.UserId ?? payload.userId,
+        loginResponse.RefreshToken ?? null,
+      );
+
+      const nextUserId = loginResponse.UserId ?? payload.userId;
+      try {
+        await bindUser(nextUserId);
+      } catch {
+        // best-effort
+      }
+
       setStatus('signedIn');
     },
-    [persistSession],
+    [persistSession, bindUser],
   );
 
   const signOut = useCallback(async () => {
-    await persistSession(null, null);
+    await clearSessionTokens();
+    setAccessToken(null);
+    setUserId(null);
     setStatus('signedOut');
-  }, [persistSession]);
+  }, []);
 
   const value = useMemo<AuthContextValue>(
     () => ({

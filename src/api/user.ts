@@ -18,6 +18,9 @@ export type UserProfileResponse = ApiEnvelope & {
   Bio?: string | null;
   ProfileImage?: string | null;
   Phone?: string | null;
+  BirthDate?: string | null;
+  /** Whole years derived from BirthDate. */
+  Age?: number | null;
   IsEmailVerified: boolean;
   /** Onaylı hesap — tüm interest type'lar + en az 1 galeri fotoğrafı. */
   IsVerified: boolean;

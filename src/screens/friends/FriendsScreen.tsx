@@ -1,15 +1,23 @@
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useFocusEffect } from '@react-navigation/native';
 import React, { useCallback, useState } from 'react';
-import { ActivityIndicator, Alert, StyleSheet, View } from 'react-native';
+import {
+  ActivityIndicator,
+  Alert,
+  Pressable,
+  StyleSheet,
+  View,
+} from 'react-native';
 import {
   Button,
   EmptyState,
   Header,
+  Icon,
   IconButton,
   Screen,
   SegmentedControl,
   TabScreenScrollView,
+  Typography,
   UserListItem,
 } from '../../components';
 import {
@@ -29,6 +37,7 @@ import { FriendsStackParamList } from '../../navigation/types';
 import { useTheme } from '../../theme';
 import {
   FriendRequest,
+  friends as mockFriends,
   incomingRequests as mockIncoming,
   sentRequests as mockSent,
 } from '../../utils/mockData';
@@ -37,14 +46,19 @@ type Props = NativeStackScreenProps<FriendsStackParamList, 'FriendsMain'>;
 
 type Tab = 'friends' | 'incoming' | 'sent';
 
-/** Negative ids mark local UI mocks — skip API on accept/reject/cancel. */
+type MockPerson = Pick<
+  FriendRequest,
+  'userId' | 'name' | 'username' | 'avatar' | 'premium'
+>;
+
+/** Negative friendship ids mark local UI mocks — skip API on accept/reject/cancel. */
 function toMockFriendshipItem(
-  req: FriendRequest,
+  person: MockPerson,
   friendshipId: number,
   statusCode: string,
 ): FriendshipListItem {
-  const parts = req.name.trim().split(/\s+/);
-  const firstName = parts[0] ?? req.name;
+  const parts = person.name.trim().split(/\s+/);
+  const firstName = parts[0] ?? person.name;
   const lastName = parts.slice(1).join(' ');
   return {
     FriendshipId: friendshipId,
@@ -53,16 +67,19 @@ function toMockFriendshipItem(
     StatusName: statusCode,
     CreatedDate: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(),
     User: {
-      UserId: friendshipId,
+      UserId: person.userId,
       FirstName: firstName,
       LastName: lastName,
-      Username: req.username.replace(/^@/, ''),
-      ProfileImage: req.avatar ?? null,
-      IsVerified: Boolean(req.premium),
+      Username: person.username.replace(/^@/, ''),
+      ProfileImage: person.avatar ?? null,
+      IsVerified: Boolean(person.premium),
     },
   };
 }
 
+const MOCK_FRIENDS: FriendshipListItem[] = mockFriends.map((f, i) =>
+  toMockFriendshipItem(f, -(3000 + i), 'friends'),
+);
 const MOCK_INCOMING: FriendshipListItem[] = mockIncoming.map((r, i) =>
   toMockFriendshipItem(r, -(1000 + i), 'pending'),
 );
@@ -85,6 +102,7 @@ export function FriendsScreen({ navigation }: Props) {
 
   const load = useCallback(async () => {
     if (!userId) {
+      setFriends(MOCK_FRIENDS);
       setIncomingRequests(MOCK_INCOMING);
       setSentRequests(MOCK_SENT);
       setLoading(false);
@@ -97,13 +115,15 @@ export function FriendsScreen({ navigation }: Props) {
         getIncomingFriendRequests(userId, accessToken),
         getSentFriendRequests(userId, accessToken),
       ]);
-      setFriends(friendsRes.Items ?? []);
+      const nextFriends = friendsRes.Items ?? [];
       const incoming = incomingRes.Items ?? [];
       const sent = sentRes.Items ?? [];
+      setFriends(nextFriends.length ? nextFriends : MOCK_FRIENDS);
       setIncomingRequests(incoming.length ? incoming : MOCK_INCOMING);
       setSentRequests(sent.length ? sent : MOCK_SENT);
     } catch (error) {
       // Keep UI reviewable even when API fails.
+      setFriends(MOCK_FRIENDS);
       setIncomingRequests(MOCK_INCOMING);
       setSentRequests(MOCK_SENT);
       Alert.alert(
@@ -337,14 +357,29 @@ export function FriendsScreen({ navigation }: Props) {
                     avatarUri={r.User.ProfileImage ?? undefined}
                     onPress={() => openProfile(r.User.UserId)}
                     right={
-                      <Button
-                        label={t('friends.cancel')}
-                        size="sm"
-                        variant="outline"
-                        fullWidth={false}
-                        disabled={busy}
+                      <Pressable
                         onPress={() => onCancel(r)}
-                      />
+                        disabled={busy}
+                        hitSlop={6}
+                        accessibilityRole="button"
+                        accessibilityLabel={t('friends.cancel')}
+                        style={({ pressed }) => [
+                          styles.cancelChip,
+                          {
+                            backgroundColor: theme.colors.surfaceAlt,
+                            borderColor: theme.colors.border,
+                            opacity: busy ? 0.45 : pressed ? 0.82 : 1,
+                          },
+                        ]}>
+                        <Icon
+                          name="close"
+                          size={14}
+                          color={theme.colors.textMuted}
+                        />
+                        <Typography variant="caption" color="textSecondary">
+                          {t('friends.cancel')}
+                        </Typography>
+                      </Pressable>
                     }
                   />
                 );
@@ -360,6 +395,15 @@ const styles = StyleSheet.create({
   segmentWrap: { paddingHorizontal: 20, marginBottom: 8 },
   content: { paddingHorizontal: 20, paddingTop: 8, gap: 4 },
   rowActions: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  cancelChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    height: 34,
+    paddingHorizontal: 12,
+    borderRadius: 17,
+    borderWidth: StyleSheet.hairlineWidth,
+  },
   loading: { flex: 1, alignItems: 'center', justifyContent: 'center' },
 });
 

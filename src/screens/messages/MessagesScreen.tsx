@@ -19,6 +19,7 @@ import {
 } from '../../components';
 import { useLocale } from '../../i18n';
 import { useChat } from '../../navigation/ChatContext';
+import { useScreenBottomPad } from '../../navigation/tabBarLayout';
 import { AppStackParamList } from '../../navigation/types';
 import { useTheme } from '../../theme';
 
@@ -27,6 +28,7 @@ type Props = NativeStackScreenProps<AppStackParamList, 'Messages'>;
 export function MessagesScreen({ navigation }: Props) {
   const theme = useTheme();
   const { t } = useLocale();
+  const bottomPad = useScreenBottomPad(24);
   const { conversations, loadingInbox, refreshInbox, unreadCount } = useChat();
   const [query, setQuery] = useState('');
   const [refreshing, setRefreshing] = useState(false);
@@ -60,7 +62,6 @@ export function MessagesScreen({ navigation }: Props) {
   return (
     <Screen edges={['top']}>
       <Header
-        large
         title={t('messages.title')}
         subtitle={
           unreadCount > 0
@@ -70,6 +71,8 @@ export function MessagesScreen({ navigation }: Props) {
               )
             : t('messages.subtitle')
         }
+        onBack={() => navigation.goBack()}
+        backAccessibilityLabel={t('common.back')}
       />
 
       <View style={styles.searchWrap}>
@@ -89,7 +92,10 @@ export function MessagesScreen({ navigation }: Props) {
       ) : (
         <ScrollView
           showsVerticalScrollIndicator={false}
-          contentContainerStyle={styles.content}
+          contentContainerStyle={[
+            styles.content,
+            { paddingBottom: bottomPad, flexGrow: 1 },
+          ]}
           keyboardShouldPersistTaps="handled"
           refreshControl={
             <RefreshControl
@@ -100,6 +106,7 @@ export function MessagesScreen({ navigation }: Props) {
           }>
           {filtered.length === 0 ? (
             <EmptyState
+              fill
               icon="message"
               title={
                 query.trim()
@@ -195,9 +202,7 @@ const styles = StyleSheet.create({
   content: {
     paddingHorizontal: 12,
     paddingTop: 4,
-    paddingBottom: 24,
     gap: 2,
-    flexGrow: 1,
   },
   row: {
     flexDirection: 'row',

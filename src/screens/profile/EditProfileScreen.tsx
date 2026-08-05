@@ -41,6 +41,7 @@ import {
   saveUserInterest,
   updateUserBio,
 } from '../../api';
+import { BottomActionDock, Header } from '../../components';
 import { useLocale } from '../../i18n';
 import { useAuth } from '../../navigation/AuthContext';
 import { useLockTabSwipe } from '../../navigation/useLockTabSwipe';
@@ -417,14 +418,11 @@ export function EditProfileScreen({ navigation, route }: Props) {
         translucent
       />
 
-      {/* Header */}
-      <View style={styles.header}>
-        <Text
-          style={[styles.headerTitle, { color: theme.colors.text }]}
-          numberOfLines={1}>
-          {t('edit.title')}
-        </Text>
-      </View>
+      <Header
+        title={t('edit.title')}
+        onBack={() => navigation.goBack()}
+        backAccessibilityLabel={t('common.back')}
+      />
 
       {loading ? (
         <EditProfileSkeleton />
@@ -639,16 +637,7 @@ export function EditProfileScreen({ navigation, route }: Props) {
             )}
           </ScrollView>
 
-          {/* Page-local save bar — lifted above home indicator */}
-          <View
-            style={[
-              styles.saveBar,
-              {
-                paddingBottom: insets.bottom + 40,
-                backgroundColor: theme.colors.surface,
-                borderTopColor: theme.colors.border,
-              },
-            ]}>
+          <BottomActionDock elevated>
             {justSaved ? (
               <View style={styles.savedRow}>
                 <Text style={{ color: theme.colors.success, fontSize: 16 }}>
@@ -695,7 +684,7 @@ export function EditProfileScreen({ navigation, route }: Props) {
                 )}
               </Pressable>
             )}
-          </View>
+          </BottomActionDock>
         </Animated.View>
       )}
 
@@ -943,19 +932,6 @@ const styles = StyleSheet.create({
   root: { flex: 1 },
   flex: { flex: 1 },
   body: { flex: 1 },
-  header: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 20,
-    paddingTop: 0,
-    paddingBottom: 4,
-    minHeight: 36,
-  },
-  headerTitle: {
-    textAlign: 'center',
-    fontSize: 17,
-    fontWeight: '600',
-  },
   center: {
     flex: 1,
     alignItems: 'center',
@@ -1087,13 +1063,8 @@ const styles = StyleSheet.create({
   plusGlyph: { fontSize: 18, fontWeight: '500' },
   tileTitle: { fontSize: 11, lineHeight: 14, marginBottom: 2 },
   tileValue: { fontSize: 13, lineHeight: 16, fontWeight: '600' },
-  saveBar: {
-    flexShrink: 0,
-    paddingHorizontal: 20,
-    paddingTop: 16,
-    borderTopWidth: StyleSheet.hairlineWidth,
-  },
   saveBtn: {
+    flex: 1,
     height: SAVE_BTN_HEIGHT,
     borderRadius: 999,
     borderWidth: 1.5,
@@ -1102,6 +1073,7 @@ const styles = StyleSheet.create({
   },
   saveLabel: { fontSize: 16, fontWeight: '700' },
   savedRow: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',

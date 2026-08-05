@@ -11,12 +11,10 @@ import {
   View,
 } from 'react-native';
 import LinearGradient from 'react-native-linear-gradient';
-import {
-  SafeAreaView,
-  useSafeAreaInsets,
-} from 'react-native-safe-area-context';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import {
   CountryFlag,
+  Header,
   Icon,
   FALLBACK_LANGUAGES,
   ListRow,
@@ -25,6 +23,7 @@ import {
   SettingsSep,
   Switch,
 } from '../../components';
+import { useScreenBottomPad } from '../../navigation/tabBarLayout';
 import { usePremium } from '../../hooks/usePremium';
 import { useLocale } from '../../i18n';
 import { useAuth } from '../../navigation/AuthContext';
@@ -45,7 +44,7 @@ export function SettingsScreen() {
   const navigation =
     useNavigation<NativeStackNavigationProp<ProfileStackParamList>>();
   const theme = useTheme();
-  const insets = useSafeAreaInsets();
+  const bottomPad = useScreenBottomPad(32);
   const { t, languageCode, languages, setLanguage } = useLocale();
   const { preference, setPreference, accentKey, setAccent } =
     useThemeController();
@@ -96,20 +95,15 @@ export function SettingsScreen() {
         translucent
       />
 
-      <View style={styles.header}>
-        <Text
-          style={[styles.headerTitle, { color: theme.colors.text }]}
-          numberOfLines={1}>
-          {t('settings.title')}
-        </Text>
-      </View>
+      <Header
+        title={t('settings.title')}
+        onBack={() => navigation.goBack()}
+        backAccessibilityLabel={t('common.back')}
+      />
 
       <ScrollView
         showsVerticalScrollIndicator={false}
-        contentContainerStyle={[
-          styles.content,
-          { paddingBottom: Math.max(insets.bottom, 16) + 56 },
-        ]}>
+        contentContainerStyle={[styles.content, { paddingBottom: bottomPad }]}>
         <SectionLabel label={t('settings.appearance')} />
         <SettingsGroup>
           <View style={styles.block}>
@@ -383,19 +377,6 @@ function AccentSwatch({
 
 const styles = StyleSheet.create({
   root: { flex: 1 },
-  header: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 20,
-    paddingTop: 0,
-    paddingBottom: 4,
-    minHeight: 36,
-  },
-  headerTitle: {
-    textAlign: 'center',
-    fontSize: 17,
-    fontWeight: '600',
-  },
   content: {
     paddingHorizontal: 20,
     gap: 8,

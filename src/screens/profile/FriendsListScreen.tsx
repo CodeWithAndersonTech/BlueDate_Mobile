@@ -10,6 +10,7 @@ import {
   UserListItem,
 } from '../../components';
 import { useLocale } from '../../i18n';
+import { useScreenBottomPad } from '../../navigation/tabBarLayout';
 import { ProfileStackParamList } from '../../navigation/types';
 import { useLockTabSwipe } from '../../navigation/useLockTabSwipe';
 import { useTheme } from '../../theme';
@@ -21,6 +22,7 @@ export function FriendsListScreen({ navigation }: Props) {
   useLockTabSwipe();
   const theme = useTheme();
   const { t } = useLocale();
+  const bottomPad = useScreenBottomPad(24);
   const [query, setQuery] = useState('');
   // Real friends API will populate this — no mock feed.
   const [friends] = useState<Friend[]>([]);
@@ -39,6 +41,7 @@ export function FriendsListScreen({ navigation }: Props) {
     <Screen edges={['top']}>
       <Header
         onBack={() => navigation.goBack()}
+        backAccessibilityLabel={t('common.back')}
         title={t('profile.friends')}
         subtitle={`${friends.length} ${t('friends.people')}`}
       />
@@ -54,9 +57,13 @@ export function FriendsListScreen({ navigation }: Props) {
       <ScrollView
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
-        contentContainerStyle={styles.content}>
+        contentContainerStyle={[
+          styles.content,
+          { paddingBottom: bottomPad, flexGrow: 1 },
+        ]}>
         {list.length === 0 ? (
           <EmptyState
+            fill
             icon="users"
             title={t('friends.empty_title')}
             description={t('friends.empty_desc')}
@@ -95,7 +102,7 @@ export function FriendsListScreen({ navigation }: Props) {
 
 const styles = StyleSheet.create({
   searchWrap: { paddingHorizontal: 20, paddingVertical: 8 },
-  content: { paddingHorizontal: 20, paddingBottom: 32, gap: 4 },
+  content: { paddingHorizontal: 20, gap: 4 },
 });
 
 export default FriendsListScreen;

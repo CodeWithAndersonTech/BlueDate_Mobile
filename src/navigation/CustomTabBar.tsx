@@ -1,4 +1,5 @@
 import type { MaterialTopTabBarProps } from '@react-navigation/material-top-tabs';
+import { getFocusedRouteNameFromRoute } from '@react-navigation/native';
 import React, { useEffect, useMemo } from 'react';
 import {
   Animated as RNAnimated,
@@ -17,13 +18,16 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { images } from '../assets';
 import { Icon, IconName } from '../components';
 import { useTheme } from '../theme';
-import { FLOATING_TAB_BAR_HEIGHT } from './tabBarLayout';
+import { FLOATING_TAB_BAR_HEIGHT, TAB_ROOT_SCREENS } from './tabBarLayout';
 
 // Layout hooks live in ./tabBarLayout (single source of truth for clearance
 // math); re-exported here so existing imports keep working.
 export {
   FLOATING_TAB_BAR_HEIGHT,
+  TAB_ROOT_SCREENS,
   useFloatingTabOffset,
+  useScreenBottomPad,
+  useStickyDockLayout,
   useTabBarClearance,
 } from './tabBarLayout';
 
@@ -50,24 +54,21 @@ const PILL_RADIUS = 34;
 const PILL_PADDING_H = 6;
 const INDICATOR_INSET = 5;
 
-/** Root screens of each tab stack — tab bar stays visible only on these. */
-const TAB_ROOT_SCREENS = new Set([
-  'HomeFeed',
-  'NearbyMain',
-  'FriendsMain',
-  'ProfileMain',
-  'Premium',
-]);
-
 function shouldHideTabBar(state: MaterialTopTabBarProps['state']): boolean {
   const route = state.routes[state.index];
   const nested = route.state as
     | { index?: number; routes?: { name: string }[] }
     | undefined;
 
-  // Stack has pushed a nested screen (EditProfile, Settings, …) — always hide.
+  // Stack has pushed a nested screen (EditProfile, UserProfile, …) — hide.
   if (nested?.routes?.length && (nested.index ?? 0) > 0) {
     return true;
+  }
+
+  // Prefer the deepest focused route name (more reliable than raw stack index).
+  const focused = getFocusedRouteNameFromRoute(route);
+  if (focused) {
+    return !TAB_ROOT_SCREENS.has(focused);
   }
 
   if (!nested?.routes?.length) {
@@ -125,7 +126,7 @@ export function CustomTabBar({
   }, [position, state.routes, tabCount, tabWidth, indicatorWidth]);
 
   if (hide) {
-    return <View style={styles.hiddenHost} />;
+    return null;
   }
 
   const staticIndicatorOffset =
@@ -273,10 +274,6 @@ function TabItem({
 }
 
 const styles = StyleSheet.create({
-  hiddenHost: {
-    height: 0,
-    overflow: 'hidden',
-  },
   wrapper: {
     position: 'absolute',
     left: 0,

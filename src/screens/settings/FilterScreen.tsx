@@ -2,9 +2,9 @@ import { useNavigation } from '@react-navigation/native';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Alert, StyleSheet, View } from 'react-native';
 import { ScrollView } from 'react-native-gesture-handler';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { fetchFilterPrefs, saveFilterPrefs } from '../../api/filterPrefs';
 import {
+  BottomActionDock,
   Button,
   Card,
   Chip,
@@ -44,7 +44,6 @@ export function FilterScreen() {
   useLockTabSwipe();
   const navigation = useNavigation();
   const theme = useTheme();
-  const insets = useSafeAreaInsets();
   const { t } = useLocale();
   const { userId, accessToken } = useAuth();
 
@@ -165,6 +164,8 @@ export function FilterScreen() {
     <Screen edges={['top']}>
       <Header
         title={t('filter.title')}
+        onBack={() => navigation.goBack()}
+        backAccessibilityLabel={t('common.back')}
         actions={[
           {
             icon: 'sliders',
@@ -272,22 +273,15 @@ export function FilterScreen() {
             </View>
           </ScrollView>
 
-          <View
-            style={[
-              styles.applyBar,
-              {
-                paddingBottom: Math.max(insets.bottom, 12),
-                backgroundColor: theme.colors.background,
-                borderTopColor: theme.colors.border,
-              },
-            ]}>
+          <BottomActionDock style={styles.applyDock}>
             <Button
               label={saving ? t('filter.saving') : t('filter.apply')}
               leftIcon="check"
               onPress={onApply}
               disabled={saving || !userId}
+              style={styles.applyBtn}
             />
-          </View>
+          </BottomActionDock>
         </View>
       )}
     </Screen>
@@ -316,11 +310,8 @@ const styles = StyleSheet.create({
   hint: { marginTop: 6, marginBottom: 4, lineHeight: 18 },
   slider: { marginTop: 18, marginBottom: 10 },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginTop: 12 },
-  applyBar: {
-    paddingHorizontal: 20,
-    paddingTop: 12,
-    borderTopWidth: StyleSheet.hairlineWidth,
-  },
+  applyDock: { paddingHorizontal: 20 },
+  applyBtn: { flex: 1 },
 });
 
 export default FilterScreen;

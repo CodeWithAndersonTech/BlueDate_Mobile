@@ -26,6 +26,7 @@ import {
 } from '../../api';
 import { useLocale } from '../../i18n';
 import { useAuth } from '../../navigation/AuthContext';
+import { useScreenBottomPad } from '../../navigation/tabBarLayout';
 import { FriendsStackParamList } from '../../navigation/types';
 import { useTheme } from '../../theme';
 
@@ -40,6 +41,7 @@ type RowState = {
 export function SearchUsersScreen({ navigation }: Props) {
   const { t } = useLocale();
   const theme = useTheme();
+  const bottomPad = useScreenBottomPad(24);
   const { userId, accessToken } = useAuth();
   const [query, setQuery] = useState('');
   const [directory, setDirectory] = useState<SocialUser[]>([]);
@@ -201,6 +203,7 @@ export function SearchUsersScreen({ navigation }: Props) {
     <Screen edges={['top']}>
       <Header
         onBack={() => navigation.goBack()}
+        backAccessibilityLabel={t('common.back')}
         title={t('friends.search_title')}
       />
 
@@ -223,10 +226,14 @@ export function SearchUsersScreen({ navigation }: Props) {
         <ScrollView
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
-          contentContainerStyle={styles.content}>
+          contentContainerStyle={[
+            styles.content,
+            { paddingBottom: bottomPad, flexGrow: 1 },
+          ]}>
           {query.trim() === '' ? (
             directory.length === 0 ? (
               <EmptyState
+                fill
                 icon="search"
                 title={t('friends.search_title')}
                 description={t('friends.search_placeholder')}
@@ -239,6 +246,7 @@ export function SearchUsersScreen({ navigation }: Props) {
             )
           ) : results.length === 0 ? (
             <EmptyState
+              fill
               icon="search"
               title={t('friends.no_results_title')}
               description={t('friends.no_results_desc').replace(
@@ -257,7 +265,7 @@ export function SearchUsersScreen({ navigation }: Props) {
 
 const styles = StyleSheet.create({
   searchWrap: { paddingHorizontal: 20, paddingVertical: 8 },
-  content: { paddingHorizontal: 20, paddingBottom: 32, gap: 4 },
+  content: { paddingHorizontal: 20, gap: 4 },
   suggest: { gap: 8 },
   loading: { flex: 1, alignItems: 'center', justifyContent: 'center' },
 });

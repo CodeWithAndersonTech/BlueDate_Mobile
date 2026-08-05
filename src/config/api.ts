@@ -78,6 +78,7 @@ export const API_PATHS = {
   translationsByCode: '/api/LanguageTranslations/by-code',
   register: '/api/Authroizations/authorization-register',
   login: '/api/Authroizations/authorization-login',
+  refresh: '/api/Authroizations/refresh',
   changePassword: '/api/Authroizations/change-password',
   userProfile: '/api/User/profile',
   userBio: '/api/User/bio',
