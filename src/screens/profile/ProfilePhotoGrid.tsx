@@ -158,7 +158,9 @@ export function ProfilePhotoGrid({
         </Text>
         <View style={styles.headerRight}>
           <Text style={[styles.count, { color: theme.colors.textMuted }]}>
-            {photos.length}/{MAX_GALLERY_PHOTOS}
+            {editable
+              ? `${photos.length}/${MAX_GALLERY_PHOTOS}`
+              : String(photos.length)}
           </Text>
           {busy ? <ActivityIndicator color={theme.colors.primary} /> : null}
         </View>

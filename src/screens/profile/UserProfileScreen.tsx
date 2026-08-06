@@ -45,6 +45,7 @@ import {
 import { useLockTabSwipe } from '../../navigation/useLockTabSwipe';
 import {
   loadProfilePhotos,
+  mergeAvatarIntoDisplayPhotos,
   ProfilePhoto,
 } from '../../services/photos/photoStore';
 import { useTheme } from '../../theme';
@@ -191,19 +192,29 @@ export function UserProfileScreen({ navigation, route }: Props) {
             gallery: [] as ProfilePhoto[],
             avatarUri: undefined as string | undefined,
           })),
-          getFriends(targetId, accessToken).catch(() => ({ Items: [] })),
+          getFriends(targetId, accessToken).catch(() => ({
+            IsSuccess: true,
+            Items: [],
+          })),
           getLikeCount(targetId, accessToken).catch(() => ({ Count: 0 })),
         ]);
       setProfile(profileRes);
       loadedProfileIdRef.current = profileRes.Id;
-      setPhotos(photoBundle.gallery);
+      const profileAvatar = await resolveMediaUrl(profileRes.ProfileImage);
+      const avatarUriResolved = photoBundle.avatarUri ?? profileAvatar;
+      setAvatarUri(avatarUriResolved);
+      // Friend profiles: count/show avatar + gallery (users see both as "photos").
+      setPhotos(
+        mergeAvatarIntoDisplayPhotos({
+          avatarUri: avatarUriResolved,
+          gallery: photoBundle.gallery,
+        }),
+      );
       setDisplayAge(
         typeof profileRes.Age === 'number' ? profileRes.Age : null,
       );
       setFriendCount(friendshipItems(friendsRes).length);
       setLikeCount(likeCountFromResponse(likeCountRes));
-      const profileAvatar = await resolveMediaUrl(profileRes.ProfileImage);
-      setAvatarUri(photoBundle.avatarUri ?? profileAvatar);
 
       if (meId && meId !== targetId) {
         const [statusRes, likeStatusRes] = await Promise.all([

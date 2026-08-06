@@ -7,13 +7,13 @@ import { isEmulator } from 'react-native-device-info';
  *
  * TestFlight öncesi: quick-tunnel.sh çalıştır → USE_PRODUCTION = true yap.
  */
-const USE_PRODUCTION = false;
+const USE_PRODUCTION = true;
 
 /**
  * Cloudflare QUICK tunnel URL — her tunnel açılışında değişir.
  * Terminal: AD_BlueDateApp/deploy/quick-tunnel.sh  (bu satırı otomatik günceller)
  */
-const PROD_API_URL = 'https://symantec-conviction-gmbh-reveal.trycloudflare.com';
+const PROD_API_URL = 'https://lender-installing-laptops-includes.trycloudflare.com';
 
 /** Lokal debug (USE_PRODUCTION = false) */
 const DEV_PORT = 5135;

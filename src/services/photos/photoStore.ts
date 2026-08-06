@@ -108,6 +108,40 @@ export async function loadProfilePhotos(
   };
 }
 
+/**
+ * Photos shown on a profile: avatar (if any) + gallery, de-duplicated by URL.
+ * Used for friend/other profile grids and the photo count stat.
+ */
+export function mergeAvatarIntoDisplayPhotos(bundle: {
+  avatarUri?: string;
+  gallery: ProfilePhoto[];
+}): ProfilePhoto[] {
+  const gallery = bundle.gallery ?? [];
+  const avatarUri = bundle.avatarUri?.trim();
+  if (!avatarUri) {
+    return gallery;
+  }
+
+  const normalizedAvatar = avatarUri.replace(/\/+$/, '');
+  const alreadyInGallery = gallery.some(p => {
+    const uri = (p.uri ?? '').replace(/\/+$/, '');
+    return uri === normalizedAvatar || uri.endsWith(normalizedAvatar) || normalizedAvatar.endsWith(uri);
+  });
+  if (alreadyInGallery) {
+    return gallery;
+  }
+
+  return [
+    {
+      id: 'avatar-display',
+      uri: avatarUri,
+      sortOrder: -1,
+      localOnly: false,
+    },
+    ...gallery,
+  ];
+}
+
 export async function pickAndAddGalleryPhoto(
   userId: number,
   asset: { uri: string; fileName?: string; type?: string },

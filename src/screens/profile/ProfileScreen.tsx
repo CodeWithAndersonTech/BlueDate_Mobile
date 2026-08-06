@@ -22,6 +22,7 @@ import {
 } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import {
+  friendshipItems,
   getFriends,
   getInterestTypes,
   getLikeCount,
@@ -159,7 +160,7 @@ export function ProfileScreen({ navigation }: Props) {
           ].sort((a, b) => (a.SortOrder ?? 0) - (b.SortOrder ?? 0)),
         );
         setPhotos(photoBundle.gallery);
-        setFriendCount(friendsRes.Items?.length ?? 0);
+        setFriendCount(friendshipItems(friendsRes).length);
         setLikeCount(likeCountFromResponse(likeCountRes));
         const profileAvatar = await resolveMediaUrl(profileResponse.ProfileImage);
         setAvatarUri(photoBundle.avatarUri ?? profileAvatar);
