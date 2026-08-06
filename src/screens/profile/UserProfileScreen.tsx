@@ -24,9 +24,11 @@ import {
   getLikeStatus,
   getOrCreateDirectConversation,
   getUserProfile,
+  likeCountFromResponse,
   likeUser,
   resolveMediaUrl,
   sendFriendRequest,
+  unfriend,
   unlikeUser,
   UserProfileInterest,
   UserProfileResponse,
@@ -115,6 +117,7 @@ export function UserProfileScreen({ navigation, route }: Props) {
   const [displayAge, setDisplayAge] = useState<number | null>(null);
   const [friendCount, setFriendCount] = useState(0);
   const [busy, setBusy] = useState(false);
+  const [likeBusy, setLikeBusy] = useState(false);
   const loadedProfileIdRef = useRef<number | null>(null);
 
   const load = useCallback(async () => {
@@ -198,7 +201,7 @@ export function UserProfileScreen({ navigation, route }: Props) {
         typeof profileRes.Age === 'number' ? profileRes.Age : null,
       );
       setFriendCount(friendshipItems(friendsRes).length);
-      setLikeCount(likeCountRes.Count ?? 0);
+      setLikeCount(likeCountFromResponse(likeCountRes));
       const profileAvatar = await resolveMediaUrl(profileRes.ProfileImage);
       setAvatarUri(photoBundle.avatarUri ?? profileAvatar);
 
@@ -304,7 +307,7 @@ export function UserProfileScreen({ navigation, route }: Props) {
   };
 
   const onToggleLike = async () => {
-    if (!profile || busy || (meId != null && meId === targetId)) return;
+    if (!profile || likeBusy || (meId != null && meId === targetId)) return;
 
     if (isMockProfileUserId(targetId)) {
       setHasLiked(prev => !prev);
@@ -313,25 +316,80 @@ export function UserProfileScreen({ navigation, route }: Props) {
     }
 
     if (!meId) return;
-    setBusy(true);
+    const prevLiked = hasLiked;
+    const prevCount = likeCount;
+    setLikeBusy(true);
+    setHasLiked(!prevLiked);
+    setLikeCount(c => (prevLiked ? Math.max(0, c - 1) : c + 1));
     try {
-      if (hasLiked) {
+      if (prevLiked) {
         await unlikeUser(meId, targetId, accessToken);
-        setHasLiked(false);
-        setLikeCount(c => Math.max(0, c - 1));
       } else {
         await likeUser(meId, targetId, accessToken);
-        setHasLiked(true);
-        setLikeCount(c => c + 1);
+      }
+      const fresh = await getLikeCount(targetId, accessToken).catch(() => null);
+      if (fresh) {
+        setLikeCount(likeCountFromResponse(fresh));
       }
     } catch (error) {
+      setHasLiked(prevLiked);
+      setLikeCount(prevCount);
       Alert.alert(
         t('user_profile.like'),
         error instanceof Error ? error.message : t('user_profile.action_error'),
       );
     } finally {
-      setBusy(false);
+      setLikeBusy(false);
     }
+  };
+
+  const onUnfriend = () => {
+    if (
+      !profile ||
+      busy ||
+      meId === targetId ||
+      relation !== FriendshipRelation.Friends
+    ) {
+      return;
+    }
+    Alert.alert(
+      t('user_profile.unfriend_title'),
+      t('user_profile.unfriend_confirm'),
+      [
+        { text: t('profile.status_cancel'), style: 'cancel' },
+        {
+          text: t('user_profile.unfriend'),
+          style: 'destructive',
+          onPress: () => {
+            void (async () => {
+              if (isMockProfileUserId(targetId)) {
+                setRelation(FriendshipRelation.None);
+                setFriendshipId(null);
+                setHasLiked(false);
+                return;
+              }
+              if (!meId) return;
+              setBusy(true);
+              try {
+                await unfriend(meId, targetId, accessToken);
+                setRelation(FriendshipRelation.None);
+                setFriendshipId(null);
+                setHasLiked(false);
+              } catch (error) {
+                Alert.alert(
+                  t('user_profile.unfriend'),
+                  error instanceof Error
+                    ? error.message
+                    : t('user_profile.action_error'),
+                );
+              } finally {
+                setBusy(false);
+              }
+            })();
+          },
+        },
+      ],
+    );
   };
 
   const onMessagePress = async () => {
@@ -704,27 +762,53 @@ export function UserProfileScreen({ navigation, route }: Props) {
             },
           ]}>
           {areFriends ? (
-            <Pressable
-              onPress={onMessagePress}
-              disabled={busy}
-              style={[
-                styles.actionBtn,
-                {
-                  backgroundColor: theme.colors.primary,
-                  borderColor: theme.colors.primary,
-                  opacity: busy ? 0.7 : 1,
-                },
-              ]}>
-              <Text
+            <>
+              <Pressable
+                key="message"
+                onPress={onMessagePress}
+                disabled={busy}
                 style={[
-                  styles.actionBtnLabel,
-                  { color: theme.colors.onPrimary },
+                  styles.actionBtn,
+                  styles.actionBtnPrimary,
+                  {
+                    backgroundColor: theme.colors.primary,
+                    borderColor: theme.colors.primary,
+                    opacity: busy ? 0.7 : 1,
+                  },
                 ]}>
-                {t('user_profile.message')}
-              </Text>
-            </Pressable>
+                <Text
+                  style={[
+                    styles.actionBtnLabel,
+                    { color: theme.colors.onPrimary },
+                  ]}>
+                  {t('user_profile.message')}
+                </Text>
+              </Pressable>
+              <Pressable
+                key="unfriend"
+                onPress={onUnfriend}
+                disabled={busy}
+                style={[
+                  styles.actionBtn,
+                  styles.actionBtnSecondary,
+                  {
+                    backgroundColor: theme.colors.surfaceAlt,
+                    borderColor: theme.colors.border,
+                    opacity: busy ? 0.7 : 1,
+                  },
+                ]}>
+                <Text
+                  style={[
+                    styles.actionBtnLabel,
+                    { color: theme.colors.danger },
+                  ]}>
+                  {t('user_profile.unfriend')}
+                </Text>
+              </Pressable>
+            </>
           ) : (
             <Pressable
+              key="friend-action"
               onPress={onFriendAction}
               disabled={
                 busy ||
@@ -733,6 +817,7 @@ export function UserProfileScreen({ navigation, route }: Props) {
               }
               style={[
                 styles.actionBtn,
+                styles.actionBtnPrimary,
                 {
                   opacity: busy ? 0.7 : 1,
                   backgroundColor:
@@ -942,12 +1027,20 @@ const styles = StyleSheet.create({
   },
   emptyInterestsText: { fontSize: 13, lineHeight: 18 },
   actionBtn: {
-    flex: 1,
     height: DOCK_ACTION_HEIGHT,
     borderRadius: 999,
     borderWidth: StyleSheet.hairlineWidth,
     alignItems: 'center',
     justifyContent: 'center',
+    paddingHorizontal: 12,
+  },
+  actionBtnPrimary: {
+    flex: 1.4,
+    minWidth: 0,
+  },
+  actionBtnSecondary: {
+    flex: 1,
+    minWidth: 0,
   },
   actionBtnLabel: { fontSize: 14, fontWeight: '700' },
 });

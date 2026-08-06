@@ -1,11 +1,27 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
+  Dimensions,
   Image,
   Pressable,
   ScrollView,
   StyleSheet,
   View,
 } from 'react-native';
+import {
+  Gesture,
+  GestureDetector,
+  GestureHandlerRootView,
+} from 'react-native-gesture-handler';
+import Animated, {
+  Easing,
+  Extrapolation,
+  interpolate,
+  runOnJS,
+  useAnimatedStyle,
+  useSharedValue,
+  withSpring,
+  withTiming,
+} from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Video from 'react-native-video';
 import { Avatar, Icon, Typography } from '../../components';
@@ -13,6 +29,8 @@ import { StoryItem, StoryUserGroup } from '../../api';
 import { useLocale } from '../../i18n';
 
 const PHOTO_MS = 5000;
+const { height: SCREEN_H } = Dimensions.get('window');
+const DISMISS_Y = 120;
 
 type Props = {
   visible: boolean;
@@ -43,7 +61,10 @@ export function StoryViewer({
   const [groupIndex, setGroupIndex] = useState(startGroupIndex);
   const [storyIndex, setStoryIndex] = useState(0);
   const [progress, setProgress] = useState(0);
+  const [paused, setPaused] = useState(false);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const translateY = useSharedValue(0);
+  const backdrop = useSharedValue(1);
 
   const activeGroups = useMemo(
     () => groups.filter(g => g.Stories.length > 0),
@@ -57,6 +78,10 @@ export function StoryViewer({
     g => g.User.UserId !== group?.User.UserId,
   );
 
+  const dismiss = useCallback(() => {
+    onClose();
+  }, [onClose]);
+
   useEffect(() => {
     if (!visible) return;
     setGroupIndex(
@@ -64,10 +89,19 @@ export function StoryViewer({
     );
     setStoryIndex(0);
     setProgress(0);
-  }, [visible, startGroupIndex, activeGroups.length]);
+    setPaused(false);
+    translateY.value = 0;
+    backdrop.value = 1;
+  }, [visible, startGroupIndex, activeGroups.length, backdrop, translateY]);
 
   useEffect(() => {
-    if (!visible || !story) return;
+    if (!visible || !story || paused) {
+      if (timerRef.current) {
+        clearInterval(timerRef.current);
+        timerRef.current = null;
+      }
+      return;
+    }
 
     if (timerRef.current) {
       clearInterval(timerRef.current);
@@ -95,7 +129,69 @@ export function StoryViewer({
       }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [visible, groupIndex, storyIndex, story?.Id]);
+  }, [visible, groupIndex, storyIndex, story?.Id, paused]);
+
+  const pan = Gesture.Pan()
+    .activeOffsetY(14)
+    .failOffsetX([-30, 30])
+    .onBegin(() => {
+      runOnJS(setPaused)(true);
+    })
+    .onUpdate(e => {
+      translateY.value = Math.max(0, e.translationY);
+    })
+    .onEnd(e => {
+      const shouldDismiss =
+        translateY.value > DISMISS_Y || e.velocityY > 1100;
+      if (shouldDismiss) {
+        backdrop.value = withTiming(0, { duration: 160 });
+        translateY.value = withTiming(
+          SCREEN_H,
+          { duration: 200, easing: Easing.out(Easing.cubic) },
+          finished => {
+            if (finished) {
+              runOnJS(dismiss)();
+            }
+          },
+        );
+      } else {
+        translateY.value = withSpring(0, { damping: 20, stiffness: 260 });
+        runOnJS(setPaused)(false);
+      }
+    })
+    .onFinalize((_e, success) => {
+      // If gesture cancelled without end dismiss path, resume playback.
+      if (!success && translateY.value < DISMISS_Y) {
+        runOnJS(setPaused)(false);
+      }
+    });
+
+  const sheetStyle = useAnimatedStyle(() => {
+    const drag = interpolate(
+      translateY.value,
+      [0, DISMISS_Y * 1.8],
+      [0, 1],
+      Extrapolation.CLAMP,
+    );
+    return {
+      transform: [
+        { translateY: translateY.value },
+        { scale: interpolate(drag, [0, 1], [1, 0.92]) },
+      ],
+      borderRadius: interpolate(drag, [0, 1], [0, 18]),
+      overflow: 'hidden' as const,
+      opacity: interpolate(drag, [0, 1], [1, 0.75]),
+    };
+  });
+
+  const rootStyle = useAnimatedStyle(() => ({
+    backgroundColor: `rgba(0,0,0,${interpolate(
+      translateY.value,
+      [0, DISMISS_Y * 1.6],
+      [1, 0.25],
+      Extrapolation.CLAMP,
+    ) * backdrop.value})`,
+  }));
 
   if (!visible || !group || !story) {
     return null;
@@ -138,133 +234,138 @@ export function StoryViewer({
   }
 
   return (
-    <View style={styles.root}>
-      {/* Full-bleed media behind chrome */}
-      <View style={styles.mediaWrap}>
-        {story.MediaType === 'video' ? (
-          <Video
-            key={story.Id}
-            source={{ uri: story.MediaUrl }}
-            style={styles.media}
-            resizeMode="cover"
-            controls={false}
-            paused={false}
-            onProgress={({ currentTime, seekableDuration }) => {
-              if (seekableDuration > 0) {
-                setProgress(Math.min(1, currentTime / seekableDuration));
-              }
-            }}
-            onEnd={goNext}
-            onError={goNext}
-          />
-        ) : (
-          <Image
-            key={story.Id}
-            source={{ uri: story.MediaUrl }}
-            style={styles.media}
-            resizeMode="cover"
-          />
-        )}
-        {story.Caption ? (
-          <View style={[styles.caption, { bottom: insets.bottom + 24 }]}>
-            <Typography variant="body" tint="#fff" align="center">
-              {story.Caption}
-            </Typography>
-          </View>
-        ) : null}
-      </View>
-
-      <View style={styles.tapZones} pointerEvents="box-none">
-        <Pressable style={styles.tapLeft} onPress={goPrev} />
-        <Pressable style={styles.tapRight} onPress={goNext} />
-      </View>
-
-      {/* Overlay chrome — does not push media down */}
-      <View
-        style={styles.top}
-        pointerEvents="box-none">
-        <View style={styles.bars}>
-          {group.Stories.map((s, i) => (
-            <View key={s.Id} style={styles.barTrack}>
-              <View
-                style={[
-                  styles.barFill,
-                  {
-                    width:
-                      i < storyIndex
-                        ? '100%'
-                        : i === storyIndex
-                          ? `${Math.round(progress * 100)}%`
-                          : '0%',
-                  },
-                ]}
-              />
+    <GestureHandlerRootView style={styles.root}>
+      <Animated.View style={[styles.rootFill, rootStyle]}>
+        <GestureDetector gesture={pan}>
+          <Animated.View style={[styles.sheet, sheetStyle]}>
+            <View style={styles.mediaWrap}>
+              {story.MediaType === 'video' ? (
+                <Video
+                  key={story.Id}
+                  source={{ uri: story.MediaUrl }}
+                  style={styles.media}
+                  resizeMode="cover"
+                  controls={false}
+                  paused={paused}
+                  onProgress={({ currentTime, seekableDuration }) => {
+                    if (seekableDuration > 0) {
+                      setProgress(Math.min(1, currentTime / seekableDuration));
+                    }
+                  }}
+                  onEnd={goNext}
+                  onError={goNext}
+                />
+              ) : (
+                <Image
+                  key={story.Id}
+                  source={{ uri: story.MediaUrl }}
+                  style={styles.media}
+                  resizeMode="cover"
+                />
+              )}
+              {story.Caption ? (
+                <View style={[styles.caption, { bottom: insets.bottom + 24 }]}>
+                  <Typography variant="body" tint="#fff" align="center">
+                    {story.Caption}
+                  </Typography>
+                </View>
+              ) : null}
             </View>
-          ))}
-        </View>
 
-        <View style={styles.headerRow} pointerEvents="box-none">
-          <View style={styles.userBlock} pointerEvents="box-none">
-            <Pressable
-              style={styles.userRow}
-              onPress={() => onOpenProfile?.(group.User.UserId)}
-              disabled={!onOpenProfile}
-              hitSlop={6}>
-              <Avatar
-                uri={group.User.ProfileImage ?? undefined}
-                name={userLabel(group)}
-                size="sm"
-              />
-              <Typography variant="bodyStrong" tint="#fff" numberOfLines={1}>
-                {userLabel(group)}
-              </Typography>
-            </Pressable>
+            <View style={styles.tapZones} pointerEvents="box-none">
+              <Pressable style={styles.tapLeft} onPress={goPrev} />
+              <Pressable style={styles.tapRight} onPress={goNext} />
+            </View>
 
-            {otherGroups.length > 0 ? (
-              <ScrollView
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                contentContainerStyle={styles.friendsRow}
-                keyboardShouldPersistTaps="handled">
-                {otherGroups.map(g => (
-                  <Pressable
-                    key={g.User.UserId}
-                    onPress={() => onOpenProfile?.(g.User.UserId)}
-                    onLongPress={() => openGroupStories(g.User.UserId)}
-                    style={styles.friendAvatar}
-                    accessibilityLabel={userLabel(g)}>
-                    <View style={styles.friendRing}>
-                      <Avatar
-                        uri={g.User.ProfileImage ?? undefined}
-                        name={userLabel(g)}
-                        size="xs"
-                      />
-                    </View>
-                  </Pressable>
+            <View style={styles.top} pointerEvents="box-none">
+              <View style={styles.bars}>
+                {group.Stories.map((s, i) => (
+                  <View key={s.Id} style={styles.barTrack}>
+                    <View
+                      style={[
+                        styles.barFill,
+                        {
+                          width:
+                            i < storyIndex
+                              ? '100%'
+                              : i === storyIndex
+                                ? `${Math.round(progress * 100)}%`
+                                : '0%',
+                        },
+                      ]}
+                    />
+                  </View>
                 ))}
-              </ScrollView>
-            ) : null}
-          </View>
+              </View>
 
-          <View style={styles.headerActions}>
-            {isOwner && onDelete ? (
-              <Pressable
-                onPress={() => onDelete(story)}
-                hitSlop={10}
-                accessibilityLabel={t('stories.delete')}>
-                <Icon name="trash" size={20} color="#fff" />
-              </Pressable>
-            ) : null}
-            <Pressable
-              onPress={onClose}
-              hitSlop={10}
-              accessibilityLabel={t('common.close')}>
-              <Icon name="close" size={22} color="#fff" />
-            </Pressable>
-          </View>
-        </View>
-      </View>
-    </View>
+              <View style={styles.headerRow} pointerEvents="box-none">
+                <View style={styles.userBlock} pointerEvents="box-none">
+                  <Pressable
+                    style={styles.userRow}
+                    onPress={() => onOpenProfile?.(group.User.UserId)}
+                    disabled={!onOpenProfile}
+                    hitSlop={6}>
+                    <Avatar
+                      uri={group.User.ProfileImage ?? undefined}
+                      name={userLabel(group)}
+                      size="sm"
+                    />
+                    <Typography
+                      variant="bodyStrong"
+                      tint="#fff"
+                      numberOfLines={1}>
+                      {userLabel(group)}
+                    </Typography>
+                  </Pressable>
+
+                  {otherGroups.length > 0 ? (
+                    <ScrollView
+                      horizontal
+                      showsHorizontalScrollIndicator={false}
+                      contentContainerStyle={styles.friendsRow}
+                      keyboardShouldPersistTaps="handled">
+                      {otherGroups.map(g => (
+                        <Pressable
+                          key={g.User.UserId}
+                          onPress={() => onOpenProfile?.(g.User.UserId)}
+                          onLongPress={() => openGroupStories(g.User.UserId)}
+                          style={styles.friendAvatar}
+                          accessibilityLabel={userLabel(g)}>
+                          <View style={styles.friendRing}>
+                            <Avatar
+                              uri={g.User.ProfileImage ?? undefined}
+                              name={userLabel(g)}
+                              size="xs"
+                            />
+                          </View>
+                        </Pressable>
+                      ))}
+                    </ScrollView>
+                  ) : null}
+                </View>
+
+                <View style={styles.headerActions}>
+                  {isOwner && onDelete ? (
+                    <Pressable
+                      onPress={() => onDelete(story)}
+                      hitSlop={10}
+                      accessibilityLabel={t('stories.delete')}>
+                      <Icon name="trash" size={20} color="#fff" />
+                    </Pressable>
+                  ) : null}
+                  <Pressable
+                    onPress={onClose}
+                    hitSlop={10}
+                    accessibilityLabel={t('common.close')}>
+                    <Icon name="close" size={22} color="#fff" />
+                  </Pressable>
+                </View>
+              </View>
+            </View>
+          </Animated.View>
+        </GestureDetector>
+      </Animated.View>
+    </GestureHandlerRootView>
   );
 }
 
@@ -272,6 +373,12 @@ const styles = StyleSheet.create({
   root: {
     ...StyleSheet.absoluteFill,
     zIndex: 50,
+  },
+  rootFill: {
+    flex: 1,
+  },
+  sheet: {
+    flex: 1,
     backgroundColor: '#000',
   },
   mediaWrap: {

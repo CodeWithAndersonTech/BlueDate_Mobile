@@ -119,7 +119,16 @@ export type LikeStatusResponse = ApiEnvelope & {
 export type LikeCountResponse = ApiEnvelope & {
   UserId: number;
   Count: number;
+  count?: number;
+  userId?: number;
 };
+
+export function likeCountFromResponse(
+  res: LikeCountResponse | { Count?: number; count?: number } | null | undefined,
+): number {
+  const n = Number(res?.Count ?? res?.count ?? 0);
+  return Number.isFinite(n) && n > 0 ? n : Math.max(0, n);
+}
 
 export type SocialActivityItem = {
   Type: 'like' | 'friend_request' | string;
@@ -279,11 +288,16 @@ export function getLikeStatus(
   });
 }
 
-export function getLikeCount(userId: number, token?: string | null) {
-  return apiRequest<LikeCountResponse>(API_PATHS.userLikeCount, {
+export async function getLikeCount(userId: number, token?: string | null) {
+  const raw = await apiRequest<LikeCountResponse>(API_PATHS.userLikeCount, {
     query: { userId },
     token,
   });
+  return {
+    ...raw,
+    UserId: Number(raw.UserId ?? raw.userId ?? userId),
+    Count: likeCountFromResponse(raw),
+  };
 }
 
 export function getSocialActivity(

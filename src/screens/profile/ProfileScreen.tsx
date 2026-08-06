@@ -27,6 +27,7 @@ import {
   getLikeCount,
   getUserProfile,
   InterestTypeItem,
+  likeCountFromResponse,
   resolveMediaUrl,
   updateUserStatus,
   UserProfileResponse,
@@ -159,7 +160,7 @@ export function ProfileScreen({ navigation }: Props) {
         );
         setPhotos(photoBundle.gallery);
         setFriendCount(friendsRes.Items?.length ?? 0);
-        setLikeCount(likeCountRes.Count ?? 0);
+        setLikeCount(likeCountFromResponse(likeCountRes));
         const profileAvatar = await resolveMediaUrl(profileResponse.ProfileImage);
         setAvatarUri(photoBundle.avatarUri ?? profileAvatar);
         // Soft settle after skeleton — only when this was a cold load.

@@ -208,6 +208,10 @@ const FALLBACK_TRANSLATIONS: Record<string, string> = {
   'user_profile.request_sent': 'Request sent',
   'user_profile.accept_request': 'Accept request',
   'user_profile.friends': 'Friends',
+  'user_profile.unfriend': 'Unfriend',
+  'user_profile.unfriend_title': 'Remove friend?',
+  'user_profile.unfriend_confirm':
+    'You will no longer be friends. You can send a new request later.',
   'user_profile.like': 'Like',
   'user_profile.liked': 'Liked',
   'user_profile.bio_empty': 'No bio yet.',
@@ -603,6 +607,10 @@ const LOCAL_TRANSLATIONS_TR: Record<string, string> = {
   'user_profile.request_sent': 'İstek gönderildi',
   'user_profile.accept_request': 'İsteği kabul et',
   'user_profile.friends': 'Arkadaşlar',
+  'user_profile.unfriend': 'Arkadaşlıktan çıkar',
+  'user_profile.unfriend_title': 'Arkadaşlıktan çıkarılsın mı?',
+  'user_profile.unfriend_confirm':
+    'Artık arkadaş olmayacaksınız. İsterseniz sonra yeniden istek gönderebilirsiniz.',
   'user_profile.like': 'Beğen',
   'user_profile.liked': 'Beğenildi',
   'user_profile.bio_empty': 'Henüz biyografi eklenmemiş.',
