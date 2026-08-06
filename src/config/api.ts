@@ -7,13 +7,13 @@ import { isEmulator } from 'react-native-device-info';
  *
  * TestFlight öncesi: quick-tunnel.sh çalıştır → USE_PRODUCTION = true yap.
  */
-const USE_PRODUCTION = false;
+const USE_PRODUCTION = true;
 
 /**
  * Cloudflare QUICK tunnel URL — her tunnel açılışında değişir.
  * Terminal: AD_BlueDateApp/deploy/quick-tunnel.sh  (bu satırı otomatik günceller)
  */
-const PROD_API_URL = 'https://intensive-hardly-win-sectors.trycloudflare.com';
+const PROD_API_URL = 'https://surrounded-sum-proven-precise.trycloudflare.com';
 
 /** Lokal debug (USE_PRODUCTION = false) */
 const DEV_PORT = 5135;
@@ -22,7 +22,7 @@ const DEV_PORT = 5135;
  * Mac'in Wi‑Fi IP'si — fiziksel telefon/tablet için gerekli.
  * Terminal: ipconfig getifaddr en0
  */
-const DEV_MAC_HOST = '192.168.1.19';
+const DEV_MAC_HOST = '172.16.4.109';
 
 let resolvedDevUrl: string | null = null;
 

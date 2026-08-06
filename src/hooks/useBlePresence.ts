@@ -8,7 +8,6 @@ import {
   BridgeNearbyItem,
   DirectNearbyItem,
   fetchNearbyProximity,
-  resetProximity,
   submitBleSightings,
 } from '../api/proximity';
 import { BleAdvertiserService } from '../services/ble/BleAdvertiserService';
@@ -67,10 +66,19 @@ export function useBlePresence(session: BleSession | null) {
     try {
       const token = await BleIdentityService.createToken(current, deviceId);
       const advertising = await BleAdvertiserService.start(token.token);
-      patch({ advertising });
+      patch({
+        advertising,
+        errorMessage: advertising
+          ? null
+          : 'Bluetooth yayını başlatılamadı (advertising).',
+      });
     } catch (e: unknown) {
       const message = e instanceof Error ? e.message : String(e);
       console.warn('[useBlePresence] token refresh', message);
+      patch({
+        advertising: false,
+        errorMessage: `BLE token/API: ${message}`,
+      });
     }
   }, [patch]);
 
@@ -95,10 +103,11 @@ export function useBlePresence(session: BleSession | null) {
           SeenAt: i.seenAt,
         })),
       });
-      patch({ lastSyncAt: new Date().toISOString() });
+      patch({ lastSyncAt: new Date().toISOString(), errorMessage: null });
     } catch (e: unknown) {
       const message = e instanceof Error ? e.message : String(e);
       console.warn('[useBlePresence] sightings', message);
+      patch({ errorMessage: `Sightings API: ${message}` });
     }
   }, [patch]);
 
@@ -114,27 +123,16 @@ export function useBlePresence(session: BleSession | null) {
     } catch (e: unknown) {
       const message = e instanceof Error ? e.message : String(e);
       console.warn('[useBlePresence] nearby', message);
+      patch({ errorMessage: `Nearby API: ${message}` });
     }
   }, [patch]);
 
   const refresh = useCallback(async () => {
-    const current = sessionRef.current;
     patch({ refreshing: true });
     try {
-      if (current) {
-        try {
-          await resetProximity({
-            userId: current.userId,
-            token: current.accessToken,
-          });
-        } catch (e: unknown) {
-          const message = e instanceof Error ? e.message : String(e);
-          console.warn('[useBlePresence] reset', message);
-        }
-      }
-      await new Promise<void>(r => setTimeout(r, 800));
+      // Soft refresh only — do NOT call resetProximity here. Reset wipes
+      // edges/sightings and is why peers briefly appear then vanish on pull.
       await flushSightings();
-      await new Promise<void>(r => setTimeout(r, 700));
       await pollNearby();
     } finally {
       patch({ refreshing: false });

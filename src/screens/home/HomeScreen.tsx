@@ -311,7 +311,7 @@ export function HomeScreen({ navigation }: Props) {
                 theme.shadows.sm,
               ]}>
               {recentActivity.map((item, i) => {
-                const meta = ACTIVITY_META[item.type];
+                const meta = ACTIVITY_META[item.type] ?? ACTIVITY_META.like;
                 return (
                   <View key={item.id}>
                     <Pressable

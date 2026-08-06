@@ -15,7 +15,9 @@ const Stack = createNativeStackNavigator<ProfileStackParamList>();
 
 const nestedOptions = {
   gestureEnabled: true,
-  fullScreenGestureEnabled: true,
+  // Full-screen back gesture fights Material Top Tabs pager-view and can
+  // corrupt UIKit appearance transitions during tab changes.
+  fullScreenGestureEnabled: false,
   animation: 'slide_from_right' as const,
 };
 

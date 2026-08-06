@@ -9,13 +9,13 @@ import { toNavigationTheme } from './navigationTheme';
 
 export function RootNavigator() {
   const theme = useTheme();
-  const { status } = useAuth();
+  const { status, isSignedIn } = useAuth();
 
   return (
     <NavigationContainer theme={toNavigationTheme(theme)}>
       {status === 'bootstrapping' ? (
         <SplashScreen />
-      ) : status === 'signedIn' ? (
+      ) : isSignedIn ? (
         <AppStack />
       ) : (
         <AuthStack />

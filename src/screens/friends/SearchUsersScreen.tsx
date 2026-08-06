@@ -27,6 +27,7 @@ import {
 import { useLocale } from '../../i18n';
 import { useAuth } from '../../navigation/AuthContext';
 import { useScreenBottomPad } from '../../navigation/tabBarLayout';
+import { useLockTabSwipe } from '../../navigation/useLockTabSwipe';
 import { FriendsStackParamList } from '../../navigation/types';
 import { useTheme } from '../../theme';
 
@@ -41,6 +42,7 @@ type RowState = {
 export function SearchUsersScreen({ navigation }: Props) {
   const { t } = useLocale();
   const theme = useTheme();
+  useLockTabSwipe();
   const bottomPad = useScreenBottomPad(24);
   const { userId, accessToken } = useAuth();
   const [query, setQuery] = useState('');

@@ -6,11 +6,21 @@ import { NearbyStackParamList } from './types';
 
 const Stack = createNativeStackNavigator<NearbyStackParamList>();
 
+const nestedOptions = {
+  gestureEnabled: true,
+  fullScreenGestureEnabled: false,
+  animation: 'slide_from_right' as const,
+};
+
 export function NearbyStack() {
   return (
     <Stack.Navigator screenOptions={{ headerShown: false }}>
       <Stack.Screen name="NearbyMain" component={NearbyScreen} />
-      <Stack.Screen name="UserProfile" component={UserProfileScreen} />
+      <Stack.Screen
+        name="UserProfile"
+        component={UserProfileScreen}
+        options={nestedOptions}
+      />
     </Stack.Navigator>
   );
 }

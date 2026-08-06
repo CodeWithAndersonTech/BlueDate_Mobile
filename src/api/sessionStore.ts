@@ -114,6 +114,8 @@ export async function refreshAccessToken(
   refreshInFlight = (async () => {
     const currentRefresh = refreshToken;
     if (!currentRefresh) {
+      // Dead access token with nothing to renew — force login/register.
+      await clearSessionTokens();
       return null;
     }
 

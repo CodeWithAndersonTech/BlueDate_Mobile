@@ -12,6 +12,7 @@ import android.bluetooth.le.BluetoothLeAdvertiser
 import android.content.Context
 import android.os.Build
 import android.os.ParcelUuid
+import android.util.Log
 import com.facebook.react.bridge.Promise
 import com.facebook.react.bridge.ReactApplicationContext
 import com.facebook.react.bridge.ReactContextBaseJavaModule
@@ -20,10 +21,10 @@ import com.facebook.react.bridge.ReactMethod
 /**
  * BLE Advertiser native modulu.
  *
- * Token'i, verilen 16-bit alias'li service UUID altinda "service data" olarak yayinlar.
- * Token 32 byte'a kadar oldugu icin legacy 31-byte reklam paketine sigmayabilir;
- * bu yuzden Android 8+ (API 26) cihazlarda extended advertising (startAdvertisingSet)
- * kullanilir. Daha eski cihazlarda legacy startAdvertising'e geri dusulur.
+ * Presence token (~16 char) service-data olarak yayinlanir.
+ * iOS tarayicilar extended advertising'i guvenilir sekilde gormedigi icin
+ * once LEGACY mode denenir (16-bit UUID alias + kisa token 31 byte'a sigar).
+ * Legacy basarisiz olursa extended'e dusulur.
  */
 class BleAdvertiserModule(reactContext: ReactApplicationContext) :
     ReactContextBaseJavaModule(reactContext) {
@@ -72,54 +73,81 @@ class BleAdvertiserModule(reactContext: ReactApplicationContext) :
                 .addServiceData(parcelUuid, tokenBytes)
                 .build()
 
-            // API 26+: extended advertising ile daha buyuk payload.
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                val params = AdvertisingSetParameters.Builder()
-                    .setLegacyMode(false)
-                    .setConnectable(false)
-                    .setScannable(true)
-                    .setInterval(AdvertisingSetParameters.INTERVAL_MEDIUM)
-                    .setTxPowerLevel(AdvertisingSetParameters.TX_POWER_MEDIUM)
-                    .build()
-
-                setCallback = object : AdvertisingSetCallback() {
-                    override fun onAdvertisingSetStarted(
-                        advertisingSet: AdvertisingSet?,
-                        txPower: Int,
-                        status: Int
-                    ) {
-                        if (status == ADVERTISE_SUCCESS) {
-                            promise.resolve(true)
-                        } else {
-                            promise.reject("ADV_FAILED", "Extended advertising basarisiz: $status")
-                        }
-                    }
-                }
-                adv.startAdvertisingSet(params, data, null, null, null, setCallback)
-            } else {
-                // Legacy fallback (token kisa degilse paket sigmayabilir).
-                val settings = AdvertiseSettings.Builder()
-                    .setAdvertiseMode(AdvertiseSettings.ADVERTISE_MODE_BALANCED)
-                    .setTxPowerLevel(AdvertiseSettings.ADVERTISE_TX_POWER_MEDIUM)
-                    .setConnectable(false)
-                    .build()
-
-                legacyCallback = object : AdvertiseCallback() {
-                    override fun onStartSuccess(settingsInEffect: AdvertiseSettings?) {
-                        promise.resolve(true)
-                    }
-
-                    override fun onStartFailure(errorCode: Int) {
-                        promise.reject("ADV_FAILED", "Legacy advertising basarisiz: $errorCode")
-                    }
-                }
-                adv.startAdvertising(settings, data, legacyCallback)
+            // Prefer legacy so iOS / older scanners can see us.
+            startLegacy(adv, data, promise) {
+                Log.w(TAG, "Legacy advertise failed, trying extended")
+                startExtended(adv, data, promise)
             }
         } catch (e: SecurityException) {
             promise.reject("PERMISSION", "BLUETOOTH_ADVERTISE izni yok.", e)
         } catch (e: Exception) {
             promise.reject("ADV_ERROR", e.message, e)
         }
+    }
+
+    private fun startLegacy(
+        adv: BluetoothLeAdvertiser,
+        data: AdvertiseData,
+        promise: Promise,
+        onFailure: () -> Unit,
+    ) {
+        val settings = AdvertiseSettings.Builder()
+            .setAdvertiseMode(AdvertiseSettings.ADVERTISE_MODE_LOW_LATENCY)
+            .setTxPowerLevel(AdvertiseSettings.ADVERTISE_TX_POWER_HIGH)
+            .setConnectable(false)
+            .setTimeout(0)
+            .build()
+
+        legacyCallback = object : AdvertiseCallback() {
+            override fun onStartSuccess(settingsInEffect: AdvertiseSettings?) {
+                promise.resolve(true)
+            }
+
+            override fun onStartFailure(errorCode: Int) {
+                legacyCallback = null
+                // DATA_TOO_LARGE / INTERNAL — try extended if available.
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    onFailure()
+                } else {
+                    promise.reject("ADV_FAILED", "Legacy advertising basarisiz: $errorCode")
+                }
+            }
+        }
+        adv.startAdvertising(settings, data, legacyCallback)
+    }
+
+    private fun startExtended(
+        adv: BluetoothLeAdvertiser,
+        data: AdvertiseData,
+        promise: Promise,
+    ) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) {
+            promise.reject("ADV_FAILED", "Extended advertising desteklenmiyor.")
+            return
+        }
+
+        val params = AdvertisingSetParameters.Builder()
+            .setLegacyMode(true) // keep legacy PDU even via AdvertisingSet API
+            .setConnectable(false)
+            .setScannable(true)
+            .setInterval(AdvertisingSetParameters.INTERVAL_HIGH)
+            .setTxPowerLevel(AdvertisingSetParameters.TX_POWER_HIGH)
+            .build()
+
+        setCallback = object : AdvertisingSetCallback() {
+            override fun onAdvertisingSetStarted(
+                advertisingSet: AdvertisingSet?,
+                txPower: Int,
+                status: Int
+            ) {
+                if (status == ADVERTISE_SUCCESS) {
+                    promise.resolve(true)
+                } else {
+                    promise.reject("ADV_FAILED", "Advertising basarisiz: $status")
+                }
+            }
+        }
+        adv.startAdvertisingSet(params, data, null, null, null, setCallback)
     }
 
     @ReactMethod
@@ -147,5 +175,9 @@ class BleAdvertiserModule(reactContext: ReactApplicationContext) :
             setCallback = null
             legacyCallback = null
         }
+    }
+
+    companion object {
+        private const val TAG = "BleAdvertiser"
     }
 }

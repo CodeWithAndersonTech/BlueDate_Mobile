@@ -97,7 +97,7 @@ export function NearbyScreen({ navigation }: Props) {
     [userId, accessToken, device?.id, device?.uniqueId],
   );
 
-  const { state, start, stop, refresh } = useBlePresence(session);
+  const { state, start, stop, refresh, pollNearby } = useBlePresence(session);
 
   const [users, setUsers] = useState<NearbyUser[]>([]);
   const [added, setAdded] = useState<Record<string, boolean>>({});
@@ -171,12 +171,13 @@ export function NearbyScreen({ navigation }: Props) {
 
     const unsub = parent.addListener('tabPress' as never, () => {
       if (navigation.isFocused() && state.status === 'running') {
-        refresh();
+        // Poll only — full refresh used to reset the proximity graph.
+        void pollNearby();
       }
     });
 
     return unsub;
-  }, [rootNav, navigation, state.status, refresh]);
+  }, [rootNav, navigation, state.status, pollNearby]);
 
   const contentFadeStyle = useAnimatedStyle(() => ({
     opacity: contentOpacity.value,
@@ -232,7 +233,15 @@ export function NearbyScreen({ navigation }: Props) {
 
             <View style={styles.scanBtnWrap}>
               <Pressable
-                onPress={() => setScanTipOpen(open => !open)}
+                onPress={() => {
+                  setScanTipOpen(false);
+                  if (state.status === 'idle' || state.status === 'error') {
+                    start();
+                  } else {
+                    refresh();
+                  }
+                }}
+                onLongPress={() => setScanTipOpen(open => !open)}
                 hitSlop={8}
                 accessibilityRole="button"
                 accessibilityLabel={t('nearby.scan_action')}

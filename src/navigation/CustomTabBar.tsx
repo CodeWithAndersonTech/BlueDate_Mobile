@@ -56,6 +56,11 @@ const INDICATOR_INSET = 5;
 
 function shouldHideTabBar(state: MaterialTopTabBarProps['state']): boolean {
   const route = state.routes[state.index];
+  // During pager transitions index can briefly be out of range.
+  if (!route) {
+    return false;
+  }
+
   const nested = route.state as
     | { index?: number; routes?: { name: string }[] }
     | undefined;
@@ -125,10 +130,6 @@ export function CustomTabBar({
     });
   }, [position, state.routes, tabCount, tabWidth, indicatorWidth]);
 
-  if (hide) {
-    return null;
-  }
-
   const staticIndicatorOffset =
     PILL_PADDING_H +
     state.index * tabWidth +
@@ -144,8 +145,15 @@ export function CustomTabBar({
     ? 'rgba(255, 255, 255, 0.12)'
     : theme.colors.primarySoft;
 
+  // Never unmount the tab bar (return null). Material Top Tabs + UIKit
+  // appearance transitions crash when the bar is removed mid page-change
+  // (_associatedViewControllerForwardsAppearanceCallbacks).
   return (
-    <View style={styles.wrapper} pointerEvents="box-none">
+    <View
+      style={[styles.wrapper, hide && styles.wrapperHidden]}
+      pointerEvents={hide ? 'none' : 'box-none'}
+      accessibilityElementsHidden={hide}
+      importantForAccessibility={hide ? 'no-hide-descendants' : 'auto'}>
       <View
         style={[
           styles.bar,
@@ -281,6 +289,9 @@ const styles = StyleSheet.create({
     bottom: 0,
     alignItems: 'center',
     backgroundColor: 'transparent',
+  },
+  wrapperHidden: {
+    opacity: 0,
   },
   bar: {
     backgroundColor: 'transparent',
