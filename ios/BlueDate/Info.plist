@@ -47,7 +47,9 @@
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>Profil ve galeri fotoğraflarınızı ekleyebilmeniz için fotoğraf kütüphanenize erişmemiz gerekir.</string>
 	<key>NSCameraUsageDescription</key>
-	<string>Profil fotoğrafı çekebilmeniz için kameraya erişmemiz gerekir.</string>
+	<string>Hikâye ve profil için fotoğraf veya kısa video çekebilmeniz amacıyla kameraya erişmemiz gerekir.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Hikâye videosu çekerken ses kaydı için mikrofona erişmemiz gerekir.</string>
 	<key>NSPhotoLibraryAddUsageDescription</key>
 	<string>Fotoğrafları kaydedebilmek için izin gerekir.</string>
 	<key>RCTNewArchEnabled</key>

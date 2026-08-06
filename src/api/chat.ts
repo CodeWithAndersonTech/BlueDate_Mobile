@@ -83,9 +83,16 @@ type RawMessage = {
   isMine?: boolean;
 };
 
-function pickNum(a?: number | null, b?: number | null): number {
-  if (typeof a === 'number') return a;
-  if (typeof b === 'number') return b;
+function pickNum(...values: unknown[]): number {
+  for (const value of values) {
+    if (typeof value === 'number' && Number.isFinite(value)) {
+      return value;
+    }
+    if (typeof value === 'string' && value.trim() !== '') {
+      const n = Number(value);
+      if (Number.isFinite(n)) return n;
+    }
+  }
   return 0;
 }
 
@@ -145,7 +152,10 @@ export function toMessageUi(
   dto: ChatMessageDto,
   myUserId: number,
 ): ChatMessageUi {
-  const mine = dto.IsMine ?? dto.SenderId === myUserId;
+  // Prefer SenderId: SignalR / broadcast payloads force IsMine=false and
+  // expect clients to decide ownership via SenderId === current user.
+  const mine =
+    (myUserId > 0 && dto.SenderId === myUserId) || dto.IsMine === true;
   return {
     id: String(dto.Id),
     conversationId: String(dto.ConversationId),

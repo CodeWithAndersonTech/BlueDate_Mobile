@@ -19,6 +19,7 @@ import { images } from '../assets';
 import { Icon, IconName } from '../components';
 import { useTheme } from '../theme';
 import { FLOATING_TAB_BAR_HEIGHT, TAB_ROOT_SCREENS } from './tabBarLayout';
+import { useTabBarForceHidden } from './useHideTabBar';
 
 // Layout hooks live in ./tabBarLayout (single source of truth for clearance
 // math); re-exported here so existing imports keep working.
@@ -100,7 +101,8 @@ export function CustomTabBar({
   const theme = useTheme();
   const insets = useSafeAreaInsets();
   const { width: windowWidth } = useWindowDimensions();
-  const hide = shouldHideTabBar(state);
+  const forceHidden = useTabBarForceHidden();
+  const hide = shouldHideTabBar(state) || forceHidden;
 
   const bottomInset = Math.max(insets.bottom, 12);
   const totalHeight = BAR_HEIGHT + bottomInset;

@@ -1,6 +1,7 @@
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import React, { useCallback, useState } from 'react';
 import {
+  Alert,
   Image,
   Pressable,
   StyleSheet,
@@ -19,20 +20,36 @@ import {
   Typography,
 } from '../../components';
 import {
+  createStory,
+  deleteStory,
   displayName,
   formatRelativeTime,
   getSocialActivity,
+  getStoryFeed,
   getUserProfile,
   resolveMediaUrl,
+  resolveStoryMediaUrls,
+  StoryItem,
+  StoryUserGroup,
 } from '../../api';
 import { useLocale } from '../../i18n';
 import { usePremium } from '../../hooks/usePremium';
 import { useAuth } from '../../navigation/AuthContext';
 import { useChat } from '../../navigation/ChatContext';
+import { useHideTabBar } from '../../navigation/useHideTabBar';
 import { HomeStackParamList } from '../../navigation/types';
 import { loadProfilePhotos } from '../../services/photos/photoStore';
+import {
+  pickStoryMediaFromCamera,
+  pickStoryMediaFromLibrary,
+  type PickedStoryAsset,
+  type StoryPickResult,
+} from '../../services/stories/pickStoryMedia';
 import { ThemeColors, useTheme } from '../../theme';
 import { ActivityItem } from '../../utils';
+import { StoryComposeOverlay } from './StoryComposeOverlay';
+import { StoryRail } from './StoryRail';
+import { StoryViewer } from './StoryViewer';
 
 type Props = NativeStackScreenProps<HomeStackParamList, 'HomeFeed'>;
 
@@ -77,7 +94,27 @@ export function HomeScreen({ navigation }: Props) {
   const [fullName, setFullName] = useState('');
   const [avatarUri, setAvatarUri] = useState<string | undefined>();
   const [recentActivity, setRecentActivity] = useState<ActivityItem[]>([]);
+  const [storyGroups, setStoryGroups] = useState<StoryUserGroup[]>([]);
+  const [composeAsset, setComposeAsset] = useState<PickedStoryAsset | null>(
+    null,
+  );
+  const [composeVisible, setComposeVisible] = useState(false);
+  const [uploadingStory, setUploadingStory] = useState(false);
+  const [viewerVisible, setViewerVisible] = useState(false);
+  const [viewerStartIndex, setViewerStartIndex] = useState(0);
+  useHideTabBar(composeVisible || viewerVisible);
   const goToTab = (tab: string) => navigation.getParent()?.navigate(tab as never);
+
+  const refreshStories = useCallback(async () => {
+    if (!userId) return;
+    try {
+      const feed = await getStoryFeed(userId, accessToken);
+      const resolved = await resolveStoryMediaUrls(feed.Items);
+      setStoryGroups(resolved);
+    } catch {
+      /* keep previous stories */
+    }
+  }, [userId, accessToken]);
 
   useFocusEffect(
     useCallback(() => {
@@ -85,6 +122,7 @@ export function HomeScreen({ navigation }: Props) {
       let cancelled = false;
       refreshUnread();
       void refreshPremium();
+      void refreshStories();
 
       (async () => {
         try {
@@ -137,7 +175,99 @@ export function HomeScreen({ navigation }: Props) {
       return () => {
         cancelled = true;
       };
-    }, [userId, accessToken, refreshUnread, refreshPremium]),
+    }, [userId, accessToken, refreshUnread, refreshPremium, refreshStories]),
+  );
+
+  const openComposeWithPick = useCallback(
+    (picked: StoryPickResult) => {
+      if (picked.didCancel) return false;
+      if (!picked.asset) {
+        Alert.alert(
+          t('stories.error_title'),
+          picked.errorMessage === 'NATIVE_MODULE_MISSING'
+            ? t('stories.picker_missing')
+            : t('stories.pick_error'),
+        );
+        return false;
+      }
+      setComposeAsset(picked.asset);
+      setComposeVisible(true);
+      return true;
+    },
+    [t],
+  );
+
+  const handlePickFromGallery = useCallback(async () => {
+    const picked = await pickStoryMediaFromLibrary();
+    openComposeWithPick(picked);
+  }, [openComposeWithPick]);
+
+  const handleAddStory = useCallback(async () => {
+    const picked = await pickStoryMediaFromCamera();
+    if (picked.didCancel) return;
+    openComposeWithPick(picked);
+  }, [openComposeWithPick]);
+
+  const handleShareStory = useCallback(async () => {
+    if (!userId || !composeAsset) return;
+    setUploadingStory(true);
+    try {
+      await createStory(userId, composeAsset, undefined, accessToken);
+      setComposeVisible(false);
+      setComposeAsset(null);
+      await refreshStories();
+    } catch {
+      Alert.alert(t('stories.error_title'), t('stories.upload_error'));
+    } finally {
+      setUploadingStory(false);
+    }
+  }, [userId, composeAsset, accessToken, refreshStories, t]);
+
+  const handleOpenUserStories = useCallback(
+    (targetUserId: number) => {
+      const index = storyGroups.findIndex(g => g.User.UserId === targetUserId);
+      if (index < 0) return;
+      setViewerStartIndex(index);
+      setViewerVisible(true);
+    },
+    [storyGroups],
+  );
+
+  const handleOpenStoryProfile = useCallback(
+    (targetUserId: number) => {
+      setViewerVisible(false);
+      if (userId && targetUserId === userId) {
+        navigation.getParent()?.navigate('Profile' as never);
+        return;
+      }
+      navigation.navigate('UserProfile', { userId: String(targetUserId) });
+    },
+    [navigation, userId],
+  );
+
+  const handleDeleteStory = useCallback(
+    (story: StoryItem) => {
+      if (!userId) return;
+      Alert.alert(t('stories.delete_title'), t('stories.delete_confirm'), [
+        { text: t('profile.status_cancel'), style: 'cancel' },
+        {
+          text: t('stories.delete'),
+          style: 'destructive',
+          onPress: () => {
+            void (async () => {
+              try {
+                await deleteStory(userId, story.Id, accessToken);
+                await refreshStories();
+                setViewerVisible(false);
+              } catch {
+                Alert.alert(t('stories.error_title'), t('stories.delete_error'));
+              }
+            })();
+          },
+        },
+      ]);
+    },
+    [userId, accessToken, refreshStories, t],
   );
 
   return (
@@ -185,6 +315,22 @@ export function HomeScreen({ navigation }: Props) {
             />
           </View>
         </View>
+
+        {userId ? (
+          <StoryRail
+            ownUserId={userId}
+            ownAvatarUri={avatarUri}
+            ownName={fullName || firstName || '?'}
+            groups={storyGroups}
+            onAddStory={() => {
+              void handleAddStory();
+            }}
+            onAddFromGallery={() => {
+              void handlePickFromGallery();
+            }}
+            onOpenUser={handleOpenUserStories}
+          />
+        ) : null}
 
         {!isPremium ? (
           <Pressable
@@ -361,6 +507,30 @@ export function HomeScreen({ navigation }: Props) {
           )}
         </View>
       </TabScreenScrollView>
+
+      <StoryComposeOverlay
+        visible={composeVisible}
+        asset={composeAsset}
+        uploading={uploadingStory}
+        onClose={() => {
+          if (uploadingStory) return;
+          setComposeVisible(false);
+          setComposeAsset(null);
+        }}
+        onSubmit={() => {
+          void handleShareStory();
+        }}
+      />
+
+      <StoryViewer
+        visible={viewerVisible}
+        groups={storyGroups}
+        startGroupIndex={viewerStartIndex}
+        viewerUserId={userId ?? 0}
+        onClose={() => setViewerVisible(false)}
+        onDelete={handleDeleteStory}
+        onOpenProfile={handleOpenStoryProfile}
+      />
     </View>
   );
 }
