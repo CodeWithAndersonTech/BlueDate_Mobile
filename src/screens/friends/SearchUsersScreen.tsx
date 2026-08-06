@@ -23,6 +23,7 @@ import {
   searchUsers,
   sendFriendRequest,
   SocialUser,
+  withResolvedAvatar,
 } from '../../api';
 import { useLocale } from '../../i18n';
 import { useAuth } from '../../navigation/AuthContext';
@@ -56,8 +57,8 @@ export function SearchUsersScreen({ navigation }: Props) {
       setLoading(true);
       try {
         const res = await searchUsers(userId, q.trim(), 30, accessToken);
-        const items = res.Items ?? [];
-        setDirectory(items);
+        const items = res.Items ?? res.items ?? [];
+        setDirectory(await Promise.all(items.map(withResolvedAvatar)));
 
         const statuses = await Promise.all(
           items.map(async u => {

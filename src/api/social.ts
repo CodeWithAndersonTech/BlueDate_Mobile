@@ -1,5 +1,6 @@
 import { API_PATHS } from '../config/api';
 import { apiRequest, ApiEnvelope } from './client';
+import { resolveMediaUrl } from './photos';
 
 export type SocialUser = {
   UserId: number;
@@ -24,7 +25,39 @@ export type FriendshipListItem = {
 export type FriendshipListResponse = ApiEnvelope & {
   UserId: number;
   Items: FriendshipListItem[];
+  /** ASP.NET default camelCase when JsonPropertyName is missing. */
+  items?: FriendshipListItem[];
 };
+
+/** Normalize list payload whether API emits `Items` or `items`. */
+export function friendshipItems(
+  res: FriendshipListResponse | null | undefined,
+): FriendshipListItem[] {
+  return res?.Items ?? res?.items ?? [];
+}
+
+/** Turn relative `/uploads/...` paths into absolute URLs for Avatar. */
+export async function withResolvedAvatar(user: SocialUser): Promise<SocialUser> {
+  const raw =
+    user.ProfileImage ??
+    (user as SocialUser & { profileImage?: string | null }).profileImage;
+  const resolved = await resolveMediaUrl(raw);
+  return {
+    ...user,
+    ProfileImage: resolved ?? raw ?? null,
+  };
+}
+
+export async function resolveFriendshipAvatars(
+  items: FriendshipListItem[],
+): Promise<FriendshipListItem[]> {
+  return Promise.all(
+    items.map(async item => ({
+      ...item,
+      User: await withResolvedAvatar(item.User),
+    })),
+  );
+}
 
 export type FriendshipActionResponse = ApiEnvelope & {
   Id: number;
@@ -44,11 +77,35 @@ export const FriendshipRelation = {
 
 export type FriendshipStatusResponse = ApiEnvelope & {
   FriendshipId?: number | null;
-  Relation: number;
+  friendshipId?: number | null;
+  Relation?: number;
+  relation?: number;
   StatusId?: number | null;
+  statusId?: number | null;
   StatusCode?: string | null;
+  statusCode?: string | null;
   StatusName?: string | null;
+  statusName?: string | null;
 };
+
+/** Normalize camelCase/PascalCase friendship-status payloads. */
+export function normalizeFriendshipStatus(
+  res: FriendshipStatusResponse | null | undefined,
+): {
+  FriendshipId: number | null;
+  Relation: number;
+  StatusId: number | null;
+  StatusCode: string | null;
+  StatusName: string | null;
+} {
+  return {
+    FriendshipId: res?.FriendshipId ?? res?.friendshipId ?? null,
+    Relation: res?.Relation ?? res?.relation ?? FriendshipRelation.None,
+    StatusId: res?.StatusId ?? res?.statusId ?? null,
+    StatusCode: res?.StatusCode ?? res?.statusCode ?? null,
+    StatusName: res?.StatusName ?? res?.statusName ?? null,
+  };
+}
 
 export type LikeActionResponse = ApiEnvelope & {
   Id: number;
@@ -74,10 +131,12 @@ export type SocialActivityItem = {
 export type SocialActivityResponse = ApiEnvelope & {
   UserId: number;
   Items: SocialActivityItem[];
+  items?: SocialActivityItem[];
 };
 
 export type SearchUsersResponse = ApiEnvelope & {
   Items: SocialUser[];
+  items?: SocialUser[];
 };
 
 export function displayName(user: SocialUser) {
@@ -109,15 +168,20 @@ export function getSentFriendRequests(userId: number, token?: string | null) {
   });
 }
 
-export function getFriendshipStatus(
+export async function getFriendshipStatus(
   userId: number,
   otherUserId: number,
   token?: string | null,
-) {
-  return apiRequest<FriendshipStatusResponse>(API_PATHS.friendshipStatus, {
-    query: { userId, otherUserId },
-    token,
-  });
+): Promise<FriendshipStatusResponse & ReturnType<typeof normalizeFriendshipStatus>> {
+  const raw = await apiRequest<FriendshipStatusResponse>(
+    API_PATHS.friendshipStatus,
+    {
+      query: { userId, otherUserId },
+      token,
+    },
+  );
+  const normalized = normalizeFriendshipStatus(raw);
+  return { ...raw, ...normalized };
 }
 
 export function sendFriendRequest(

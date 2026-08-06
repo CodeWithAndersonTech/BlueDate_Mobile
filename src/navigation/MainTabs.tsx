@@ -24,14 +24,13 @@ export function MainTabs() {
       tabBarPosition="bottom"
       tabBar={renderTabBar}
       screenOptions={{
-        // Nested stack screens call useLockTabSwipe() to turn this off,
-        // so edge-swipe pops the stack instead of switching to Premium.
-        swipeEnabled: true,
-        // iOS New Arch: Material Top Tabs + animated scene transitions abort
-        // with UIViewControllerHierarchyInconsistency
-        // (_associatedViewControllerForwardsAppearanceCallbacks).
+        // Nested stack screens call useLockTabSwipe() to turn this off.
+        // iOS New Arch + Material Top Tabs: swipe/lazy remounts abort with
+        // UIViewControllerHierarchyInconsistency (appearance callbacks).
+        // Tap the tab bar to switch; keep scenes mounted.
+        swipeEnabled: false,
         animationEnabled: false,
-        lazy: true,
+        lazy: false,
         sceneStyle: { flex: 1 },
       }}>
       <Tab.Screen name="Home" component={HomeStack} />

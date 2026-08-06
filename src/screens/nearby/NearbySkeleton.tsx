@@ -16,7 +16,8 @@ import { useTheme } from '../../theme';
 const H_PAD = 20;
 const GAP = 12;
 const CARD_COUNT = 6;
-const CARD_ASPECT = 0.72;
+/** Matches NearbyCard grid circle diameter. */
+const CIRCLE = 132;
 
 type Props = {
   /** When true, fades the skeleton in (used on first paint). */
@@ -24,7 +25,7 @@ type Props = {
 };
 
 /**
- * Nearby screen skeleton — mirrors header, scan banner, and photo-card grid.
+ * Nearby skeleton — header + circular avatar grid (current Nearby UI).
  */
 export function NearbySkeleton({ visible = true }: Props) {
   const theme = useTheme();
@@ -33,7 +34,6 @@ export function NearbySkeleton({ visible = true }: Props) {
   const opacity = useSharedValue(0);
 
   const cardW = (windowWidth - H_PAD * 2 - GAP) / 2;
-  const cardH = cardW / CARD_ASPECT;
 
   useEffect(() => {
     opacity.value = withTiming(visible ? 1 : 0, {
@@ -52,40 +52,42 @@ export function NearbySkeleton({ visible = true }: Props) {
         fadeStyle,
       ]}
       pointerEvents="none">
-      {/* Header — eyebrow + title + info chip */}
+      {/* Header — eyebrow + title + round scan button */}
       <View style={styles.header}>
         <View style={styles.headerText}>
           <SkeletonLine width={72} height={11} radius={6} />
-          <SkeletonLine width={148} height={26} radius={8} style={styles.title} />
+          <SkeletonLine
+            width={148}
+            height={26}
+            radius={8}
+            style={styles.title}
+          />
         </View>
-        <SkeletonBlock width={44} height={44} radius={14} />
+        <SkeletonBlock width={44} height={44} radius={22} />
       </View>
 
-      {/* Photo card grid */}
+      {/* Circular profile grid */}
       <View style={styles.grid}>
         {Array.from({ length: CARD_COUNT }).map((_, i) => (
-          <View
-            key={i}
-            style={[
-              styles.card,
-              {
-                width: cardW,
-                backgroundColor: theme.colors.card,
-                borderColor: theme.colors.border,
-              },
-            ]}>
-            <View style={[styles.photo, { height: cardH }]}>
-              <SkeletonBlock width="100%" height={cardH} radius={0} />
-              <View style={styles.cardMeta}>
-                <SkeletonLine
-                  width="58%"
-                  height={13}
-                  radius={6}
-                  style={styles.metaName}
-                />
-                <SkeletonBlock width={30} height={30} radius={15} />
+          <View key={i} style={[styles.card, { width: cardW }]}>
+            <View style={styles.circleWrap}>
+              <SkeletonBlock
+                width={CIRCLE}
+                height={CIRCLE}
+                radius={CIRCLE / 2}
+              />
+              <View
+                style={[
+                  styles.addFab,
+                  {
+                    backgroundColor: theme.colors.card,
+                    borderColor: theme.colors.border,
+                  },
+                ]}>
+                <SkeletonBlock width={18} height={18} radius={9} />
               </View>
             </View>
+            <SkeletonLine width={72} height={14} radius={7} />
           </View>
         ))}
       </View>
@@ -110,32 +112,30 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     flexWrap: 'wrap',
     justifyContent: 'space-between',
-    rowGap: 12,
+    rowGap: 18,
     paddingHorizontal: H_PAD,
-    paddingTop: 4,
+    paddingTop: 8,
   },
   card: {
-    borderRadius: 18,
-    borderWidth: StyleSheet.hairlineWidth,
-    overflow: 'hidden',
+    alignItems: 'center',
+    gap: 10,
+    paddingVertical: 4,
   },
-  photo: {
-    width: '100%',
+  circleWrap: {
+    width: CIRCLE,
+    height: CIRCLE,
     position: 'relative',
   },
-  cardMeta: {
+  addFab: {
     position: 'absolute',
-    left: 10,
-    right: 10,
-    bottom: 12,
-    flexDirection: 'row',
+    right: 2,
+    bottom: 2,
+    width: 34,
+    height: 34,
+    borderRadius: 17,
     alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: 8,
-  },
-  metaName: {
-    // Soften the bone so it reads as name text over photo
-    opacity: 0.85,
+    justifyContent: 'center',
+    borderWidth: StyleSheet.hairlineWidth,
   },
 });
 

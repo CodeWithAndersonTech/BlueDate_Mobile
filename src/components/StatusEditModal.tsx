@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   KeyboardAvoidingView,
+  Modal,
   Platform,
   Pressable,
   StyleSheet,
@@ -25,10 +26,6 @@ type Props = {
   onClear?: () => void;
 };
 
-/**
- * In-tree overlay (not RN Modal). Native Modal + Material Top Tabs on iOS
- * New Arch can SIGABRT via UIViewControllerHierarchyInconsistency.
- */
 export function StatusEditModal({
   visible,
   initialStatus = '',
@@ -48,23 +45,30 @@ export function StatusEditModal({
     }
   }, [visible, initialStatus]);
 
-  if (!visible) {
-    return null;
-  }
-
   const trimmed = text.trim();
   const canSave = trimmed.length > 0 && trimmed.length <= MAX_LEN && !saving;
 
   return (
-    <View style={styles.root} pointerEvents="box-none">
+    <Modal
+      visible={visible}
+      transparent
+      animationType="fade"
+      // Stay in the same window as the app — avoids some VC hierarchy issues
+      // when nested under Material Top Tabs.
+      presentationStyle="overFullScreen"
+      statusBarTranslucent
+      onRequestClose={onClose}>
       <KeyboardAvoidingView
         style={styles.flex}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-        <Pressable style={styles.backdrop} onPress={onClose}>
+        <View style={styles.backdrop}>
           <Pressable
-            onPress={e => {
-              e?.stopPropagation?.();
-            }}
+            style={StyleSheet.absoluteFill}
+            onPress={onClose}
+            accessibilityRole="button"
+            accessibilityLabel={t('common.close')}
+          />
+          <View
             style={[
               styles.sheet,
               {
@@ -134,25 +138,21 @@ export function StatusEditModal({
                 {saving ? (
                   <ActivityIndicator size="small" color={theme.colors.danger} />
                 ) : (
-                  <Text style={[styles.clearLabel, { color: theme.colors.danger }]}>
+                  <Text
+                    style={[styles.clearLabel, { color: theme.colors.danger }]}>
                     {t('profile.status_clear')}
                   </Text>
                 )}
               </Pressable>
             ) : null}
-          </Pressable>
-        </Pressable>
+          </View>
+        </View>
       </KeyboardAvoidingView>
-    </View>
+    </Modal>
   );
 }
 
 const styles = StyleSheet.create({
-  root: {
-    ...StyleSheet.absoluteFillObject,
-    zIndex: 1000,
-    elevation: 1000,
-  },
   flex: { flex: 1 },
   backdrop: {
     flex: 1,

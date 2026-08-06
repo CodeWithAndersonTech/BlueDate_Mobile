@@ -112,7 +112,7 @@ export function HomeScreen({ navigation }: Props) {
         .then(async activity => {
           if (cancelled) return;
           const mapped = await Promise.all(
-            (activity.Items ?? []).map(async item => ({
+            (activity.Items ?? activity.items ?? []).map(async item => ({
               id: `${item.Type}-${item.EntityId}`,
               userId: String(item.User.UserId),
               type:

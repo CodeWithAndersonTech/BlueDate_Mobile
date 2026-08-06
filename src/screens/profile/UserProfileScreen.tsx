@@ -17,6 +17,7 @@ import { EmptyState, Header } from '../../components';
 import {
   acceptFriendRequest,
   FriendshipRelation,
+  friendshipItems,
   getFriends,
   getFriendshipStatus,
   getLikeCount,
@@ -196,7 +197,7 @@ export function UserProfileScreen({ navigation, route }: Props) {
       setDisplayAge(
         typeof profileRes.Age === 'number' ? profileRes.Age : null,
       );
-      setFriendCount(friendsRes.Items?.length ?? 0);
+      setFriendCount(friendshipItems(friendsRes).length);
       setLikeCount(likeCountRes.Count ?? 0);
       const profileAvatar = await resolveMediaUrl(profileRes.ProfileImage);
       setAvatarUri(photoBundle.avatarUri ?? profileAvatar);
@@ -206,9 +207,12 @@ export function UserProfileScreen({ navigation, route }: Props) {
           getFriendshipStatus(meId, targetId, accessToken),
           getLikeStatus(meId, targetId, accessToken),
         ]);
-        setRelation(statusRes.Relation ?? FriendshipRelation.None);
-        setFriendshipId(statusRes.FriendshipId ?? null);
-        setHasLiked(!!likeStatusRes.HasLiked);
+        setRelation(statusRes.Relation);
+        setFriendshipId(statusRes.FriendshipId);
+        setHasLiked(
+          !!(likeStatusRes.HasLiked ??
+            (likeStatusRes as { hasLiked?: boolean }).hasLiked),
+        );
       }
     } catch {
       setProfile(null);
@@ -230,12 +234,16 @@ export function UserProfileScreen({ navigation, route }: Props) {
   }, [profile]);
 
   const statusText = useMemo(() => {
-    const text = (profile?.StatusText ?? '').trim();
+    const text = (
+      profile?.StatusText ??
+      profile?.statusText ??
+      ''
+    ).trim();
     if (!text) return '';
-    const expiresAt = profile?.StatusExpiresAt;
+    const expiresAt = profile?.StatusExpiresAt ?? profile?.statusExpiresAt;
     if (expiresAt && new Date(expiresAt).getTime() <= Date.now()) return '';
     return text;
-  }, [profile?.StatusText, profile?.StatusExpiresAt]);
+  }, [profile?.StatusText, profile?.statusText, profile?.StatusExpiresAt, profile?.statusExpiresAt]);
 
   const interests = useMemo(
     () => (profile?.Interests ?? []).map(mapInterest),
@@ -398,6 +406,7 @@ export function UserProfileScreen({ navigation, route }: Props) {
 
   const hasBio = (profile.Bio ?? '').trim().length > 0;
   const isSelf = meId === targetId;
+  const areFriends = relation === FriendshipRelation.Friends;
   const scrollBottomPad = isSelf ? screenBottomPad : dock.scrollClearance;
 
   return (
@@ -416,9 +425,8 @@ export function UserProfileScreen({ navigation, route }: Props) {
         <Header
           title={t('user_profile.title')}
           actions={
-            isSelf
-              ? []
-              : [
+            !isSelf && areFriends
+              ? [
                   {
                     icon: 'heart',
                     onPress: () => {
@@ -431,6 +439,7 @@ export function UserProfileScreen({ navigation, route }: Props) {
                     filled: hasLiked,
                   },
                 ]
+              : []
           }
         />
 
@@ -543,6 +552,22 @@ export function UserProfileScreen({ navigation, route }: Props) {
                   {formatUsername(profile.Username)}
                 </Text>
               </View>
+              {statusText ? (
+                <View
+                  style={[
+                    styles.statusChip,
+                    {
+                      backgroundColor: theme.colors.surfaceAlt,
+                      borderColor: theme.colors.border,
+                    },
+                  ]}>
+                  <Text
+                    style={[styles.statusChipText, { color: theme.colors.text }]}
+                    numberOfLines={2}>
+                    {statusText}
+                  </Text>
+                </View>
+              ) : null}
             </View>
           </View>
 
@@ -678,59 +703,62 @@ export function UserProfileScreen({ navigation, route }: Props) {
               borderTopColor: theme.colors.border,
             },
           ]}>
-          <Pressable
-            onPress={onMessagePress}
-            disabled={busy}
-            style={[
-              styles.actionBtn,
-              {
-                backgroundColor: theme.colors.surfaceAlt,
-                borderColor: theme.colors.border,
-                opacity: busy ? 0.7 : 1,
-              },
-            ]}>
-            <Text style={[styles.actionBtnLabel, { color: theme.colors.text }]}>
-              {t('user_profile.message')}
-            </Text>
-          </Pressable>
-          <Pressable
-            onPress={onFriendAction}
-            disabled={
-              busy ||
-              isSelf ||
-              relation === FriendshipRelation.Friends ||
-              relation === FriendshipRelation.PendingOutgoing
-            }
-            style={[
-              styles.actionBtn,
-              {
-                opacity: busy ? 0.7 : 1,
-                backgroundColor:
-                  relation === FriendshipRelation.Friends ||
-                  relation === FriendshipRelation.PendingOutgoing
-                    ? theme.colors.surfaceAlt
-                    : theme.colors.primary,
-                borderColor:
-                  relation === FriendshipRelation.Friends ||
-                  relation === FriendshipRelation.PendingOutgoing
-                    ? theme.colors.border
-                    : theme.colors.primary,
-              },
-            ]}>
-            <Text
+          {areFriends ? (
+            <Pressable
+              onPress={onMessagePress}
+              disabled={busy}
               style={[
-                styles.actionBtnLabel,
+                styles.actionBtn,
                 {
-                  color:
-                    relation === FriendshipRelation.Friends ||
-                    relation === FriendshipRelation.PendingOutgoing
-                      ? theme.colors.text
-                      : theme.colors.onPrimary,
+                  backgroundColor: theme.colors.primary,
+                  borderColor: theme.colors.primary,
+                  opacity: busy ? 0.7 : 1,
                 },
               ]}>
-              {friendLabel}
-            </Text>
-          </Pressable>
+              <Text
+                style={[
+                  styles.actionBtnLabel,
+                  { color: theme.colors.onPrimary },
+                ]}>
+                {t('user_profile.message')}
+              </Text>
+            </Pressable>
+          ) : (
+            <Pressable
+              onPress={onFriendAction}
+              disabled={
+                busy ||
+                isSelf ||
+                relation === FriendshipRelation.PendingOutgoing
+              }
+              style={[
+                styles.actionBtn,
+                {
+                  opacity: busy ? 0.7 : 1,
+                  backgroundColor:
+                    relation === FriendshipRelation.PendingOutgoing
+                      ? theme.colors.surfaceAlt
+                      : theme.colors.primary,
+                  borderColor:
+                    relation === FriendshipRelation.PendingOutgoing
+                      ? theme.colors.border
+                      : theme.colors.primary,
+                },
+              ]}>
+              <Text
+                style={[
+                  styles.actionBtnLabel,
+                  {
+                    color:
+                      relation === FriendshipRelation.PendingOutgoing
+                        ? theme.colors.text
+                        : theme.colors.onPrimary,
+                  },
+                ]}>
+                {friendLabel}
+              </Text>
+            </Pressable>
+          )}
         </View>
       ) : null}
     </View>
@@ -760,21 +788,24 @@ const styles = StyleSheet.create({
   loading: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   header: {
     paddingHorizontal: 16,
-    paddingTop: 8,
+    paddingTop: 16,
     paddingBottom: 12,
     gap: 12,
+    overflow: 'visible',
   },
   headerTop: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
     marginTop: 4,
+    overflow: 'visible',
   },
   avatarRing: {
     width: AVATAR_SIZE,
     height: AVATAR_SIZE,
     position: 'relative',
     overflow: 'visible',
+    zIndex: 5,
   },
   avatar: {
     width: AVATAR_SIZE,
@@ -786,22 +817,36 @@ const styles = StyleSheet.create({
   avatarInitials: { fontSize: 26, fontWeight: '700' },
   statusBubble: {
     position: 'absolute',
-    top: -8,
-    left: -6,
-    maxWidth: AVATAR_SIZE + 28,
-    minWidth: 28,
-    minHeight: 26,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 13,
+    top: -6,
+    left: -4,
+    maxWidth: AVATAR_SIZE + 36,
+    minWidth: 32,
+    minHeight: 28,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 14,
     borderWidth: StyleSheet.hairlineWidth,
-    zIndex: 3,
+    zIndex: 20,
+    elevation: 20,
     alignItems: 'center',
     justifyContent: 'center',
   },
   statusBubbleText: {
     fontSize: 12,
     fontWeight: '700',
+  },
+  statusChip: {
+    alignSelf: 'flex-start',
+    marginTop: 6,
+    maxWidth: '100%',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 12,
+    borderWidth: StyleSheet.hairlineWidth,
+  },
+  statusChipText: {
+    fontSize: 13,
+    fontWeight: '600',
   },
   statsRow: {
     flex: 1,

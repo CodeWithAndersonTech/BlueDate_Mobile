@@ -26,7 +26,9 @@ export type UserProfileResponse = ApiEnvelope & {
   IsVerified: boolean;
   /** Active 24h status (text/emoji); null when missing or expired. */
   StatusText?: string | null;
+  statusText?: string | null;
   StatusExpiresAt?: string | null;
+  statusExpiresAt?: string | null;
   Interests: UserProfileInterest[];
   Photos?: UserProfilePhoto[];
 };
@@ -82,11 +84,16 @@ export type UpdateUserBioResponse = ApiEnvelope & {
   Bio: string;
 };
 
-export function getUserProfile(userId: number, token?: string | null) {
-  return apiRequest<UserProfileResponse>(API_PATHS.userProfile, {
+export async function getUserProfile(userId: number, token?: string | null) {
+  const raw = await apiRequest<UserProfileResponse>(API_PATHS.userProfile, {
     query: { userId },
     token,
   });
+  return {
+    ...raw,
+    StatusText: raw.StatusText ?? raw.statusText ?? null,
+    StatusExpiresAt: raw.StatusExpiresAt ?? raw.statusExpiresAt ?? null,
+  };
 }
 
 export function updateUserBio(payload: UpdateUserBioRequest, token?: string | null) {

@@ -11,7 +11,6 @@ import {
   Alert,
   BackHandler,
   KeyboardAvoidingView,
-  Modal,
   Platform,
   Pressable,
   ScrollView,
@@ -41,9 +40,10 @@ import {
   saveUserInterest,
   updateUserBio,
 } from '../../api';
-import { BottomActionDock, Header } from '../../components';
+import { Header } from '../../components';
 import { useLocale } from '../../i18n';
 import { useAuth } from '../../navigation/AuthContext';
+import { useStickyDockLayout } from '../../navigation/tabBarLayout';
 import { useLockTabSwipe } from '../../navigation/useLockTabSwipe';
 import { ProfileStackParamList } from '../../navigation/types';
 import { useTheme } from '../../theme';
@@ -93,6 +93,8 @@ export function EditProfileScreen({ navigation, route }: Props) {
   const insets = useSafeAreaInsets();
   const { userId, accessToken } = useAuth();
   const { t } = useLocale();
+  // Nested under Material Top Tabs — pill can still overlay; keep CTAs above it.
+  const dock = useStickyDockLayout(SAVE_BTN_HEIGHT, { forceAboveTabBar: true });
   const focusTarget = route.params?.focus;
   const focusInterestTypeId = route.params?.interestTypeId;
 
@@ -418,11 +420,7 @@ export function EditProfileScreen({ navigation, route }: Props) {
         translucent
       />
 
-      <Header
-        title={t('edit.title')}
-        onBack={() => navigation.goBack()}
-        backAccessibilityLabel={t('common.back')}
-      />
+      <Header title={t('edit.title')} />
 
       {loading ? (
         <EditProfileSkeleton />
@@ -456,7 +454,10 @@ export function EditProfileScreen({ navigation, route }: Props) {
             showsVerticalScrollIndicator={false}
             keyboardShouldPersistTaps="handled"
             keyboardDismissMode="on-drag"
-            contentContainerStyle={styles.content}>
+            contentContainerStyle={[
+              styles.content,
+              { paddingBottom: dock.scrollClearance },
+            ]}>
             {/* Account */}
             <Text style={[styles.sectionLabel, { color: theme.colors.textMuted }]}>
               {t('edit.account')}
@@ -636,57 +637,69 @@ export function EditProfileScreen({ navigation, route }: Props) {
               </View>
             )}
           </ScrollView>
-
-          <BottomActionDock elevated>
-            {justSaved ? (
-              <View style={styles.savedRow}>
-                <Text style={{ color: theme.colors.success, fontSize: 16 }}>
-                  ✓
-                </Text>
-                <Text
-                  style={[styles.savedLabel, { color: theme.colors.success }]}>
-                  {t('edit.saved')}
-                </Text>
-              </View>
-            ) : (
-              <Pressable
-                onPress={onSave}
-                disabled={!dirty || saving}
-                accessibilityRole="button"
-                accessibilityState={{
-                  disabled: !dirty || saving,
-                  busy: saving,
-                }}
-                style={[
-                  styles.saveBtn,
-                  {
-                    backgroundColor: dirty
-                      ? theme.colors.primary
-                      : theme.colors.primarySoft,
-                    borderColor: theme.colors.primary,
-                    opacity: saving ? 0.85 : 1,
-                  },
-                ]}>
-                {saving ? (
-                  <ActivityIndicator color={theme.colors.onPrimary} />
-                ) : (
-                  <Text
-                    style={[
-                      styles.saveLabel,
-                      {
-                        color: dirty
-                          ? theme.colors.onPrimary
-                          : theme.colors.primary,
-                      },
-                    ]}>
-                    {t('edit.save_changes')}
-                  </Text>
-                )}
-              </Pressable>
-            )}
-          </BottomActionDock>
         </Animated.View>
       )}
+
+      {!loading && !loadFailed ? (
+        <View
+          pointerEvents="box-none"
+          style={[
+            styles.stickyDock,
+            {
+              bottom: 0,
+              paddingBottom: dock.dockBottom + dock.dockPaddingBottom,
+              backgroundColor: theme.colors.surface,
+              borderTopColor: theme.colors.border,
+            },
+          ]}>
+          {justSaved ? (
+            <View style={styles.savedRow}>
+              <Text style={{ color: theme.colors.success, fontSize: 16 }}>
+                ✓
+              </Text>
+              <Text
+                style={[styles.savedLabel, { color: theme.colors.success }]}>
+                {t('edit.saved')}
+              </Text>
+            </View>
+          ) : (
+            <Pressable
+              onPress={onSave}
+              disabled={!dirty || saving}
+              accessibilityRole="button"
+              accessibilityState={{
+                disabled: !dirty || saving,
+                busy: saving,
+              }}
+              style={[
+                styles.saveBtn,
+                {
+                  backgroundColor: dirty
+                    ? theme.colors.primary
+                    : theme.colors.primarySoft,
+                  borderColor: theme.colors.primary,
+                  opacity: saving ? 0.85 : 1,
+                },
+              ]}>
+              {saving ? (
+                <ActivityIndicator color={theme.colors.onPrimary} />
+              ) : (
+                <Text
+                  style={[
+                    styles.saveLabel,
+                    {
+                      color: dirty
+                        ? theme.colors.onPrimary
+                        : theme.colors.primary,
+                    },
+                  ]}>
+                  {t('edit.save_changes')}
+                </Text>
+              )}
+            </Pressable>
+          )}
+        </View>
+      ) : null}
 
       <InterestSheet
         visible={sheetType != null}
@@ -826,21 +839,24 @@ function InterestSheet({
   const { t } = useLocale();
   const showClear = hasValue || value.trim().length > 0;
 
+  // In-tree overlay — RN Modal + Material Top Tabs crashes iOS New Arch
+  // (UIViewControllerHierarchyInconsistency).
+  if (!visible) {
+    return null;
+  }
+
   return (
-    <Modal
-      visible={visible}
-      transparent
-      animationType="slide"
-      onRequestClose={onClose}>
+    <View style={styles.sheetRoot} pointerEvents="box-none">
+      <Pressable
+        style={[styles.backdrop, { backgroundColor: theme.colors.backdrop }]}
+        accessibilityRole="button"
+        accessibilityLabel={t('common.close')}
+        onPress={onClose}
+      />
       <KeyboardAvoidingView
-        style={styles.flex}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-        <Pressable
-          style={[styles.backdrop, { backgroundColor: theme.colors.backdrop }]}
-          accessibilityRole="button"
-          accessibilityLabel={t('common.close')}
-          onPress={onClose}
-        />
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        pointerEvents="box-none"
+        style={styles.sheetKeyboard}>
         <View
           style={[
             styles.sheet,
@@ -924,7 +940,7 @@ function InterestSheet({
           </View>
         </View>
       </KeyboardAvoidingView>
-    </Modal>
+    </View>
   );
 }
 
@@ -932,6 +948,12 @@ const styles = StyleSheet.create({
   root: { flex: 1 },
   flex: { flex: 1 },
   body: { flex: 1 },
+  sheetKeyboard: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+  },
   center: {
     flex: 1,
     alignItems: 'center',
@@ -953,7 +975,18 @@ const styles = StyleSheet.create({
   content: {
     paddingHorizontal: 20,
     paddingTop: 0,
-    paddingBottom: 24,
+  },
+  stickyDock: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingHorizontal: 16,
+    paddingTop: 12,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    zIndex: 20,
   },
   sectionLabel: {
     fontSize: 11,
@@ -1081,7 +1114,13 @@ const styles = StyleSheet.create({
     height: SAVE_BTN_HEIGHT,
   },
   savedLabel: { fontSize: 16, fontWeight: '700' },
-  backdrop: { flex: 1 },
+  sheetRoot: {
+    ...StyleSheet.absoluteFillObject,
+    zIndex: 9999,
+    elevation: 9999,
+    justifyContent: 'flex-end',
+  },
+  backdrop: { ...StyleSheet.absoluteFillObject },
   sheet: {
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,

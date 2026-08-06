@@ -280,13 +280,16 @@ export function ProfileScreen({ navigation }: Props) {
   const shell = (children: React.ReactNode) => (
     <SafeAreaView
       edges={['top']}
-      style={[styles.root, { backgroundColor: theme.colors.background }]}>
+      style={[
+        styles.root,
+        { backgroundColor: theme.colors.background, overflow: 'visible' },
+      ]}>
       <StatusBar
         barStyle={theme.isDark ? 'light-content' : 'dark-content'}
         backgroundColor="transparent"
         translucent
       />
-      {children}
+      <View style={styles.flex}>{children}</View>
       <StatusEditModal
         visible={statusModalOpen}
         initialStatus={statusText}
@@ -399,42 +402,45 @@ export function ProfileScreen({ navigation }: Props) {
           </View>
 
           <View style={styles.headerTop}>
-            <Pressable
-              style={styles.avatarRing}
-              onPress={onChangeAvatar}
-              onLongPress={() => setStatusModalOpen(true)}
-              accessibilityRole="button"
-              accessibilityLabel={t('profile.change_avatar')}>
-              {avatarUri ? (
-                <Image
-                  source={{ uri: avatarUri }}
-                  style={[
-                    styles.avatar,
-                    { borderColor: theme.colors.border },
-                  ]}
-                />
-              ) : (
-                <View
-                  style={[
-                    styles.avatar,
-                    styles.avatarFallback,
-                    {
-                      backgroundColor: theme.colors.primarySoft,
-                      borderColor: theme.colors.border,
-                    },
-                  ]}>
-                  <Text
-                    style={[
-                      styles.avatarInitials,
-                      { color: theme.colors.primary },
-                    ]}>
-                    {initialsFromName(fullName)}
-                  </Text>
-                </View>
-              )}
+            <View style={styles.avatarRing}>
               <Pressable
-                onPress={() => setStatusModalOpen(true)}
-                hitSlop={6}
+                onPress={onChangeAvatar}
+                accessibilityRole="button"
+                accessibilityLabel={t('profile.change_avatar')}>
+                {avatarUri ? (
+                  <Image
+                    source={{ uri: avatarUri }}
+                    style={[
+                      styles.avatar,
+                      { borderColor: theme.colors.border },
+                    ]}
+                  />
+                ) : (
+                  <View
+                    style={[
+                      styles.avatar,
+                      styles.avatarFallback,
+                      {
+                        backgroundColor: theme.colors.primarySoft,
+                        borderColor: theme.colors.border,
+                      },
+                    ]}>
+                    <Text
+                      style={[
+                        styles.avatarInitials,
+                        { color: theme.colors.primary },
+                      ]}>
+                      {initialsFromName(fullName)}
+                    </Text>
+                  </View>
+                )}
+              </Pressable>
+              <Pressable
+                onPress={() => {
+                  closeVerifyTip();
+                  setStatusModalOpen(true);
+                }}
+                hitSlop={14}
                 accessibilityRole="button"
                 accessibilityLabel={t('profile.status_title')}
                 style={[
@@ -451,7 +457,11 @@ export function ProfileScreen({ navigation }: Props) {
                   {statusText || '+'}
                 </Text>
               </Pressable>
-              <View
+              <Pressable
+                onPress={onChangeAvatar}
+                hitSlop={6}
+                accessibilityRole="button"
+                accessibilityLabel={t('profile.change_avatar')}
                 style={[
                   styles.avatarCamBadge,
                   { backgroundColor: theme.colors.primary },
@@ -459,7 +469,7 @@ export function ProfileScreen({ navigation }: Props) {
                 <Text style={{ color: theme.colors.onPrimary, fontSize: 11 }}>
                   ✎
                 </Text>
-              </View>
+              </Pressable>
               <View
                 style={[
                   styles.onlineDot,
@@ -469,7 +479,7 @@ export function ProfileScreen({ navigation }: Props) {
                   },
                 ]}
               />
-            </Pressable>
+            </View>
 
             <View style={styles.statsRow}>
               <View style={styles.statItem}>
@@ -919,6 +929,7 @@ const styles = StyleSheet.create({
     height: AVATAR_SIZE,
     position: 'relative',
     overflow: 'visible',
+    zIndex: 5,
   },
   avatar: {
     width: AVATAR_SIZE,
@@ -930,16 +941,17 @@ const styles = StyleSheet.create({
   avatarInitials: { fontSize: 26, fontWeight: '700' },
   statusBubble: {
     position: 'absolute',
-    top: -8,
-    left: -6,
-    maxWidth: AVATAR_SIZE + 28,
-    minWidth: 28,
-    minHeight: 26,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 13,
+    top: -10,
+    left: -8,
+    maxWidth: AVATAR_SIZE + 36,
+    minWidth: 32,
+    minHeight: 30,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 15,
     borderWidth: StyleSheet.hairlineWidth,
-    zIndex: 3,
+    zIndex: 20,
+    elevation: 20,
     alignItems: 'center',
     justifyContent: 'center',
   },

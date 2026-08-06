@@ -13,7 +13,7 @@ const USE_PRODUCTION = false;
  * Cloudflare QUICK tunnel URL — her tunnel açılışında değişir.
  * Terminal: AD_BlueDateApp/deploy/quick-tunnel.sh  (bu satırı otomatik günceller)
  */
-const PROD_API_URL = 'https://fill-explorer-feature-monthly.trycloudflare.com';
+const PROD_API_URL = 'https://symantec-conviction-gmbh-reveal.trycloudflare.com';
 
 /** Lokal debug (USE_PRODUCTION = false) */
 const DEV_PORT = 5135;

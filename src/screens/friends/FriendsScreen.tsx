@@ -26,10 +26,12 @@ import {
   displayName,
   formatRelativeTime,
   FriendshipListItem,
+  friendshipItems,
   getFriends,
   getIncomingFriendRequests,
   getSentFriendRequests,
   rejectFriendRequest,
+  resolveFriendshipAvatars,
 } from '../../api';
 import { useLocale } from '../../i18n';
 import { useAuth } from '../../navigation/AuthContext';
@@ -68,9 +70,14 @@ export function FriendsScreen({ navigation }: Props) {
         getIncomingFriendRequests(userId, accessToken),
         getSentFriendRequests(userId, accessToken),
       ]);
-      setFriends(friendsRes.Items ?? []);
-      setIncomingRequests(incomingRes.Items ?? []);
-      setSentRequests(sentRes.Items ?? []);
+      const [nextFriends, nextIncoming, nextSent] = await Promise.all([
+        resolveFriendshipAvatars(friendshipItems(friendsRes)),
+        resolveFriendshipAvatars(friendshipItems(incomingRes)),
+        resolveFriendshipAvatars(friendshipItems(sentRes)),
+      ]);
+      setFriends(nextFriends);
+      setIncomingRequests(nextIncoming);
+      setSentRequests(nextSent);
     } catch (error) {
       setFriends([]);
       setIncomingRequests([]);
