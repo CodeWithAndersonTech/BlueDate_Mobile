@@ -124,7 +124,9 @@ const styles = StyleSheet.create({
     borderRadius: 18,
   },
   desc: { maxWidth: 300 },
-  action: { marginTop: 8 },
+  // Button's intrinsic style uses alignSelf: 'flex-start' — override so CTAs
+  // stay centered with the title/description block.
+  action: { marginTop: 8, alignSelf: 'center' },
 });
 
 export default EmptyState;

@@ -2,6 +2,7 @@ import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
+  Alert,
   Image,
   Pressable,
   RefreshControl,
@@ -11,13 +12,13 @@ import {
   useWindowDimensions,
   View,
 } from 'react-native';
-import Animated, {
-  Easing,
-  useAnimatedStyle,
-  useSharedValue,
-  withTiming,
-} from 'react-native-reanimated';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import {
+  FriendshipRelation,
+  getFriendshipStatus,
+  getUserProfile,
+  sendFriendRequest,
+} from '../../api';
 import { resolveMediaUrl } from '../../api/photos';
 import {
   BridgeNearbyItem,
@@ -47,14 +48,17 @@ const LOAD_MS = 400;
 function estimateDistanceKm(
   item: DirectNearbyItem | BridgeNearbyItem,
 ): number {
-  if ('DistanceKm' in item && typeof item.DistanceKm === 'number' && item.DistanceKm > 0) {
+  if (
+    'DistanceKm' in item &&
+    typeof item.DistanceKm === 'number' &&
+    item.DistanceKm > 0
+  ) {
     return item.DistanceKm;
   }
   if ('Rssi' in item && typeof item.Rssi === 'number') {
     const meters = Math.pow(10, (-59 - item.Rssi) / 20);
     return Math.max(0.001, meters / 1000);
   }
-  // Bridge / unknown: soften by strength (0-100 → ~5m-80m)
   const score = item.StrengthScore ?? 0;
   return Math.max(0.005, (100 - score) / 1000);
 }
@@ -102,27 +106,57 @@ export function NearbyScreen({ navigation }: Props) {
   const [users, setUsers] = useState<NearbyUser[]>([]);
   const [added, setAdded] = useState<Record<string, boolean>>({});
   const [loading, setLoading] = useState(true);
+  const [verified, setVerified] = useState<boolean | null>(null);
   const [scanTipOpen, setScanTipOpen] = useState(false);
-  const contentOpacity = useSharedValue(0);
   const mappingRef = useRef(0);
+  const addingRef = useRef<Record<string, boolean>>({});
 
   const closeScanTip = () => setScanTipOpen(false);
   const cardW = (windowWidth - H_PAD * 2 - GAP) / 2;
 
-  // Empty-state / cold-start scan: show the branded radar overlay (not the
-  // native RefreshControl spinner). List pull-to-refresh keeps the native one.
   const showScanOverlay =
-    state.status === 'starting' ||
-    (state.refreshing && users.length === 0);
+    verified === true &&
+    (state.status === 'starting' ||
+      (state.refreshing && users.length === 0));
+
+  const goToProfileTab = useCallback(() => {
+    rootNav.getParent()?.navigate('Profile' as never);
+  }, [rootNav]);
 
   useFocusEffect(
     useCallback(() => {
-      if (!isSignedIn || !session) return undefined;
-      start();
+      if (!isSignedIn || !userId) {
+        setVerified(false);
+        return undefined;
+      }
+
+      let cancelled = false;
+
+      (async () => {
+        try {
+          const me = await getUserProfile(userId, accessToken);
+          if (cancelled) return;
+          const ok = Boolean(me.IsVerified);
+          setVerified(ok);
+          if (ok) {
+            start();
+          } else {
+            stop();
+            // Unverified users cannot use Nearby — send them to Profile.
+            rootNav.getParent()?.navigate('Profile' as never);
+          }
+        } catch {
+          if (!cancelled) {
+            setVerified(false);
+            stop();
+          }
+        }
+      })();
+
       return () => {
-        // Keep advertising while tab stack stays mounted; stop only on sign-out.
+        cancelled = true;
       };
-    }, [isSignedIn, session, start]),
+    }, [isSignedIn, userId, accessToken, start, stop, rootNav]),
   );
 
   useEffect(() => {
@@ -132,20 +166,15 @@ export function NearbyScreen({ navigation }: Props) {
   }, [isSignedIn, stop]);
 
   useEffect(() => {
-    const boot = setTimeout(() => {
-      setLoading(false);
-      contentOpacity.value = withTiming(1, {
-        duration: 280,
-        easing: Easing.out(Easing.quad),
-      });
-    }, LOAD_MS);
+    const boot = setTimeout(() => setLoading(false), LOAD_MS);
     return () => clearTimeout(boot);
-  }, [contentOpacity]);
+  }, []);
 
   useEffect(() => {
+    if (verified !== true) return;
+
     const seq = ++mappingRef.current;
     const combined = [...state.direct, ...state.bridge];
-    // Dedupe by userId — prefer direct over bridge
     const byId = new Map<number, DirectNearbyItem | BridgeNearbyItem>();
     for (const item of combined) {
       if (!byId.has(item.UserId) || item.HopCount === 1) {
@@ -159,35 +188,75 @@ export function NearbyScreen({ navigation }: Props) {
       );
       if (seq !== mappingRef.current) return;
       setUsers(mapped);
-      if (mapped.length > 0) {
-        contentOpacity.value = withTiming(1, { duration: 280 });
+
+      // Prefill added state from friendship status (friends / pending out).
+      if (userId && mapped.length > 0) {
+        const statuses = await Promise.all(
+          mapped.map(async u => {
+            try {
+              const res = await getFriendshipStatus(
+                userId,
+                Number(u.id),
+                accessToken,
+              );
+              return {
+                id: u.id,
+                added:
+                  res.Relation === FriendshipRelation.Friends ||
+                  res.Relation === FriendshipRelation.PendingOutgoing,
+              };
+            } catch {
+              return { id: u.id, added: false };
+            }
+          }),
+        );
+        if (seq !== mappingRef.current) return;
+        setAdded(prev => {
+          const next = { ...prev };
+          for (const row of statuses) {
+            if (row.added) next[row.id] = true;
+          }
+          return next;
+        });
       }
     })();
-  }, [state.direct, state.bridge, contentOpacity]);
+  }, [state.direct, state.bridge, verified, userId, accessToken]);
 
   useEffect(() => {
     const parent = rootNav.getParent();
     if (!parent) return;
 
     const unsub = parent.addListener('tabPress' as never, () => {
-      if (navigation.isFocused() && state.status === 'running') {
-        // Poll only — full refresh used to reset the proximity graph.
+      if (
+        navigation.isFocused() &&
+        verified === true &&
+        state.status === 'running'
+      ) {
         void pollNearby();
       }
     });
 
     return unsub;
-  }, [rootNav, navigation, state.status, pollNearby]);
+  }, [rootNav, navigation, state.status, pollNearby, verified]);
 
-  const contentFadeStyle = useAnimatedStyle(() => ({
-    opacity: contentOpacity.value,
-  }));
-
-  const toggleAdd = (id: string) =>
-    setAdded(prev => ({ ...prev, [id]: !prev[id] }));
+  const onAddFriend = async (id: string) => {
+    if (!userId || added[id] || addingRef.current[id]) return;
+    addingRef.current[id] = true;
+    try {
+      await sendFriendRequest(userId, Number(id), accessToken);
+      setAdded(prev => ({ ...prev, [id]: true }));
+    } catch (error) {
+      Alert.alert(
+        t('user_profile.add_friend'),
+        error instanceof Error ? error.message : t('nearby.add_friend_error'),
+      );
+    } finally {
+      addingRef.current[id] = false;
+    }
+  };
 
   const onRefresh = () => {
-    refresh();
+    if (verified === true) refresh();
   };
 
   const emptyDesc =
@@ -196,6 +265,38 @@ export function NearbyScreen({ navigation }: Props) {
       : state.status === 'error'
         ? state.errorMessage || t('nearby.empty_desc')
         : t('nearby.empty_desc');
+
+  if (loading || verified === null) {
+    return (
+      <SafeAreaView
+        edges={['top']}
+        style={[styles.root, { backgroundColor: theme.colors.background }]}>
+        <NearbySkeleton />
+      </SafeAreaView>
+    );
+  }
+
+  if (verified === false) {
+    return (
+      <SafeAreaView
+        edges={['top']}
+        style={[styles.root, { backgroundColor: theme.colors.background }]}>
+        <StatusBar
+          barStyle={theme.isDark ? 'light-content' : 'dark-content'}
+          backgroundColor="transparent"
+          translucent
+        />
+        <EmptyState
+          fill
+          icon="shield"
+          title={t('nearby.verified_required_title')}
+          description={t('nearby.verified_required_desc')}
+          actionLabel={t('nearby.verified_required_action')}
+          onAction={goToProfileTab}
+        />
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView
@@ -207,140 +308,137 @@ export function NearbyScreen({ navigation }: Props) {
         translucent
       />
 
-      {loading ? (
-        <NearbySkeleton />
-      ) : (
-        <Animated.View style={[styles.flex, contentFadeStyle]}>
-          <View style={styles.header}>
+      <View style={styles.flex}>
+        <View style={styles.header}>
+          {scanTipOpen ? (
+            <Pressable
+              style={styles.scanTipDismiss}
+              onPress={closeScanTip}
+              accessibilityRole="button"
+              accessibilityLabel={t('common.close')}
+            />
+          ) : null}
+
+          <View style={styles.headerText}>
+            <Text style={[styles.eyebrow, { color: theme.colors.textMuted }]}>
+              {t('nearby.eyebrow')}
+            </Text>
+            <Text style={[styles.title, { color: theme.colors.text }]}>
+              {t('nearby.title')}
+            </Text>
+          </View>
+
+          <View style={styles.scanBtnWrap}>
+            <Pressable
+              onPress={() => {
+                setScanTipOpen(false);
+                if (state.status === 'idle' || state.status === 'error') {
+                  start();
+                } else {
+                  refresh();
+                }
+              }}
+              onLongPress={() => setScanTipOpen(open => !open)}
+              hitSlop={8}
+              accessibilityRole="button"
+              accessibilityLabel={t('nearby.scan_action')}
+              accessibilityState={{ expanded: scanTipOpen }}
+              style={[
+                styles.scanBtn,
+                {
+                  backgroundColor: theme.colors.surfaceAlt,
+                  borderColor: theme.colors.border,
+                },
+              ]}>
+              <Image source={images.appLogo} style={styles.scanBtnLogo} />
+            </Pressable>
+
             {scanTipOpen ? (
-              <Pressable
-                style={styles.scanTipDismiss}
-                onPress={closeScanTip}
-                accessibilityRole="button"
-                accessibilityLabel={t('common.close')}
-              />
-            ) : null}
-
-            <View style={styles.headerText}>
-              <Text
-                style={[styles.eyebrow, { color: theme.colors.textMuted }]}>
-                {t('nearby.eyebrow')}
-              </Text>
-              <Text style={[styles.title, { color: theme.colors.text }]}>
-                {t('nearby.title')}
-              </Text>
-            </View>
-
-            <View style={styles.scanBtnWrap}>
-              <Pressable
-                onPress={() => {
-                  setScanTipOpen(false);
-                  if (state.status === 'idle' || state.status === 'error') {
-                    start();
-                  } else {
-                    refresh();
-                  }
-                }}
-                onLongPress={() => setScanTipOpen(open => !open)}
-                hitSlop={8}
-                accessibilityRole="button"
-                accessibilityLabel={t('nearby.scan_action')}
-                accessibilityState={{ expanded: scanTipOpen }}
+              <View
                 style={[
-                  styles.scanBtn,
+                  styles.scanTip,
                   {
-                    backgroundColor: theme.colors.surfaceAlt,
+                    backgroundColor: theme.colors.card,
                     borderColor: theme.colors.border,
                   },
+                  theme.shadows.sm,
                 ]}>
-                <Image source={images.appLogo} style={styles.scanBtnLogo} />
-              </Pressable>
-
-              {scanTipOpen ? (
                 <View
                   style={[
-                    styles.scanTip,
+                    styles.scanTipCaret,
                     {
                       backgroundColor: theme.colors.card,
                       borderColor: theme.colors.border,
                     },
-                    theme.shadows.sm,
+                  ]}
+                />
+                <Text
+                  style={[styles.scanTipTitle, { color: theme.colors.text }]}>
+                  {t('nearby.scan_action')}
+                </Text>
+                <Text
+                  style={[
+                    styles.scanTipText,
+                    { color: theme.colors.textMuted },
                   ]}>
-                  <View
-                    style={[
-                      styles.scanTipCaret,
-                      {
-                        backgroundColor: theme.colors.card,
-                        borderColor: theme.colors.border,
-                      },
-                    ]}
-                  />
-                  <Text
-                    style={[styles.scanTipTitle, { color: theme.colors.text }]}>
-                    {t('nearby.scan_action')}
-                  </Text>
-                  <Text
-                    style={[
-                      styles.scanTipText,
-                      { color: theme.colors.textMuted },
-                    ]}>
-                    {t('nearby.scan_banner')}
-                  </Text>
-                </View>
-              ) : null}
-            </View>
+                  {t('nearby.scan_banner')}
+                </Text>
+              </View>
+            ) : null}
           </View>
+        </View>
 
-          {users.length === 0 ? (
-            <TabScreenScrollView
-              contentContainerStyle={styles.emptyScroll}
-              onScrollBeginDrag={closeScanTip}
-              refreshControl={
-                <RefreshControl
-                  refreshing={false}
-                  onRefresh={onRefresh}
-                  tintColor={theme.colors.primary}
-                />
-              }>
-              <EmptyState
-                image={images.appLogo}
-                onImagePress={() => {
-                  if (state.status === 'idle') start();
-                  else refresh();
-                }}
-                imageAccessibilityLabel={t('nearby.scan_action')}
-                title={t('nearby.empty_title')}
-                description={emptyDesc}
+        {users.length === 0 ? (
+          <TabScreenScrollView
+            contentContainerStyle={styles.emptyScroll}
+            onScrollBeginDrag={closeScanTip}
+            refreshControl={
+              <RefreshControl
+                refreshing={false}
+                onRefresh={onRefresh}
+                tintColor={theme.colors.primary}
               />
-            </TabScreenScrollView>
-          ) : (
-            <TabScreenScrollView
-              contentContainerStyle={styles.grid}
-              onScrollBeginDrag={closeScanTip}
-              refreshControl={
-                <RefreshControl
-                  refreshing={state.refreshing}
-                  onRefresh={onRefresh}
-                  tintColor={theme.colors.primary}
-                />
-              }>
-              {users.map(user => (
-                <NearbyCard
-                  key={user.id}
-                  user={user}
-                  variant="grid"
-                  style={{ width: cardW }}
-                  added={!!added[user.id]}
-                  onAdd={() => toggleAdd(user.id)}
-                  onPress={() =>
-                    navigation.navigate('UserProfile', { userId: user.id })
-                  }
-                />
-              ))}
-            </TabScreenScrollView>
-          )}
-        </Animated.View>
-      )}
+            }>
+            <EmptyState
+              image={images.appLogo}
+              onImagePress={() => {
+                if (state.status === 'idle') start();
+                else refresh();
+              }}
+              imageAccessibilityLabel={t('nearby.scan_action')}
+              title={t('nearby.empty_title')}
+              description={emptyDesc}
+            />
+          </TabScreenScrollView>
+        ) : (
+          <TabScreenScrollView
+            contentContainerStyle={styles.grid}
+            onScrollBeginDrag={closeScanTip}
+            refreshControl={
+              <RefreshControl
+                refreshing={state.refreshing}
+                onRefresh={onRefresh}
+                tintColor={theme.colors.primary}
+              />
+            }>
+            {users.map(user => (
+              <NearbyCard
+                key={user.id}
+                user={user}
+                variant="grid"
+                style={{ width: cardW }}
+                added={!!added[user.id]}
+                onAdd={() => {
+                  void onAddFriend(user.id);
+                }}
+                onPress={() =>
+                  navigation.navigate('UserProfile', { userId: user.id })
+                }
+              />
+            ))}
+          </TabScreenScrollView>
+        )}
+      </View>
 
       <NearbyScanOverlay
         visible={showScanOverlay}
@@ -380,21 +478,19 @@ const styles = StyleSheet.create({
   },
   scanBtnWrap: {
     position: 'relative',
-    marginTop: 10,
     zIndex: 5,
   },
   scanBtn: {
     width: 44,
     height: 44,
-    borderRadius: 14,
+    borderRadius: 22,
     borderWidth: StyleSheet.hairlineWidth,
     alignItems: 'center',
     justifyContent: 'center',
-    overflow: 'hidden',
   },
   scanBtnLogo: {
-    width: 32,
-    height: 32,
+    width: 28,
+    height: 28,
     borderRadius: 8,
   },
   scanTipDismiss: {
@@ -441,9 +537,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     flexWrap: 'wrap',
     justifyContent: 'space-between',
-    rowGap: 12,
+    rowGap: 18,
     paddingHorizontal: H_PAD,
-    paddingTop: 4,
+    paddingTop: 8,
   },
 });
 

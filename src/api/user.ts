@@ -24,6 +24,9 @@ export type UserProfileResponse = ApiEnvelope & {
   IsEmailVerified: boolean;
   /** Onaylı hesap — tüm interest type'lar + en az 1 galeri fotoğrafı. */
   IsVerified: boolean;
+  /** Active 24h status (text/emoji); null when missing or expired. */
+  StatusText?: string | null;
+  StatusExpiresAt?: string | null;
   Interests: UserProfileInterest[];
   Photos?: UserProfilePhoto[];
 };
@@ -88,6 +91,28 @@ export function getUserProfile(userId: number, token?: string | null) {
 
 export function updateUserBio(payload: UpdateUserBioRequest, token?: string | null) {
   return apiRequest<UpdateUserBioResponse>(API_PATHS.userBio, {
+    method: 'PUT',
+    body: payload,
+    token,
+  });
+}
+
+export type UpdateUserStatusRequest = {
+  UserId: number;
+  StatusText: string;
+};
+
+export type UpdateUserStatusResponse = ApiEnvelope & {
+  UserId: number;
+  StatusText?: string | null;
+  StatusExpiresAt?: string | null;
+};
+
+export function updateUserStatus(
+  payload: UpdateUserStatusRequest,
+  token?: string | null,
+) {
+  return apiRequest<UpdateUserStatusResponse>(API_PATHS.userStatus, {
     method: 'PUT',
     body: payload,
     token,

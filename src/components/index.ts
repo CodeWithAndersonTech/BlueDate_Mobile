@@ -30,5 +30,7 @@ export * from './NearbyCard';
 export * from './LanguagePicker';
 export * from './LanguageFlagButton';
 export * from './BioEditModal';
+export * from './StatusEditModal';
+export * from './ErrorBoundary';
 export * from './SettingsGroup';
 export * from './ReadOnlyRow';

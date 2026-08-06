@@ -1,10 +1,11 @@
-import { useNavigation } from '@react-navigation/native';
+import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import React, { useState } from 'react';
+import React, { useCallback, useState } from 'react';
 import {
   Alert,
   Pressable,
   ScrollView,
+  Share,
   StatusBar,
   StyleSheet,
   Text,
@@ -37,6 +38,12 @@ import {
   useTheme,
   useThemeController,
 } from '../../theme';
+import {
+  clearCrashLogs,
+  CrashEntry,
+  formatCrashEntry,
+  getLastCrash,
+} from '../../utils/crashLog';
 
 export function SettingsScreen() {
   useLockTabSwipe();
@@ -57,8 +64,43 @@ export function SettingsScreen() {
     messages: true,
     marketing: false,
   });
+  const [lastCrash, setLastCrash] = useState<CrashEntry | null>(null);
   const setNotifKey = (key: keyof typeof notif) => (value: boolean) =>
     setNotif(prev => ({ ...prev, [key]: value }));
+
+  useFocusEffect(
+    useCallback(() => {
+      void getLastCrash().then(setLastCrash);
+    }, []),
+  );
+
+  const openCrashLog = () => {
+    if (!lastCrash) {
+      Alert.alert('Crash log', 'Henüz kaydedilmiş bir crash yok.');
+      return;
+    }
+    const dump = formatCrashEntry(lastCrash);
+    Alert.alert(
+      `Crash · ${lastCrash.kind}`,
+      `${lastCrash.at}\n\n${lastCrash.message}`,
+      [
+        { text: 'Kapat', style: 'cancel' },
+        {
+          text: 'Temizle',
+          style: 'destructive',
+          onPress: () => {
+            void clearCrashLogs().then(() => setLastCrash(null));
+          },
+        },
+        {
+          text: 'Paylaş',
+          onPress: () => {
+            void Share.share({ message: dump });
+          },
+        },
+      ],
+    );
+  };
 
   const modeItems = [
     { key: 'light', label: t('settings.theme_light') },
@@ -305,6 +347,21 @@ export function SettingsScreen() {
               })}
             </View>
           </View>
+        </SettingsGroup>
+
+        <SectionLabel label="Debug" />
+        <SettingsGroup>
+          <ListRow
+            icon="zap"
+            title="Crash log"
+            subtitle={
+              lastCrash
+                ? `${lastCrash.kind} · ${lastCrash.message.slice(0, 48)}`
+                : 'Kayıt yok'
+            }
+            onPress={openCrashLog}
+            style={styles.rowPad}
+          />
         </SettingsGroup>
 
         <View style={styles.logoutWrap}>

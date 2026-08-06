@@ -8,23 +8,31 @@ import React from 'react';
 import { StyleSheet } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { ErrorBoundary } from './src/components/ErrorBoundary';
 import { LocaleProvider } from './src/i18n';
 import { AuthProvider, ChatProvider, RootNavigator } from './src/navigation';
 import { ThemeProvider } from './src/theme';
+import { breadcrumb } from './src/utils/crashLog';
 
 function App() {
+  React.useEffect(() => {
+    breadcrumb('app_mounted');
+  }, []);
+
   return (
     <GestureHandlerRootView style={styles.root}>
       <SafeAreaProvider>
-        <ThemeProvider initialPreference="dark" initialAccent="cosmic">
-          <LocaleProvider>
-            <AuthProvider>
-              <ChatProvider>
-                <RootNavigator />
-              </ChatProvider>
-            </AuthProvider>
-          </LocaleProvider>
-        </ThemeProvider>
+        <ErrorBoundary>
+          <ThemeProvider initialPreference="dark" initialAccent="cosmic">
+            <LocaleProvider>
+              <AuthProvider>
+                <ChatProvider>
+                  <RootNavigator />
+                </ChatProvider>
+              </AuthProvider>
+            </LocaleProvider>
+          </ThemeProvider>
+        </ErrorBoundary>
       </SafeAreaProvider>
     </GestureHandlerRootView>
   );

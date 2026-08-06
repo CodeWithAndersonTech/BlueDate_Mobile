@@ -27,7 +27,10 @@ export function MainTabs() {
         // Nested stack screens call useLockTabSwipe() to turn this off,
         // so edge-swipe pops the stack instead of switching to Premium.
         swipeEnabled: true,
-        animationEnabled: true,
+        // iOS New Arch: Material Top Tabs + animated scene transitions abort
+        // with UIViewControllerHierarchyInconsistency
+        // (_associatedViewControllerForwardsAppearanceCallbacks).
+        animationEnabled: false,
         lazy: true,
         sceneStyle: { flex: 1 },
       }}>

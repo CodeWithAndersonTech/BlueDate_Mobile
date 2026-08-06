@@ -34,17 +34,12 @@ export interface NearbyCardProps {
   onPress?: () => void;
   onAdd?: () => void;
   added?: boolean;
-  /** 'grid' = photo card, 'rail' = compact circle rail */
+  /** 'grid' = circular photo tile, 'rail' = compact circle rail */
   variant?: 'grid' | 'rail';
   style?: StyleProp<ViewStyle>;
 }
 
-function formatDistance(distanceKm: number): string {
-  if (distanceKm < 1) {
-    return `${Math.round(distanceKm * 1000)} m`;
-  }
-  return `${distanceKm.toFixed(1)} km`;
-}
+const CIRCLE = 132;
 
 export function NearbyCard({
   user,
@@ -66,6 +61,8 @@ export function NearbyCard({
   const pressOut = () => {
     scale.value = withSpring(1, { damping: 14, stiffness: 260 });
   };
+
+  const firstName = user.name.split(' ')[0] || user.name;
 
   if (variant === 'rail') {
     return (
@@ -107,17 +104,8 @@ export function NearbyCard({
           <Text
             style={[styles.railName, { color: theme.colors.text }]}
             numberOfLines={1}>
-            {user.name.split(' ')[0]}
+            {firstName}
           </Text>
-          <View
-            style={[
-              styles.railDist,
-              { backgroundColor: theme.colors.surfaceAlt },
-            ]}>
-            <Text style={[styles.railDistText, { color: theme.colors.textMuted }]}>
-              {formatDistance(user.distanceKm)}
-            </Text>
-          </View>
         </Animated.View>
       </Pressable>
     );
@@ -131,92 +119,80 @@ export function NearbyCard({
       style={style}
       accessibilityRole="button"
       accessibilityLabel={`${user.name}, ${user.age}`}>
-      <Animated.View
-        style={[
-          styles.gridCard,
-          {
-            backgroundColor: theme.colors.card,
-            borderColor: theme.colors.border,
-          },
-          theme.shadows.sm,
-          animated,
-        ]}>
-        <View style={styles.photoWrap}>
-          {user.photo ? (
-            <Image source={{ uri: user.photo }} style={styles.fill} />
-          ) : (
-            <LinearGradient
-              colors={user.accentColors ?? theme.gradients.primary}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 1 }}
-              style={styles.fill}
+      <Animated.View style={[styles.gridCard, animated]}>
+        <View style={styles.circleWrap}>
+          <View
+            style={[
+              styles.circle,
+              {
+                borderColor: user.online
+                  ? theme.colors.primary
+                  : theme.colors.borderStrong,
+                backgroundColor: theme.colors.surfaceAlt,
+              },
+            ]}>
+            {user.photo ? (
+              <Image source={{ uri: user.photo }} style={styles.fill} />
+            ) : (
+              <LinearGradient
+                colors={user.accentColors ?? theme.gradients.primary}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={styles.fill}
+              />
+            )}
+          </View>
+
+          {user.online ? (
+            <View
+              style={[
+                styles.online,
+                {
+                  backgroundColor: theme.colors.online,
+                  borderColor: theme.colors.background,
+                },
+              ]}
             />
-          )}
+          ) : null}
 
-          <LinearGradient
-            colors={['transparent', 'rgba(0,0,0,0.25)', 'rgba(0,0,0,0.72)']}
-            locations={[0.35, 0.65, 1]}
-            style={styles.photoFade}
-          />
-
-          <View style={styles.topRow}>
-            <View style={styles.distBadge}>
-              <Icon name="map-pin" size={10} color="#fff" />
-              <Text style={styles.distText}>{formatDistance(user.distanceKm)}</Text>
+          {user.premium ? (
+            <View style={styles.crown}>
+              <Icon name="crown" size={11} color="#3A2A00" filled />
             </View>
-            <View style={styles.topRight}>
-              {user.premium ? (
-                <View style={styles.crown}>
-                  <Icon name="crown" size={11} color="#3A2A00" filled />
-                </View>
-              ) : null}
-              {user.online ? (
-                <View
-                  style={[
-                    styles.online,
-                    {
-                      backgroundColor: theme.colors.online,
-                      borderColor: '#fff',
-                    },
-                  ]}
-                />
-              ) : null}
-            </View>
-          </View>
+          ) : null}
 
-          <View style={styles.bottomRow}>
-            <View style={styles.nameBlock}>
-              <Text style={styles.name} numberOfLines={1}>
-                {user.name}
-                {user.age > 0 ? (
-                  <Text style={styles.age}>  {user.age}</Text>
-                ) : null}
-              </Text>
-            </View>
-
-            {onAdd ? (
-              <Pressable
-                onPress={onAdd}
-                hitSlop={8}
-                accessibilityRole="button"
-                accessibilityLabel={added ? 'Added' : 'Add'}
-                style={[
-                  styles.addFab,
-                  {
-                    backgroundColor: added
-                      ? theme.colors.success
-                      : 'rgba(255,255,255,0.95)',
-                  },
-                ]}>
-                <Icon
-                  name={added ? 'user-check' : 'user-plus'}
-                  size={15}
-                  color={added ? '#fff' : theme.colors.primary}
-                />
-              </Pressable>
-            ) : null}
-          </View>
+          {onAdd ? (
+            <Pressable
+              onPress={onAdd}
+              hitSlop={8}
+              accessibilityRole="button"
+              accessibilityLabel={added ? 'Added' : 'Add'}
+              style={[
+                styles.addFab,
+                {
+                  backgroundColor: added
+                    ? theme.colors.success
+                    : theme.colors.card,
+                  borderColor: theme.colors.border,
+                },
+              ]}>
+              <Icon
+                name={added ? 'user-check' : 'user-plus'}
+                size={15}
+                color={added ? '#fff' : theme.colors.primary}
+              />
+            </Pressable>
+          ) : null}
         </View>
+
+        <Text
+          style={[styles.name, { color: theme.colors.text }]}
+          numberOfLines={1}>
+          {firstName}
+          {user.age > 0 ? (
+            <Text style={{ color: theme.colors.textMuted }}>  {user.age}</Text>
+          ) : null}
+        </Text>
       </Animated.View>
     </Pressable>
   );
@@ -242,100 +218,61 @@ const styles = StyleSheet.create({
     borderWidth: 2.5,
   },
   railName: { fontSize: 12, fontWeight: '600', maxWidth: 72 },
-  railDist: {
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 999,
-  },
-  railDistText: { fontSize: 10, fontWeight: '600' },
   gridCard: {
-    borderRadius: 18,
-    borderWidth: StyleSheet.hairlineWidth,
-    overflow: 'hidden',
+    alignItems: 'center',
+    gap: 10,
+    paddingVertical: 4,
   },
-  photoWrap: {
-    width: '100%',
-    aspectRatio: 0.72,
+  circleWrap: {
+    width: CIRCLE,
+    height: CIRCLE,
     position: 'relative',
   },
+  circle: {
+    width: CIRCLE,
+    height: CIRCLE,
+    borderRadius: CIRCLE / 2,
+    borderWidth: 2.5,
+    overflow: 'hidden',
+  },
   fill: { width: '100%', height: '100%' },
-  photoFade: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-  },
-  topRow: {
-    position: 'absolute',
-    top: 10,
-    left: 10,
-    right: 10,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  topRight: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
-  distBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    paddingHorizontal: 8,
-    paddingVertical: 5,
-    borderRadius: 999,
-    backgroundColor: 'rgba(0,0,0,0.42)',
-  },
-  distText: {
-    color: '#fff',
-    fontSize: 10,
-    fontWeight: '700',
-    letterSpacing: 0.2,
-  },
   online: {
-    width: 12,
-    height: 12,
-    borderRadius: 6,
-    borderWidth: 2,
+    position: 'absolute',
+    right: 10,
+    bottom: 10,
+    width: 16,
+    height: 16,
+    borderRadius: 8,
+    borderWidth: 2.5,
   },
   crown: {
-    width: 22,
-    height: 22,
-    borderRadius: 11,
+    position: 'absolute',
+    top: 6,
+    left: 6,
+    width: 24,
+    height: 24,
+    borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: '#F5D76E',
   },
-  bottomRow: {
-    position: 'absolute',
-    left: 12,
-    right: 10,
-    bottom: 12,
-    flexDirection: 'row',
-    alignItems: 'flex-end',
-    gap: 8,
-  },
-  nameBlock: { flex: 1, gap: 2 },
   name: {
-    color: '#fff',
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: '700',
     letterSpacing: -0.2,
-  },
-  age: {
-    color: 'rgba(255,255,255,0.88)',
-    fontSize: 15,
-    fontWeight: '600',
+    maxWidth: CIRCLE + 8,
+    textAlign: 'center',
   },
   addFab: {
+    position: 'absolute',
+    right: 2,
+    bottom: 2,
     width: 34,
     height: 34,
     borderRadius: 17,
     alignItems: 'center',
     justifyContent: 'center',
+    borderWidth: StyleSheet.hairlineWidth,
   },
 });
 

@@ -7,13 +7,13 @@ import { isEmulator } from 'react-native-device-info';
  *
  * TestFlight öncesi: quick-tunnel.sh çalıştır → USE_PRODUCTION = true yap.
  */
-const USE_PRODUCTION = true;
+const USE_PRODUCTION = false;
 
 /**
  * Cloudflare QUICK tunnel URL — her tunnel açılışında değişir.
  * Terminal: AD_BlueDateApp/deploy/quick-tunnel.sh  (bu satırı otomatik günceller)
  */
-const PROD_API_URL = 'https://surrounded-sum-proven-precise.trycloudflare.com';
+const PROD_API_URL = 'https://fill-explorer-feature-monthly.trycloudflare.com';
 
 /** Lokal debug (USE_PRODUCTION = false) */
 const DEV_PORT = 5135;
@@ -82,6 +82,7 @@ export const API_PATHS = {
   changePassword: '/api/Authroizations/change-password',
   userProfile: '/api/User/profile',
   userBio: '/api/User/bio',
+  userStatus: '/api/User/status',
   userSearch: '/api/User/search',
   interestTypes: '/api/InterestType',
   userInterestsByUser: '/api/UserInterest/by-user',

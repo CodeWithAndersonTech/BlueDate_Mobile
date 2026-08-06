@@ -1,6 +1,6 @@
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useFocusEffect } from '@react-navigation/native';
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -114,6 +114,7 @@ export function UserProfileScreen({ navigation, route }: Props) {
   const [displayAge, setDisplayAge] = useState<number | null>(null);
   const [friendCount, setFriendCount] = useState(0);
   const [busy, setBusy] = useState(false);
+  const loadedProfileIdRef = useRef<number | null>(null);
 
   const load = useCallback(async () => {
     if (!Number.isFinite(targetId) || targetId <= 0) {
@@ -122,7 +123,12 @@ export function UserProfileScreen({ navigation, route }: Props) {
       return;
     }
 
-    setLoading(true);
+    // Keep previous content mounted while refreshing the same profile —
+    // full-screen spinner caused a visible blink when opening from Nearby.
+    if (loadedProfileIdRef.current !== targetId) {
+      setLoading(true);
+      loadedProfileIdRef.current = null;
+    }
     setNotFound(false);
 
     // Incoming / Sent mock rows — render a full local profile preview.
@@ -168,6 +174,7 @@ export function UserProfileScreen({ navigation, route }: Props) {
       setLikeCount(mock.likeCount);
       setDisplayAge(mock.age ?? null);
       setFriendCount(mock.relation === 3 ? 36 : 12);
+      loadedProfileIdRef.current = mock.userId;
       setLoading(false);
       return;
     }
@@ -184,6 +191,7 @@ export function UserProfileScreen({ navigation, route }: Props) {
           getLikeCount(targetId, accessToken).catch(() => ({ Count: 0 })),
         ]);
       setProfile(profileRes);
+      loadedProfileIdRef.current = profileRes.Id;
       setPhotos(photoBundle.gallery);
       setDisplayAge(
         typeof profileRes.Age === 'number' ? profileRes.Age : null,
@@ -220,6 +228,14 @@ export function UserProfileScreen({ navigation, route }: Props) {
     if (!profile) return '';
     return `${profile.FirstName} ${profile.LastName}`.trim() || profile.Username;
   }, [profile]);
+
+  const statusText = useMemo(() => {
+    const text = (profile?.StatusText ?? '').trim();
+    if (!text) return '';
+    const expiresAt = profile?.StatusExpiresAt;
+    if (expiresAt && new Date(expiresAt).getTime() <= Date.now()) return '';
+    return text;
+  }, [profile?.StatusText, profile?.StatusExpiresAt]);
 
   const interests = useMemo(
     () => (profile?.Interests ?? []).map(mapInterest),
@@ -312,11 +328,7 @@ export function UserProfileScreen({ navigation, route }: Props) {
 
   const onMessagePress = async () => {
     if (!meId || busy || meId === targetId) return;
-    const canMessage =
-      relation === FriendshipRelation.Friends ||
-      relation === FriendshipRelation.PendingOutgoing ||
-      relation === FriendshipRelation.PendingIncoming;
-    if (!canMessage) {
+    if (relation !== FriendshipRelation.Friends) {
       Alert.alert(
         t('user_profile.message'),
         t('user_profile.message_friends_only'),
@@ -456,6 +468,26 @@ export function UserProfileScreen({ navigation, route }: Props) {
                     </Text>
                   </View>
                 )}
+                {statusText ? (
+                  <View
+                    style={[
+                      styles.statusBubble,
+                      {
+                        backgroundColor: theme.colors.card,
+                        borderColor: theme.colors.border,
+                      },
+                      theme.shadows.sm,
+                    ]}>
+                    <Text
+                      style={[
+                        styles.statusBubbleText,
+                        { color: theme.colors.text },
+                      ]}
+                      numberOfLines={1}>
+                      {statusText}
+                    </Text>
+                  </View>
+                ) : null}
               </View>
 
               <View style={styles.statsRow}>
@@ -742,6 +774,7 @@ const styles = StyleSheet.create({
     width: AVATAR_SIZE,
     height: AVATAR_SIZE,
     position: 'relative',
+    overflow: 'visible',
   },
   avatar: {
     width: AVATAR_SIZE,
@@ -751,6 +784,25 @@ const styles = StyleSheet.create({
   },
   avatarFallback: { alignItems: 'center', justifyContent: 'center' },
   avatarInitials: { fontSize: 26, fontWeight: '700' },
+  statusBubble: {
+    position: 'absolute',
+    top: -8,
+    left: -6,
+    maxWidth: AVATAR_SIZE + 28,
+    minWidth: 28,
+    minHeight: 26,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 13,
+    borderWidth: StyleSheet.hairlineWidth,
+    zIndex: 3,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  statusBubbleText: {
+    fontSize: 12,
+    fontWeight: '700',
+  },
   statsRow: {
     flex: 1,
     flexDirection: 'row',

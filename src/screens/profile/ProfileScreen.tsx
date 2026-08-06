@@ -28,9 +28,10 @@ import {
   getUserProfile,
   InterestTypeItem,
   resolveMediaUrl,
+  updateUserStatus,
   UserProfileResponse,
 } from '../../api';
-import { TabScreenScrollView } from '../../components';
+import { StatusEditModal, TabScreenScrollView } from '../../components';
 import { useLocale } from '../../i18n';
 import { useAuth } from '../../navigation/AuthContext';
 import { useTabBarClearance } from '../../navigation/tabBarLayout';
@@ -45,6 +46,7 @@ import {
   ProfilePhoto,
 } from '../../services/photos/photoStore';
 import { useTheme } from '../../theme';
+import { breadcrumb } from '../../utils/crashLog';
 import { ProfilePhotoGrid } from './ProfilePhotoGrid';
 import { ProfileSkeleton } from './ProfileSkeleton';
 
@@ -100,6 +102,15 @@ export function ProfileScreen({ navigation }: Props) {
   const [friendCount, setFriendCount] = useState(0);
   const [likeCount, setLikeCount] = useState(0);
   const [verifyTipOpen, setVerifyTipOpen] = useState(false);
+  const [statusModalOpen, setStatusModalOpen] = useState(false);
+  const [statusSaving, setStatusSaving] = useState(false);
+  const statusText = (() => {
+    const text = (profile?.StatusText ?? '').trim();
+    if (!text) return '';
+    const expiresAt = profile?.StatusExpiresAt;
+    if (expiresAt && new Date(expiresAt).getTime() <= Date.now()) return '';
+    return text;
+  })();
   // Start at 1 so skeleton → content never flashes a blank frame.
   const contentOpacity = useSharedValue(1);
   const profileRef = useRef<UserProfileResponse | null>(null);
@@ -202,6 +213,40 @@ export function ProfileScreen({ navigation }: Props) {
   const hasGalleryPhoto = photos.length > 0;
   const isVerified = interestsComplete && hasGalleryPhoto;
 
+  const saveStatus = async (next: string) => {
+    if (!userId) return;
+    breadcrumb('status_save_start', { len: String(next.length) });
+    setStatusSaving(true);
+    try {
+      const res = await updateUserStatus(
+        { UserId: userId, StatusText: next },
+        accessToken,
+      );
+      setProfile(prev =>
+        prev
+          ? {
+              ...prev,
+              StatusText: res.StatusText ?? null,
+              StatusExpiresAt: res.StatusExpiresAt ?? null,
+            }
+          : prev,
+      );
+      setStatusModalOpen(false);
+      breadcrumb('status_save_ok');
+    } catch (error) {
+      breadcrumb('status_save_fail', {
+        message:
+          error instanceof Error ? error.message.slice(0, 80) : 'unknown',
+      });
+      Alert.alert(
+        t('profile.status_title'),
+        error instanceof Error ? error.message : t('profile.status_error'),
+      );
+    } finally {
+      setStatusSaving(false);
+    }
+  };
+
   const onChangeAvatar = async () => {
     if (!userId) return;
     const result = await pickPhotoFromLibrary({
@@ -242,6 +287,18 @@ export function ProfileScreen({ navigation }: Props) {
         translucent
       />
       {children}
+      <StatusEditModal
+        visible={statusModalOpen}
+        initialStatus={statusText}
+        saving={statusSaving}
+        onClose={() => setStatusModalOpen(false)}
+        onSave={value => {
+          void saveStatus(value);
+        }}
+        onClear={() => {
+          void saveStatus('');
+        }}
+      />
     </SafeAreaView>
   );
 
@@ -345,6 +402,7 @@ export function ProfileScreen({ navigation }: Props) {
             <Pressable
               style={styles.avatarRing}
               onPress={onChangeAvatar}
+              onLongPress={() => setStatusModalOpen(true)}
               accessibilityRole="button"
               accessibilityLabel={t('profile.change_avatar')}>
               {avatarUri ? (
@@ -374,6 +432,25 @@ export function ProfileScreen({ navigation }: Props) {
                   </Text>
                 </View>
               )}
+              <Pressable
+                onPress={() => setStatusModalOpen(true)}
+                hitSlop={6}
+                accessibilityRole="button"
+                accessibilityLabel={t('profile.status_title')}
+                style={[
+                  styles.statusBubble,
+                  {
+                    backgroundColor: theme.colors.card,
+                    borderColor: theme.colors.border,
+                  },
+                  theme.shadows.sm,
+                ]}>
+                <Text
+                  style={[styles.statusBubbleText, { color: theme.colors.text }]}
+                  numberOfLines={1}>
+                  {statusText || '+'}
+                </Text>
+              </Pressable>
               <View
                 style={[
                   styles.avatarCamBadge,
@@ -841,6 +918,7 @@ const styles = StyleSheet.create({
     width: AVATAR_SIZE,
     height: AVATAR_SIZE,
     position: 'relative',
+    overflow: 'visible',
   },
   avatar: {
     width: AVATAR_SIZE,
@@ -850,6 +928,25 @@ const styles = StyleSheet.create({
   },
   avatarFallback: { alignItems: 'center', justifyContent: 'center' },
   avatarInitials: { fontSize: 26, fontWeight: '700' },
+  statusBubble: {
+    position: 'absolute',
+    top: -8,
+    left: -6,
+    maxWidth: AVATAR_SIZE + 28,
+    minWidth: 28,
+    minHeight: 26,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 13,
+    borderWidth: StyleSheet.hairlineWidth,
+    zIndex: 3,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  statusBubbleText: {
+    fontSize: 12,
+    fontWeight: '700',
+  },
   avatarCamBadge: {
     position: 'absolute',
     right: -2,
