@@ -3,8 +3,10 @@ import {
   NavigationState,
   PartialState,
 } from '@react-navigation/native';
-import React from 'react';
+import React, { useCallback } from 'react';
+import { useOnboardingGate } from '../hooks/useOnboardingGate';
 import { SplashScreen } from '../screens/auth/SplashScreen';
+import { OnboardingSetupScreen } from '../screens/onboarding/OnboardingSetupScreen';
 import { useTheme } from '../theme';
 import { breadcrumb } from '../utils/crashLog';
 import { AppStack } from './AppStack';
@@ -25,6 +27,14 @@ function activeRouteName(
 export function RootNavigator() {
   const theme = useTheme();
   const { status, isSignedIn } = useAuth();
+  const { ready, needsOnboarding, refresh } = useOnboardingGate();
+
+  const onOnboardingCompleted = useCallback(() => {
+    void refresh();
+  }, [refresh]);
+
+  const showSplash =
+    status === 'bootstrapping' || (isSignedIn && !ready);
 
   return (
     <NavigationContainer
@@ -32,12 +42,14 @@ export function RootNavigator() {
       onStateChange={state => {
         breadcrumb('nav', { route: activeRouteName(state) });
       }}>
-      {status === 'bootstrapping' ? (
+      {showSplash ? (
         <SplashScreen />
-      ) : isSignedIn ? (
-        <AppStack />
-      ) : (
+      ) : !isSignedIn ? (
         <AuthStack />
+      ) : needsOnboarding ? (
+        <OnboardingSetupScreen onCompleted={onOnboardingCompleted} />
+      ) : (
+        <AppStack />
       )}
     </NavigationContainer>
   );
