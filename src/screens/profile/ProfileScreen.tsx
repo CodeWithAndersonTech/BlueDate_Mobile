@@ -33,7 +33,7 @@ import {
   updateUserStatus,
   UserProfileResponse,
 } from '../../api';
-import { StatusEditModal, TabScreenScrollView } from '../../components';
+import { Icon, StatusEditModal, TabScreenScrollView } from '../../components';
 import { useLocale } from '../../i18n';
 import { useAuth } from '../../navigation/AuthContext';
 import { useTabBarClearance } from '../../navigation/tabBarLayout';
@@ -49,6 +49,7 @@ import {
 } from '../../services/photos/photoStore';
 import { useTheme } from '../../theme';
 import { breadcrumb } from '../../utils/crashLog';
+import { zodiacSymbolFromBirthDate } from '../../utils/zodiac';
 import { PhotoViewerModal } from './PhotoViewerModal';
 import { ProfilePhotoGrid } from './ProfilePhotoGrid';
 import { ProfileSkeleton } from './ProfileSkeleton';
@@ -197,10 +198,19 @@ export function ProfileScreen({ navigation }: Props) {
   const fullName = profile
     ? `${profile.FirstName} ${profile.LastName}`.trim()
     : '';
-  const displayName =
-    fullName && typeof profile?.Age === 'number'
-      ? `${fullName}, ${profile.Age}`
-      : fullName;
+  const zodiacSymbol = zodiacSymbolFromBirthDate(profile?.BirthDate);
+  const displayName = (() => {
+    if (!fullName) return '';
+    const parts: string[] = [fullName];
+    if (typeof profile?.Age === 'number') {
+      parts.push(String(profile.Age));
+    }
+    let line = parts.join(', ');
+    if (zodiacSymbol) {
+      line = `${line} ${zodiacSymbol}`;
+    }
+    return line;
+  })();
   const bio = profile?.Bio?.trim() ?? '';
   const hasBio = bio.length > 0;
   const interests = profile?.Interests ?? [];
@@ -214,8 +224,11 @@ export function ProfileScreen({ navigation }: Props) {
           (item.Value ?? '').trim().length > 0,
       ),
     );
-  const hasGalleryPhoto = photos.length > 0;
-  const isVerified = interestsComplete && hasGalleryPhoto;
+  const hasPhoto =
+    photos.length > 0 ||
+    Boolean(avatarUri?.trim()) ||
+    Boolean(profile?.ProfileImage?.trim());
+  const isVerified = interestsComplete && hasPhoto;
 
   const saveStatus = async (next: string) => {
     if (!userId) return;
@@ -390,6 +403,25 @@ export function ProfileScreen({ navigation }: Props) {
             />
           ) : null}
           <View style={styles.headerActions}>
+            {userId ? (
+              <Pressable
+                onPress={() => {
+                  closeVerifyTip();
+                  navigation.navigate('UserProfile', {
+                    userId: String(userId),
+                  });
+                }}
+                hitSlop={8}
+                accessibilityRole="button"
+                accessibilityLabel={t('profile.preview')}
+                accessibilityHint={t('profile.preview_hint')}
+                style={[
+                  styles.headerActionBtn,
+                  { backgroundColor: theme.colors.surfaceAlt },
+                ]}>
+                <Icon name="eye" size={18} color={theme.colors.text} />
+              </Pressable>
+            ) : null}
             <Pressable
               onPress={() => {
                 closeVerifyTip();

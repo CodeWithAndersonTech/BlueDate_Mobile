@@ -85,12 +85,19 @@ export type UpdateUserBioResponse = ApiEnvelope & {
 };
 
 export async function getUserProfile(userId: number, token?: string | null) {
-  const raw = await apiRequest<UserProfileResponse>(API_PATHS.userProfile, {
+  const raw = await apiRequest<
+    UserProfileResponse & {
+      birthDate?: string | null;
+      age?: number | null;
+    }
+  >(API_PATHS.userProfile, {
     query: { userId },
     token,
   });
   return {
     ...raw,
+    BirthDate: raw.BirthDate ?? raw.birthDate ?? null,
+    Age: typeof raw.Age === 'number' ? raw.Age : raw.age ?? null,
     StatusText: raw.StatusText ?? raw.statusText ?? null,
     StatusExpiresAt: raw.StatusExpiresAt ?? raw.statusExpiresAt ?? null,
   };

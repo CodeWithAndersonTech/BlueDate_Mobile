@@ -167,6 +167,8 @@ const FALLBACK_TRANSLATIONS: Record<string, string> = {
   // Profile
   'profile.edit': 'Edit Profile',
   'profile.edit_action': 'Edit',
+  'profile.preview': 'Preview profile',
+  'profile.preview_hint': 'See how others see your profile',
   'profile.add_bio': 'Add bio',
   'profile.add_bio_desc':
     'Introduce yourself briefly to make your profile stand out.',
@@ -180,7 +182,7 @@ const FALLBACK_TRANSLATIONS: Record<string, string> = {
   'profile.not_verified': 'Not verified',
   'profile.verified_badge': 'Verified account',
   'profile.verify_requires_interests':
-    'Fill every interest and add at least one photo to get a verified badge.',
+    'Fill every interest and add a profile photo (or gallery photo) to get a verified badge.',
   'profile.photos': 'Photos',
   'profile.photos_empty': 'Add your first photo',
   'profile.add_photo': 'Add photo',
@@ -218,6 +220,8 @@ const FALLBACK_TRANSLATIONS: Record<string, string> = {
   'profile.status_clear': 'Delete',
   'profile.status_error': 'Could not update status. Try again.',
   'user_profile.title': 'Profile',
+  'user_profile.preview_title': 'Profile preview',
+  'user_profile.preview_banner': 'This is how others see your profile.',
   'user_profile.not_found_title': 'User not found',
   'user_profile.not_found_desc': 'This profile is no longer available.',
   'user_profile.message': 'Send message',
@@ -589,6 +593,8 @@ const LOCAL_TRANSLATIONS_TR: Record<string, string> = {
   'splash.tagline': 'Yeni bağlantılar burada başlar',
   'profile.edit': 'Profili Düzenle',
   'profile.edit_action': 'Düzenle',
+  'profile.preview': 'Profil önizleme',
+  'profile.preview_hint': 'Profilinin başkalarına nasıl göründüğünü gör',
   'profile.add_bio': 'Biyografi ekle',
   'profile.add_bio_desc':
     'Kendini kısaca tanıt, profilin daha dikkat çeksin.',
@@ -602,7 +608,7 @@ const LOCAL_TRANSLATIONS_TR: Record<string, string> = {
   'profile.not_verified': 'Onaylı değil',
   'profile.verified_badge': 'Onaylı hesap',
   'profile.verify_requires_interests':
-    'Onaylı olmak için tüm ilgi alanlarını doldur ve en az bir fotoğraf ekle.',
+    'Onaylı olmak için tüm ilgi alanlarını doldur ve profil fotoğrafı (veya galeri fotoğrafı) ekle.',
   'profile.photos': 'Fotoğraflar',
   'profile.photos_empty': 'İlk fotoğrafını ekle',
   'profile.add_photo': 'Fotoğraf ekle',
@@ -643,6 +649,8 @@ const LOCAL_TRANSLATIONS_TR: Record<string, string> = {
   'profile.status_clear': 'Sil',
   'profile.status_error': 'Durum güncellenemedi. Tekrar dene.',
   'user_profile.title': 'Profil',
+  'user_profile.preview_title': 'Profil önizleme',
+  'user_profile.preview_banner': 'Profilinin başkalarına böyle görünür.',
   'user_profile.not_found_title': 'Kullanıcı bulunamadı',
   'user_profile.not_found_desc': 'Bu profil artık mevcut değil.',
   'user_profile.message': 'Mesaj gönder',

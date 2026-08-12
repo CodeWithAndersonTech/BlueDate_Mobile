@@ -48,6 +48,7 @@ import {
   mergeAvatarIntoDisplayPhotos,
   ProfilePhoto,
 } from '../../services/photos/photoStore';
+import { zodiacSymbolFromBirthDate } from '../../utils/zodiac';
 import { useTheme } from '../../theme';
 import {
   getMockUserProfile,
@@ -246,6 +247,24 @@ export function UserProfileScreen({ navigation, route }: Props) {
     if (!profile) return '';
     return `${profile.FirstName} ${profile.LastName}`.trim() || profile.Username;
   }, [profile]);
+
+  const zodiacSymbol = useMemo(
+    () => zodiacSymbolFromBirthDate(profile?.BirthDate),
+    [profile?.BirthDate],
+  );
+
+  const nameWithAgeAndZodiac = useMemo(() => {
+    if (!name) return '';
+    const parts: string[] = [name];
+    if (displayAge != null) {
+      parts.push(String(displayAge));
+    }
+    let line = parts.join(', ');
+    if (zodiacSymbol) {
+      line = `${line} ${zodiacSymbol}`;
+    }
+    return line;
+  }, [name, displayAge, zodiacSymbol]);
 
   const statusText = useMemo(() => {
     const text = (
@@ -492,7 +511,10 @@ export function UserProfileScreen({ navigation, route }: Props) {
 
       <SafeAreaView edges={['top']} style={styles.flex}>
         <Header
-          title={t('user_profile.title')}
+          title={
+            isSelf ? t('user_profile.preview_title') : t('user_profile.title')
+          }
+          style={isSelf ? styles.previewHeader : undefined}
           actions={
             !isSelf && areFriends
               ? [
@@ -519,6 +541,24 @@ export function UserProfileScreen({ navigation, route }: Props) {
             styles.scrollContent,
             { paddingBottom: scrollBottomPad },
           ]}>
+          {isSelf ? (
+            <View
+              style={[
+                styles.previewBanner,
+                {
+                  backgroundColor: theme.colors.primarySoft,
+                  borderColor: theme.colors.border,
+                },
+              ]}>
+              <Text
+                style={[
+                  styles.previewBannerText,
+                  { color: theme.colors.text },
+                ]}>
+                {t('user_profile.preview_banner')}
+              </Text>
+            </View>
+          ) : null}
           <View style={styles.header}>
             <View style={styles.headerTop}>
               <View style={styles.avatarRing}>
@@ -612,7 +652,7 @@ export function UserProfileScreen({ navigation, route }: Props) {
               <Text
                 style={[styles.name, { color: theme.colors.text }]}
                 numberOfLines={1}>
-                {displayAge != null ? `${name}, ${displayAge}` : name}
+                {nameWithAgeAndZodiac}
               </Text>
               <View style={styles.usernameRow}>
                 <Text
@@ -869,6 +909,24 @@ const styles = StyleSheet.create({
   },
   flex: { flex: 1, minHeight: 0 },
   scrollContent: { paddingBottom: 20 },
+  previewHeader: {
+    marginTop: -10,
+    minHeight: 48,
+  },
+  previewBanner: {
+    marginHorizontal: 16,
+    marginTop: 2,
+    marginBottom: 4,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 12,
+    borderWidth: StyleSheet.hairlineWidth,
+  },
+  previewBannerText: {
+    fontSize: 13,
+    fontWeight: '600',
+    lineHeight: 18,
+  },
   stickyDock: {
     position: 'absolute',
     left: 0,
