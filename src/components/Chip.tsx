@@ -10,6 +10,11 @@ export interface ChipProps {
   icon?: IconName;
   onPress?: () => void;
   style?: StyleProp<ViewStyle>;
+  /**
+   * `status`: selected = green, unselected = red (clear on/off for filters).
+   * `default`: primary / muted surface.
+   */
+  tone?: 'default' | 'status';
 }
 
 export function Chip({
@@ -18,12 +23,30 @@ export function Chip({
   icon,
   onPress,
   style,
+  tone = 'default',
 }: ChipProps) {
   const theme = useTheme();
+
+  const backgroundColor =
+    tone === 'status'
+      ? selected
+        ? theme.colors.success
+        : theme.colors.danger
+      : selected
+        ? theme.colors.primary
+        : theme.colors.surfaceAlt;
+
+  const contentColor =
+    tone === 'status'
+      ? theme.colors.white
+      : selected
+        ? theme.colors.onPrimary
+        : theme.colors.textSecondary;
 
   return (
     <Pressable
       onPress={onPress}
+      accessibilityState={{ selected }}
       style={[
         {
           flexDirection: 'row',
@@ -32,23 +55,12 @@ export function Chip({
           paddingVertical: 10,
           paddingHorizontal: 16,
           borderRadius: 999,
-          backgroundColor: selected
-            ? theme.colors.primary
-            : theme.colors.surfaceAlt,
+          backgroundColor,
         },
         style,
       ]}>
-      {icon && (
-        <Icon
-          name={icon}
-          size={14}
-          color={selected ? theme.colors.onPrimary : theme.colors.textSecondary}
-        />
-      )}
-      <Typography
-        variant="callout"
-        weight="600"
-        tint={selected ? theme.colors.onPrimary : theme.colors.textSecondary}>
+      {icon && <Icon name={icon} size={14} color={contentColor} />}
+      <Typography variant="callout" weight="600" tint={contentColor}>
         {label}
       </Typography>
     </Pressable>

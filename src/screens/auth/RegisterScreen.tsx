@@ -9,7 +9,7 @@ import {
   View,
 } from 'react-native';
 import {
-  AgePicker,
+  BirthDatePicker,
   Button,
   Checkbox,
   Chip,
@@ -28,6 +28,11 @@ import { useLocale } from '../../i18n';
 import { useAuth } from '../../navigation/AuthContext';
 import { AuthStackParamList } from '../../navigation/types';
 import { useTheme } from '../../theme';
+import {
+  defaultBirthParts,
+  formatBirthDateIso,
+  isValidRegisterAge,
+} from '../../utils/birthDate';
 import { GENDER_OPTIONS, GenderValue, isValidGender } from '../../utils/gender';
 import { isValidEmail } from '../../utils/validation';
 
@@ -49,7 +54,7 @@ export function RegisterScreen({ navigation }: Props) {
   const [submitted, setSubmitted] = useState(false);
   const [loading, setLoading] = useState(false);
   const [gender, setGender] = useState<GenderValue | null>(null);
-  const [age, setAge] = useState<number>(25);
+  const [birthParts, setBirthParts] = useState(() => defaultBirthParts(25));
 
   const lastNameRef = useRef<TextInput>(null);
   const usernameRef = useRef<TextInput>(null);
@@ -57,17 +62,7 @@ export function RegisterScreen({ navigation }: Props) {
   const passwordRef = useRef<TextInput>(null);
   const confirmRef = useRef<TextInput>(null);
 
-  const ageValid = age >= 18 && age <= 80;
-
-  /** Approximate DOB from age (today − age years) as YYYY-MM-DD. */
-  const birthDateFromAge = (years: number): string => {
-    const d = new Date();
-    d.setFullYear(d.getFullYear() - years);
-    const yyyy = d.getFullYear();
-    const mm = String(d.getMonth() + 1).padStart(2, '0');
-    const dd = String(d.getDate()).padStart(2, '0');
-    return `${yyyy}-${mm}-${dd}`;
-  };
+  const ageValid = isValidRegisterAge(birthParts);
 
   const update = (key: keyof typeof form) => (value: string) =>
     setForm(prev => ({ ...prev, [key]: value }));
@@ -120,7 +115,7 @@ export function RegisterScreen({ navigation }: Props) {
         email: form.email.trim(),
         password: form.password,
         gender,
-        birthDate: birthDateFromAge(age),
+        birthDate: formatBirthDateIso(birthParts),
       });
 
       navigation.navigate('EmailVerification', {
@@ -204,16 +199,13 @@ export function RegisterScreen({ navigation }: Props) {
             error={emailError}
           />
 
-          <AgePicker
-            label={t('auth.age')}
-            unitLabel={t('auth.age_unit')}
-            value={age}
-            min={18}
-            max={80}
-            onChange={setAge}
-            hint={t('auth.age_hint')}
+          <BirthDatePicker
+            label={t('auth.birth_date')}
+            value={birthParts}
+            onChange={setBirthParts}
+            hint={t('auth.birth_date_hint')}
             error={
-              submitted && !ageValid ? t('auth.age_required') : undefined
+              submitted && !ageValid ? t('auth.birth_date_required') : undefined
             }
           />
 

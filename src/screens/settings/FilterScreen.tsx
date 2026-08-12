@@ -4,7 +4,6 @@ import { ActivityIndicator, Alert, StyleSheet, View } from 'react-native';
 import { ScrollView } from 'react-native-gesture-handler';
 import { fetchFilterPrefs, saveFilterPrefs } from '../../api/filterPrefs';
 import {
-  BottomActionDock,
   Button,
   Card,
   Chip,
@@ -17,6 +16,10 @@ import {
 } from '../../components';
 import { useLocale } from '../../i18n';
 import { useAuth } from '../../navigation/AuthContext';
+import {
+  DOCK_ACTION_HEIGHT,
+  useStickyDockLayout,
+} from '../../navigation/tabBarLayout';
 import { useLockTabSwipe } from '../../navigation/useLockTabSwipe';
 import {
   chipSelected,
@@ -46,6 +49,10 @@ export function FilterScreen() {
   const theme = useTheme();
   const { t } = useLocale();
   const { userId, accessToken } = useAuth();
+  // Nested under Material Top Tabs — keep Apply above the floating pill.
+  const dock = useStickyDockLayout(DOCK_ACTION_HEIGHT, {
+    forceAboveTabBar: true,
+  });
 
   const [age, setAge] = useState({
     low: DEFAULT_FILTER_PREFS.ageLow,
@@ -181,10 +188,14 @@ export function FilterScreen() {
       ) : (
         <View style={styles.body}>
           <ScrollView
+            style={styles.flex}
             scrollEnabled={scrollEnabled}
             showsVerticalScrollIndicator={false}
             keyboardShouldPersistTaps="handled"
-            contentContainerStyle={styles.content}>
+            contentContainerStyle={[
+              styles.content,
+              { paddingBottom: dock.scrollClearance },
+            ]}>
             <View style={styles.section}>
               <SectionHeader title={t('filter.age_section')} />
               <Card variant="surface">
@@ -241,6 +252,7 @@ export function FilterScreen() {
                       key={o.key}
                       label={o.label}
                       icon={o.icon}
+                      tone="status"
                       selected={chipSelected(showMe, o.key)}
                       onPress={() => toggle(showMe, setShowMe, o.key)}
                     />
@@ -264,6 +276,7 @@ export function FilterScreen() {
                       key={o.key}
                       label={o.label}
                       icon={o.icon}
+                      tone="status"
                       selected={chipSelected(visibleTo, o.key)}
                       onPress={() => toggle(visibleTo, setVisibleTo, o.key)}
                     />
@@ -273,7 +286,16 @@ export function FilterScreen() {
             </View>
           </ScrollView>
 
-          <BottomActionDock style={styles.applyDock}>
+          <View
+            pointerEvents="box-none"
+            style={[
+              styles.stickyDock,
+              {
+                paddingBottom: dock.dockBottom + dock.dockPaddingBottom,
+                backgroundColor: theme.colors.background,
+                borderTopColor: theme.colors.border,
+              },
+            ]}>
             <Button
               label={saving ? t('filter.saving') : t('filter.apply')}
               leftIcon="check"
@@ -281,7 +303,7 @@ export function FilterScreen() {
               disabled={saving || !userId}
               style={styles.applyBtn}
             />
-          </BottomActionDock>
+          </View>
         </View>
       )}
     </Screen>
@@ -290,11 +312,11 @@ export function FilterScreen() {
 
 const styles = StyleSheet.create({
   body: { flex: 1 },
+  flex: { flex: 1 },
   content: {
     paddingHorizontal: 20,
     gap: 18,
     paddingTop: 8,
-    paddingBottom: 16,
   },
   loading: {
     flex: 1,
@@ -310,7 +332,18 @@ const styles = StyleSheet.create({
   hint: { marginTop: 6, marginBottom: 4, lineHeight: 18 },
   slider: { marginTop: 18, marginBottom: 10 },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginTop: 12 },
-  applyDock: { paddingHorizontal: 20 },
+  stickyDock: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingTop: 12,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    zIndex: 20,
+  },
   applyBtn: { flex: 1 },
 });
 

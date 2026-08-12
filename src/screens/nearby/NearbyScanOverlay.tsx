@@ -104,12 +104,14 @@ export function NearbyScanOverlay({ visible, onCancel }: Props) {
 
   useEffect(() => {
     if (!visible) {
-      fade.value = 0;
+      fade.value = withTiming(0, { duration: 180 });
+      pulse.value = 0;
       return;
     }
     fade.value = withTiming(1, { duration: 280 });
+    // Breathing + blink — reads as “still looking” for the full search window.
     pulse.value = withRepeat(
-      withTiming(1, { duration: 1000, easing: Easing.inOut(Easing.ease) }),
+      withTiming(1, { duration: 750, easing: Easing.inOut(Easing.ease) }),
       -1,
       true,
     );
@@ -120,7 +122,8 @@ export function NearbyScanOverlay({ visible, onCancel }: Props) {
   }));
 
   const logoStyle = useAnimatedStyle(() => ({
-    transform: [{ scale: 0.94 + pulse.value * 0.08 }],
+    transform: [{ scale: 0.9 + pulse.value * 0.14 }],
+    opacity: 0.62 + pulse.value * 0.38,
   }));
 
   if (!visible) {

@@ -65,24 +65,35 @@ export function PhotoViewerModal({
   const backdrop = useSharedValue(0);
   const scaleIn = useSharedValue(0.94);
 
+  // Keep page in sync while open (e.g. parent index from swipe).
+  useEffect(() => {
+    if (!visible || photos.length === 0) {
+      return;
+    }
+    setPage(Math.min(Math.max(0, index), photos.length - 1));
+  }, [visible, index, photos.length]);
+
+  // Open / hide animation — only tied to `visible` so swipe index updates
+  // don't replay the enter animation.
   useEffect(() => {
     if (visible) {
-      setPage(Math.min(Math.max(0, index), photos.length - 1));
       translateY.value = 0;
+      scaleIn.value = 0.94;
       backdrop.value = withTiming(1, { duration: 220 });
       scaleIn.value = withSpring(1, { damping: 18, stiffness: 220 });
     } else {
       backdrop.value = 0;
-      scaleIn.value = 0.94;
-      translateY.value = 0;
+      // Do NOT reset translateY/scaleIn here. Dismiss already moved the
+      // photo off-screen; snapping back to 0 flashes it for a frame
+      // before the Modal finishes hiding.
     }
-  }, [visible, index, photos.length, backdrop, scaleIn, translateY]);
+  }, [visible, backdrop, scaleIn, translateY]);
 
   const close = useCallback(() => {
     backdrop.value = withTiming(0, { duration: 180 });
     translateY.value = withTiming(
-      SCREEN_H * 0.35,
-      { duration: 200, easing: Easing.out(Easing.cubic) },
+      SCREEN_H,
+      { duration: 220, easing: Easing.out(Easing.cubic) },
       finished => {
         if (finished) {
           runOnJS(onClose)();

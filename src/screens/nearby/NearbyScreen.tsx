@@ -44,6 +44,8 @@ type Props = NativeStackScreenProps<NearbyStackParamList, 'NearbyMain'>;
 const H_PAD = 20;
 const GAP = 12;
 const LOAD_MS = 400;
+/** Keep the “searching” Meerk overlay up long enough to feel like a real scan. */
+const SEARCH_UI_MS = 15_000;
 
 function estimateDistanceKm(
   item: DirectNearbyItem | BridgeNearbyItem,
@@ -108,16 +110,75 @@ export function NearbyScreen({ navigation }: Props) {
   const [loading, setLoading] = useState(true);
   const [verified, setVerified] = useState<boolean | null>(null);
   const [scanTipOpen, setScanTipOpen] = useState(false);
+  const [searchUiActive, setSearchUiActive] = useState(false);
   const mappingRef = useRef(0);
   const addingRef = useRef<Record<string, boolean>>({});
+  const searchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const closeScanTip = () => setScanTipOpen(false);
   const cardW = (windowWidth - H_PAD * 2 - GAP) / 2;
 
+  const endSearchUi = useCallback(() => {
+    if (searchTimerRef.current) {
+      clearTimeout(searchTimerRef.current);
+      searchTimerRef.current = null;
+    }
+    setSearchUiActive(false);
+  }, []);
+
+  const beginSearchUi = useCallback(() => {
+    setSearchUiActive(true);
+    if (searchTimerRef.current) {
+      clearTimeout(searchTimerRef.current);
+    }
+    searchTimerRef.current = setTimeout(() => {
+      searchTimerRef.current = null;
+      setSearchUiActive(false);
+    }, SEARCH_UI_MS);
+  }, []);
+
+  useEffect(
+    () => () => {
+      if (searchTimerRef.current) {
+        clearTimeout(searchTimerRef.current);
+      }
+    },
+    [],
+  );
+
+  // Found someone — drop the searching overlay immediately.
+  useEffect(() => {
+    if (users.length > 0) {
+      endSearchUi();
+    }
+  }, [users.length, endSearchUi]);
+
+  // Permission / hard errors shouldn't keep the fake “searching” chrome up.
+  useEffect(() => {
+    if (
+      state.status === 'permission_denied' ||
+      state.status === 'error' ||
+      state.status === 'idle'
+    ) {
+      endSearchUi();
+    }
+  }, [state.status, endSearchUi]);
+
   const showScanOverlay =
     verified === true &&
-    (state.status === 'starting' ||
-      (state.refreshing && users.length === 0));
+    users.length === 0 &&
+    (searchUiActive ||
+      state.status === 'starting' ||
+      state.refreshing);
+
+  const kickOffScan = useCallback(() => {
+    beginSearchUi();
+    if (state.status === 'idle' || state.status === 'error') {
+      start();
+    } else {
+      void refresh();
+    }
+  }, [beginSearchUi, refresh, start, state.status]);
 
   const goToProfileTab = useCallback(() => {
     rootNav.getParent()?.navigate('Profile' as never);
@@ -139,8 +200,10 @@ export function NearbyScreen({ navigation }: Props) {
           const ok = Boolean(me.IsVerified);
           setVerified(ok);
           if (ok) {
+            beginSearchUi();
             start();
           } else {
+            endSearchUi();
             stop();
             // Unverified users cannot use Nearby — send them to Profile.
             rootNav.getParent()?.navigate('Profile' as never);
@@ -156,7 +219,16 @@ export function NearbyScreen({ navigation }: Props) {
       return () => {
         cancelled = true;
       };
-    }, [isSignedIn, userId, accessToken, start, stop, rootNav]),
+    }, [
+      isSignedIn,
+      userId,
+      accessToken,
+      start,
+      stop,
+      rootNav,
+      beginSearchUi,
+      endSearchUi,
+    ]),
   );
 
   useEffect(() => {
@@ -256,7 +328,11 @@ export function NearbyScreen({ navigation }: Props) {
   };
 
   const onRefresh = () => {
-    if (verified === true) refresh();
+    if (verified !== true) return;
+    if (users.length === 0) {
+      beginSearchUi();
+    }
+    void refresh();
   };
 
   const emptyDesc =
@@ -332,11 +408,7 @@ export function NearbyScreen({ navigation }: Props) {
             <Pressable
               onPress={() => {
                 setScanTipOpen(false);
-                if (state.status === 'idle' || state.status === 'error') {
-                  start();
-                } else {
-                  refresh();
-                }
+                kickOffScan();
               }}
               onLongPress={() => setScanTipOpen(open => !open)}
               hitSlop={8}
@@ -401,10 +473,7 @@ export function NearbyScreen({ navigation }: Props) {
             }>
             <EmptyState
               image={images.appLogo}
-              onImagePress={() => {
-                if (state.status === 'idle') start();
-                else refresh();
-              }}
+              onImagePress={kickOffScan}
               imageAccessibilityLabel={t('nearby.scan_action')}
               title={t('nearby.empty_title')}
               description={emptyDesc}
@@ -442,9 +511,7 @@ export function NearbyScreen({ navigation }: Props) {
 
       <NearbyScanOverlay
         visible={showScanOverlay}
-        onCancel={() => {
-          /* scanning is continuous while BLE runs */
-        }}
+        onCancel={endSearchUi}
       />
     </SafeAreaView>
   );

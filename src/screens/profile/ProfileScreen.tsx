@@ -1,5 +1,5 @@
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
-import React, { useCallback, useRef, useState } from 'react';
+import React, { useCallback, useMemo, useRef, useState } from 'react';
 import {
   Alert,
   Image,
@@ -49,6 +49,7 @@ import {
 } from '../../services/photos/photoStore';
 import { useTheme } from '../../theme';
 import { breadcrumb } from '../../utils/crashLog';
+import { PhotoViewerModal } from './PhotoViewerModal';
 import { ProfilePhotoGrid } from './ProfilePhotoGrid';
 import { ProfileSkeleton } from './ProfileSkeleton';
 
@@ -106,6 +107,7 @@ export function ProfileScreen({ navigation }: Props) {
   const [verifyTipOpen, setVerifyTipOpen] = useState(false);
   const [statusModalOpen, setStatusModalOpen] = useState(false);
   const [statusSaving, setStatusSaving] = useState(false);
+  const [avatarViewerOpen, setAvatarViewerOpen] = useState(false);
   const statusText = (() => {
     const text = (profile?.StatusText ?? '').trim();
     if (!text) return '';
@@ -279,6 +281,21 @@ export function ProfileScreen({ navigation }: Props) {
     }
   };
 
+  const avatarPreviewPhotos = useMemo<ProfilePhoto[]>(() => {
+    if (!avatarUri) {
+      return [];
+    }
+    return [{ id: 'avatar', uri: avatarUri, sortOrder: 0 }];
+  }, [avatarUri]);
+
+  const onAvatarPress = () => {
+    if (avatarUri) {
+      setAvatarViewerOpen(true);
+      return;
+    }
+    void onChangeAvatar();
+  };
+
   const shell = (children: React.ReactNode) => (
     <SafeAreaView
       edges={['top']}
@@ -303,6 +320,12 @@ export function ProfileScreen({ navigation }: Props) {
         onClear={() => {
           void saveStatus('');
         }}
+      />
+      <PhotoViewerModal
+        photos={avatarViewerOpen ? avatarPreviewPhotos : []}
+        index={avatarViewerOpen ? 0 : -1}
+        editable={false}
+        onClose={() => setAvatarViewerOpen(false)}
       />
     </SafeAreaView>
   );
@@ -406,9 +429,13 @@ export function ProfileScreen({ navigation }: Props) {
           <View style={styles.headerTop}>
             <View style={styles.avatarRing}>
               <Pressable
-                onPress={onChangeAvatar}
+                onPress={onAvatarPress}
                 accessibilityRole="button"
-                accessibilityLabel={t('profile.change_avatar')}>
+                accessibilityLabel={
+                  avatarUri
+                    ? t('profile.view_avatar')
+                    : t('profile.change_avatar')
+                }>
                 {avatarUri ? (
                   <Image
                     source={{ uri: avatarUri }}

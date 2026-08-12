@@ -197,9 +197,13 @@ export function CustomTabBar({
                   target: route.key,
                   canPreventDefault: true,
                 });
-                if (!focused && !event.defaultPrevented) {
-                  navigation.navigate(route.name as never);
+                if (event.defaultPrevented) {
+                  return;
                 }
+                // Always navigate — even when already focused — so nested
+                // stacks pop to their root, and tab screens receive the
+                // re-tap (scroll-to-top via TabScreenScrollView).
+                navigation.navigate(route.name as never);
               };
 
               return (

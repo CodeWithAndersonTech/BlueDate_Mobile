@@ -5,6 +5,7 @@ import {
   Image,
   Pressable,
   StyleSheet,
+  Text,
   View,
 } from 'react-native';
 import LinearGradient from 'react-native-linear-gradient';
@@ -16,6 +17,7 @@ import {
   Icon,
   IconButton,
   IconName,
+  StatusEditModal,
   TabScreenScrollView,
   Typography,
 } from '../../components';
@@ -31,6 +33,7 @@ import {
   resolveStoryMediaUrls,
   StoryItem,
   StoryUserGroup,
+  updateUserStatus,
 } from '../../api';
 import { useLocale } from '../../i18n';
 import { usePremium } from '../../hooks/usePremium';
@@ -93,6 +96,9 @@ export function HomeScreen({ navigation }: Props) {
   const [firstName, setFirstName] = useState('');
   const [fullName, setFullName] = useState('');
   const [avatarUri, setAvatarUri] = useState<string | undefined>();
+  const [statusText, setStatusText] = useState('');
+  const [statusModalOpen, setStatusModalOpen] = useState(false);
+  const [statusSaving, setStatusSaving] = useState(false);
   const [recentActivity, setRecentActivity] = useState<ActivityItem[]>([]);
   const [storyGroups, setStoryGroups] = useState<StoryUserGroup[]>([]);
   const [composeAsset, setComposeAsset] = useState<PickedStoryAsset | null>(
@@ -141,6 +147,12 @@ export function HomeScreen({ navigation }: Props) {
 
           const profileAvatar = await resolveMediaUrl(profile.ProfileImage);
           setAvatarUri(photoBundle.avatarUri ?? profileAvatar);
+
+          const nextStatus = (profile.StatusText ?? '').trim();
+          const expiresAt = profile.StatusExpiresAt;
+          const expired =
+            !!expiresAt && new Date(expiresAt).getTime() <= Date.now();
+          setStatusText(expired ? '' : nextStatus);
         } catch {
           /* keep last known greeting */
         }
@@ -195,6 +207,33 @@ export function HomeScreen({ navigation }: Props) {
       return true;
     },
     [t],
+  );
+
+  const saveStatus = useCallback(
+    async (next: string) => {
+      if (!userId) return;
+      setStatusSaving(true);
+      try {
+        const res = await updateUserStatus(
+          { UserId: userId, StatusText: next },
+          accessToken,
+        );
+        const saved = (res.StatusText ?? '').trim();
+        const expiresAt = res.StatusExpiresAt;
+        const expired =
+          !!expiresAt && new Date(expiresAt).getTime() <= Date.now();
+        setStatusText(expired ? '' : saved);
+        setStatusModalOpen(false);
+      } catch (error) {
+        Alert.alert(
+          t('profile.status_title'),
+          error instanceof Error ? error.message : t('profile.status_error'),
+        );
+      } finally {
+        setStatusSaving(false);
+      }
+    },
+    [userId, accessToken, t],
   );
 
   const handlePickFromGallery = useCallback(async () => {
@@ -279,23 +318,52 @@ export function HomeScreen({ navigation }: Props) {
           { paddingTop: insets.top + 8 },
         ]}>
         <View style={styles.header}>
-          <Pressable
-            style={styles.greeting}
-            onPress={() => goToTab('Profile')}>
-            <Avatar
-              uri={avatarUri}
-              name={fullName || firstName || '?'}
-              size="md"
-              premium={isPremium}
-              online
-            />
-            <View style={styles.greetingText}>
+          <View style={styles.greeting}>
+            <View style={styles.avatarWrap}>
+              <Pressable
+                onPress={() => goToTab('Profile')}
+                accessibilityRole="button"
+                accessibilityLabel={t('home.greeting')}>
+                <Avatar
+                  uri={avatarUri}
+                  name={fullName || firstName || '?'}
+                  size="md"
+                  premium={isPremium}
+                  online
+                />
+              </Pressable>
+              <Pressable
+                onPress={() => setStatusModalOpen(true)}
+                hitSlop={10}
+                accessibilityRole="button"
+                accessibilityLabel={t('profile.status_title')}
+                style={[
+                  styles.statusBubble,
+                  {
+                    backgroundColor: theme.colors.card,
+                    borderColor: theme.colors.border,
+                  },
+                  theme.shadows.sm,
+                ]}>
+                <Text
+                  style={[
+                    styles.statusBubbleText,
+                    { color: theme.colors.text },
+                  ]}
+                  numberOfLines={1}>
+                  {statusText || '+'}
+                </Text>
+              </Pressable>
+            </View>
+            <Pressable
+              style={styles.greetingText}
+              onPress={() => goToTab('Profile')}>
               <Typography variant="caption" color="textMuted">
                 {t('home.greeting')}
               </Typography>
               <Typography variant="h3">{firstName || '…'}</Typography>
-            </View>
-          </Pressable>
+            </Pressable>
+          </View>
           <View style={styles.headerActions}>
             <IconButton
               name="message"
@@ -531,6 +599,19 @@ export function HomeScreen({ navigation }: Props) {
         onDelete={handleDeleteStory}
         onOpenProfile={handleOpenStoryProfile}
       />
+
+      <StatusEditModal
+        visible={statusModalOpen}
+        initialStatus={statusText}
+        saving={statusSaving}
+        onClose={() => setStatusModalOpen(false)}
+        onSave={value => {
+          void saveStatus(value);
+        }}
+        onClear={() => {
+          void saveStatus('');
+        }}
+      />
     </View>
   );
 }
@@ -547,9 +628,42 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     marginBottom: 8,
   },
-  greeting: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  greetingText: { gap: 2 },
-  headerActions: { flexDirection: 'row', gap: 8 },
+  greeting: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    minWidth: 0,
+    marginRight: 8,
+  },
+  avatarWrap: {
+    width: 52,
+    height: 52,
+    overflow: 'visible',
+    zIndex: 5,
+  },
+  statusBubble: {
+    position: 'absolute',
+    top: -10,
+    left: -8,
+    maxWidth: 88,
+    minWidth: 28,
+    minHeight: 26,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 13,
+    borderWidth: StyleSheet.hairlineWidth,
+    zIndex: 20,
+    elevation: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  statusBubbleText: {
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  greetingText: { flex: 1, gap: 2, minWidth: 0 },
+  headerActions: { flexDirection: 'row', gap: 8, flexShrink: 0 },
   premiumCard: {
     borderRadius: 18,
     overflow: 'hidden',

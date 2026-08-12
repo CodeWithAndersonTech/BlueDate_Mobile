@@ -9,6 +9,7 @@ export * from './BottomActionDock';
 export * from './Button';
 export * from './Input';
 export * from './AgePicker';
+export * from './BirthDatePicker';
 export * from './auth/AuthInputs';
 export * from './Card';
 export * from './Avatar';
