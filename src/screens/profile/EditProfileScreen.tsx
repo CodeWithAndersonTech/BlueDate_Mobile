@@ -10,7 +10,9 @@ import {
   ActivityIndicator,
   Alert,
   BackHandler,
+  Keyboard,
   KeyboardAvoidingView,
+  Modal,
   Platform,
   Pressable,
   ScrollView,
@@ -127,8 +129,16 @@ export function EditProfileScreen({ navigation, route }: Props) {
   const bioOffsetY = useRef(0);
   const interestsOffsetY = useRef(0);
   const focusAppliedKey = useRef<string | null>(null);
+  const focusTimersRef = useRef<ReturnType<typeof setTimeout>[]>([]);
+  /** User dismissed the auto-opened interest sheet for this focus key. */
+  const interestFocusDismissedKey = useRef<string | null>(null);
 
   const savedTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const clearFocusTimers = useCallback(() => {
+    focusTimersRef.current.forEach(clearTimeout);
+    focusTimersRef.current = [];
+  }, []);
   useEffect(
     () => () => {
       if (savedTimer.current) clearTimeout(savedTimer.current);
@@ -184,13 +194,53 @@ export function EditProfileScreen({ navigation, route }: Props) {
     navigation.navigate('ProfileMain');
   }, [navigation]);
 
+  const closeInterestSheet = useCallback(() => {
+    clearFocusTimers();
+    if (focusTarget === 'interests') {
+      interestFocusDismissedKey.current = `${focusTarget}:${
+        focusInterestTypeId ?? ''
+      }`;
+    }
+    setSheetType(prev => {
+      // Only dismiss keyboard when an interest sheet was actually open —
+      // otherwise bio/other inputs lose focus immediately after gaining it.
+      if (prev != null) {
+        Keyboard.dismiss();
+      }
+      return null;
+    });
+  }, [clearFocusTimers, focusTarget, focusInterestTypeId]);
+
+  const requestClose = useCallback(() => {
+    if (saving) {
+      return;
+    }
+    // Bottom sheet first — don't leave the screen while it's open.
+    if (sheetType != null) {
+      closeInterestSheet();
+      return;
+    }
+    if (dirty) {
+      Alert.alert(t('edit.discard_title'), t('edit.discard_message'), [
+        { text: t('settings.cancel'), style: 'cancel' },
+        {
+          text: t('edit.discard_confirm'),
+          style: 'destructive',
+          onPress: goBackToProfile,
+        },
+      ]);
+      return;
+    }
+    goBackToProfile();
+  }, [saving, sheetType, dirty, t, goBackToProfile, closeInterestSheet]);
+
   useEffect(() => {
     const sub = BackHandler.addEventListener('hardwareBackPress', () => {
-      goBackToProfile();
+      requestClose();
       return true;
     });
     return () => sub.remove();
-  }, [goBackToProfile]);
+  }, [requestClose]);
 
   const load = useCallback(async () => {
     if (!userId) {
@@ -248,11 +298,14 @@ export function EditProfileScreen({ navigation, route }: Props) {
     useCallback(() => {
       load();
       return () => {
+        clearFocusTimers();
         focusAppliedKey.current = null;
+        interestFocusDismissedKey.current = null;
         setBioFocused(false);
         setInterestsHighlighted(false);
+        setSheetType(null);
       };
-    }, [load]),
+    }, [load, clearFocusTimers]),
   );
 
   useEffect(() => {
@@ -288,15 +341,21 @@ export function EditProfileScreen({ navigation, route }: Props) {
       return;
     }
     focusAppliedKey.current = key;
+    clearFocusTimers();
 
-    const timer = setTimeout(() => {
+    const schedule = (fn: () => void, ms: number) => {
+      const id = setTimeout(fn, ms);
+      focusTimersRef.current.push(id);
+    };
+
+    schedule(() => {
       if (focusTarget === 'bio') {
         scrollRef.current?.scrollTo({
           y: Math.max(0, bioOffsetY.current - 20),
           animated: true,
         });
         setBioFocused(true);
-        setTimeout(() => bioInputRef.current?.focus(), 280);
+        schedule(() => bioInputRef.current?.focus(), 280);
         return;
       }
 
@@ -306,7 +365,11 @@ export function EditProfileScreen({ navigation, route }: Props) {
           animated: true,
         });
         setInterestsHighlighted(true);
-        setTimeout(() => setInterestsHighlighted(false), 1600);
+        schedule(() => setInterestsHighlighted(false), 1600);
+
+        if (interestFocusDismissedKey.current === key) {
+          return;
+        }
 
         const targetType =
           focusInterestTypeId != null
@@ -315,12 +378,17 @@ export function EditProfileScreen({ navigation, route }: Props) {
               )
             : interestTypes[0];
         if (targetType) {
-          setTimeout(() => openInterestSheet(targetType), 320);
+          schedule(() => {
+            if (interestFocusDismissedKey.current === key) {
+              return;
+            }
+            openInterestSheet(targetType);
+          }, 320);
         }
       }
     }, 120);
 
-    return () => clearTimeout(timer);
+    return () => clearFocusTimers();
   }, [
     loading,
     loadFailed,
@@ -328,18 +396,19 @@ export function EditProfileScreen({ navigation, route }: Props) {
     focusInterestTypeId,
     interestTypes,
     openInterestSheet,
+    clearFocusTimers,
   ]);
 
   const applyInterestSheet = () => {
     if (!sheetType) return;
     setAnswers(prev => ({ ...prev, [sheetType.Id]: sheetValue.trim() }));
-    setSheetType(null);
+    closeInterestSheet();
   };
 
   const clearInterestSheet = () => {
     if (!sheetType) return;
     setAnswers(prev => ({ ...prev, [sheetType.Id]: '' }));
-    setSheetType(null);
+    closeInterestSheet();
   };
 
   const onSave = async () => {
@@ -420,7 +489,11 @@ export function EditProfileScreen({ navigation, route }: Props) {
         translucent
       />
 
-      <Header title={t('edit.title')} />
+      <Header
+        title={t('edit.title')}
+        onBack={requestClose}
+        backAccessibilityLabel={t('settings.cancel')}
+      />
 
       {loading ? (
         <EditProfileSkeleton />
@@ -529,7 +602,12 @@ export function EditProfileScreen({ navigation, route }: Props) {
                 onChangeText={text =>
                   setBio(text.length <= BIO_MAX ? text : text.slice(0, BIO_MAX))
                 }
-                onFocus={() => setBioFocused(true)}
+                onFocus={() => {
+                  if (sheetType != null) {
+                    closeInterestSheet();
+                  }
+                  setBioFocused(true);
+                }}
                 onBlur={() => setBioFocused(false)}
                 multiline
                 placeholder={t('profile.add_bio_desc')}
@@ -640,7 +718,7 @@ export function EditProfileScreen({ navigation, route }: Props) {
         </Animated.View>
       )}
 
-      {!loading && !loadFailed ? (
+      {!loading && !loadFailed && sheetType == null ? (
         <View
           pointerEvents="box-none"
           style={[
@@ -707,7 +785,7 @@ export function EditProfileScreen({ navigation, route }: Props) {
         title={sheetType?.Name || sheetType?.Code || ''}
         value={sheetValue}
         onChange={setSheetValue}
-        onClose={() => setSheetType(null)}
+        onClose={closeInterestSheet}
         onApply={applyInterestSheet}
         onClear={clearInterestSheet}
         hasValue={(answers[sheetType?.Id ?? -1] ?? '').trim().length > 0}
@@ -839,108 +917,125 @@ function InterestSheet({
   const { t } = useLocale();
   const showClear = hasValue || value.trim().length > 0;
 
-  // In-tree overlay — RN Modal + Material Top Tabs crashes iOS New Arch
-  // (UIViewControllerHierarchyInconsistency).
-  if (!visible) {
-    return null;
-  }
-
   return (
-    <View style={styles.sheetRoot} pointerEvents="box-none">
-      <Pressable
-        style={[styles.backdrop, { backgroundColor: theme.colors.backdrop }]}
-        accessibilityRole="button"
-        accessibilityLabel={t('common.close')}
-        onPress={onClose}
-      />
+    <Modal
+      visible={visible}
+      transparent
+      animationType="fade"
+      presentationStyle="overFullScreen"
+      statusBarTranslucent
+      onRequestClose={onClose}>
       <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        pointerEvents="box-none"
-        style={styles.sheetKeyboard}>
-        <View
-          style={[
-            styles.sheet,
-            {
-              backgroundColor: theme.colors.card,
-              paddingBottom: Math.max(insets.bottom, 16),
-            },
-          ]}>
+        style={styles.sheetModalRoot}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+        <View style={styles.sheetModalBody}>
+          <Pressable
+            style={[
+              styles.backdrop,
+              { backgroundColor: theme.colors.backdrop },
+            ]}
+            accessibilityRole="button"
+            accessibilityLabel={t('common.close')}
+            onPress={onClose}
+          />
           <View
             style={[
-              styles.sheetHandle,
-              { backgroundColor: theme.colors.borderStrong },
-            ]}
-          />
-          <View style={styles.sheetHeader}>
+              styles.sheet,
+              {
+                backgroundColor: theme.colors.card,
+                paddingBottom: Math.max(insets.bottom, 16),
+              },
+            ]}>
             <View
               style={[
-                styles.sheetEmoji,
-                { backgroundColor: theme.colors.primarySoft },
-              ]}>
-              <Text style={styles.sheetEmojiText}>{emoji}</Text>
+                styles.sheetHandle,
+                { backgroundColor: theme.colors.borderStrong },
+              ]}
+            />
+            <View style={styles.sheetHeader}>
+              <View
+                style={[
+                  styles.sheetEmoji,
+                  { backgroundColor: theme.colors.primarySoft },
+                ]}>
+                <Text style={styles.sheetEmojiText}>{emoji}</Text>
+              </View>
+              <View style={styles.sheetHeaderText}>
+                <Text style={[styles.sheetTitle, { color: theme.colors.text }]}>
+                  {title}
+                </Text>
+                <Text style={[styles.hint, { color: theme.colors.textMuted }]}>
+                  {t('edit.interest_sheet_hint')}
+                </Text>
+              </View>
             </View>
-            <View style={styles.sheetHeaderText}>
-              <Text style={[styles.sheetTitle, { color: theme.colors.text }]}>
-                {title}
-              </Text>
-              <Text style={[styles.hint, { color: theme.colors.textMuted }]}>
-                {t('edit.interest_sheet_hint')}
-              </Text>
-            </View>
-          </View>
-          <TextInput
-            value={value}
-            onChangeText={onChange}
-            placeholder={t('edit.answer_placeholder').replace('{name}', title)}
-            placeholderTextColor={theme.colors.textMuted}
-            autoFocus
-            returnKeyType="done"
-            onSubmitEditing={onApply}
-            accessibilityLabel={title}
-            style={[
-              styles.sheetInput,
-              {
-                color: theme.colors.text,
-                backgroundColor: theme.colors.surfaceAlt,
-                borderColor: theme.colors.border,
-              },
-            ]}
-          />
-          <View style={styles.sheetActions}>
+            <TextInput
+              value={value}
+              onChangeText={onChange}
+              placeholder={t('edit.answer_placeholder').replace(
+                '{name}',
+                title,
+              )}
+              placeholderTextColor={theme.colors.textMuted}
+              autoFocus
+              returnKeyType="done"
+              onSubmitEditing={onApply}
+              accessibilityLabel={title}
+              style={[
+                styles.sheetInput,
+                {
+                  color: theme.colors.text,
+                  backgroundColor: theme.colors.surfaceAlt,
+                  borderColor: theme.colors.border,
+                },
+              ]}
+            />
             {showClear ? (
               <Pressable
                 onPress={onClear}
+                hitSlop={8}
+                style={styles.sheetClear}>
+                <Text
+                  style={[
+                    styles.sheetClearLabel,
+                    { color: theme.colors.danger },
+                  ]}>
+                  {t('edit.clear_interest')}
+                </Text>
+              </Pressable>
+            ) : null}
+            <View style={styles.sheetActions}>
+              <Pressable
+                onPress={onClose}
                 style={[styles.sheetBtn, styles.sheetGhost]}>
                 <Text
                   style={[
                     styles.sheetBtnLabel,
                     { color: theme.colors.primary },
                   ]}>
-                  {t('edit.clear_interest')}
+                  {t('settings.cancel')}
                 </Text>
               </Pressable>
-            ) : (
-              <View style={styles.sheetBtn} />
-            )}
-            <Pressable
-              onPress={onApply}
-              style={[
-                styles.sheetBtn,
-                styles.sheetPrimary,
-                { backgroundColor: theme.colors.primary },
-              ]}>
-              <Text
+              <Pressable
+                onPress={onApply}
                 style={[
-                  styles.sheetBtnLabel,
-                  { color: theme.colors.onPrimary },
+                  styles.sheetBtn,
+                  styles.sheetPrimary,
+                  { backgroundColor: theme.colors.primary },
                 ]}>
-                {t('edit.apply_interest')}
-              </Text>
-            </Pressable>
+                <Text
+                  style={[
+                    styles.sheetBtnLabel,
+                    { color: theme.colors.onPrimary },
+                  ]}>
+                  {t('edit.apply_interest')}
+                </Text>
+              </Pressable>
+            </View>
           </View>
         </View>
       </KeyboardAvoidingView>
-    </View>
+    </Modal>
   );
 }
 
@@ -948,11 +1043,12 @@ const styles = StyleSheet.create({
   root: { flex: 1 },
   flex: { flex: 1 },
   body: { flex: 1 },
-  sheetKeyboard: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    bottom: 0,
+  sheetModalRoot: {
+    flex: 1,
+  },
+  sheetModalBody: {
+    flex: 1,
+    justifyContent: 'flex-end',
   },
   center: {
     flex: 1,
@@ -1114,19 +1210,23 @@ const styles = StyleSheet.create({
     height: SAVE_BTN_HEIGHT,
   },
   savedLabel: { fontSize: 16, fontWeight: '700' },
-  sheetRoot: {
+  backdrop: {
     ...StyleSheet.absoluteFillObject,
-    zIndex: 9999,
-    elevation: 9999,
-    justifyContent: 'flex-end',
   },
-  backdrop: { ...StyleSheet.absoluteFillObject },
   sheet: {
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
     paddingHorizontal: 20,
     paddingTop: 8,
     gap: 12,
+  },
+  sheetClear: {
+    alignSelf: 'flex-start',
+    paddingVertical: 2,
+  },
+  sheetClearLabel: {
+    fontSize: 14,
+    fontWeight: '600',
   },
   sheetHandle: {
     alignSelf: 'center',
