@@ -1,5 +1,5 @@
-import { useFocusEffect } from '@react-navigation/native';
-import { NativeStackScreenProps } from '@react-navigation/native-stack';
+import { useFocusEffect, useNavigation } from '@react-navigation/native';
+import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import React, { useCallback, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
@@ -19,16 +19,15 @@ import {
 } from '../../components';
 import { useLocale } from '../../i18n';
 import { useChat } from '../../navigation/ChatContext';
-import { useScreenBottomPad } from '../../navigation/tabBarLayout';
+import { useTabBarClearance } from '../../navigation/tabBarLayout';
 import { AppStackParamList } from '../../navigation/types';
 import { useTheme } from '../../theme';
 
-type Props = NativeStackScreenProps<AppStackParamList, 'Messages'>;
-
-export function MessagesScreen({ navigation }: Props) {
+export function MessagesScreen() {
   const theme = useTheme();
   const { t } = useLocale();
-  const bottomPad = useScreenBottomPad(24);
+  const navigation = useNavigation<NativeStackNavigationProp<AppStackParamList>>();
+  const bottomPad = useTabBarClearance(24);
   const { conversations, loadingInbox, refreshInbox, unreadCount } = useChat();
   const [query, setQuery] = useState('');
   const [refreshing, setRefreshing] = useState(false);
@@ -62,6 +61,7 @@ export function MessagesScreen({ navigation }: Props) {
   return (
     <Screen edges={['top']}>
       <Header
+        large
         title={t('messages.title')}
         subtitle={
           unreadCount > 0
@@ -71,8 +71,6 @@ export function MessagesScreen({ navigation }: Props) {
               )
             : t('messages.subtitle')
         }
-        onBack={() => navigation.goBack()}
-        backAccessibilityLabel={t('common.back')}
       />
 
       <View style={styles.searchWrap}>
@@ -197,7 +195,7 @@ export function MessagesScreen({ navigation }: Props) {
 }
 
 const styles = StyleSheet.create({
-  searchWrap: { paddingHorizontal: 20, paddingBottom: 8 },
+  searchWrap: { paddingHorizontal: 20, paddingTop: 4, paddingBottom: 4 },
   loading: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   content: {
     paddingHorizontal: 12,

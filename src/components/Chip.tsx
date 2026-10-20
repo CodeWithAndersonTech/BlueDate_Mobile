@@ -26,6 +26,7 @@ export function Chip({
   tone = 'default',
 }: ChipProps) {
   const theme = useTheme();
+  const recipe = theme.components.chip;
 
   const backgroundColor =
     tone === 'status'
@@ -51,15 +52,15 @@ export function Chip({
         {
           flexDirection: 'row',
           alignItems: 'center',
-          gap: 6,
-          paddingVertical: 10,
-          paddingHorizontal: 16,
-          borderRadius: 999,
+          gap: recipe.gap,
+          paddingVertical: recipe.paddingV,
+          paddingHorizontal: recipe.paddingH,
+          borderRadius: recipe.radius,
           backgroundColor,
         },
         style,
       ]}>
-      {icon && <Icon name={icon} size={14} color={contentColor} />}
+      {icon && <Icon name={icon} size={recipe.icon} color={contentColor} />}
       <Typography variant="callout" weight="600" tint={contentColor}>
         {label}
       </Typography>

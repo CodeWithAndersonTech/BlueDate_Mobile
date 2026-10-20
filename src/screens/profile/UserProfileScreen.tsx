@@ -13,27 +13,27 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { EmptyState, Header } from '../../components';
+import { EmptyState, Header, Icon } from '../../components';
 import {
   acceptFriendRequest,
   FriendshipRelation,
   friendshipItems,
   getFriends,
   getFriendshipStatus,
-  getLikeCount,
-  getLikeStatus,
   getOrCreateDirectConversation,
+  getStoriesByUser,
   getUserProfile,
-  likeCountFromResponse,
-  likeUser,
   resolveMediaUrl,
   sendFriendRequest,
+  StoryUserGroup,
   unfriend,
-  unlikeUser,
   UserProfileInterest,
   UserProfileResponse,
+  getBlockStatus,
+  isBlockedByMe,
+  unblockUser,
 } from '../../api';
-import { useLocale } from '../../i18n';
+import { useLocale, userFacingError } from '../../i18n';
 import { useAuth } from '../../navigation/AuthContext';
 import { useChat } from '../../navigation/ChatContext';
 import {
@@ -54,9 +54,17 @@ import {
   getMockUserProfile,
   isMockProfileUserId,
 } from '../../utils/mockData';
+import {
+  getCurrentCoordinates,
+  peekLastCoordinates,
+} from '../../services/location/currentPosition';
+import { useHideTabBar } from '../../navigation/useHideTabBar';
+import { StoryViewer } from '../home/StoryViewer';
+import { TreatSheet } from '../treat/TreatSheet';
+import { BlockSheet } from './BlockSheet';
 import { ProfilePhotoGrid } from './ProfilePhotoGrid';
 
-type UserProfileParams = { UserProfile: { userId: string } };
+type UserProfileParams = { UserProfile: { userId: string; openTreat?: boolean } };
 type Props = NativeStackScreenProps<UserProfileParams, 'UserProfile'>;
 
 const AVATAR_SIZE = 86;
@@ -114,12 +122,15 @@ export function UserProfileScreen({ navigation, route }: Props) {
   const [notFound, setNotFound] = useState(false);
   const [relation, setRelation] = useState<number>(FriendshipRelation.None);
   const [friendshipId, setFriendshipId] = useState<number | null>(null);
-  const [hasLiked, setHasLiked] = useState(false);
-  const [likeCount, setLikeCount] = useState(0);
   const [displayAge, setDisplayAge] = useState<number | null>(null);
   const [friendCount, setFriendCount] = useState(0);
   const [busy, setBusy] = useState(false);
-  const [likeBusy, setLikeBusy] = useState(false);
+  const [blockedByMe, setBlockedByMe] = useState(false);
+  const [stories, setStories] = useState<StoryUserGroup | null>(null);
+  const [storyOpen, setStoryOpen] = useState(false);
+  const [treatOpen, setTreatOpen] = useState(false);
+  const [blockOpen, setBlockOpen] = useState(false);
+  useHideTabBar(storyOpen);
   const loadedProfileIdRef = useRef<number | null>(null);
 
   const load = useCallback(async () => {
@@ -136,6 +147,7 @@ export function UserProfileScreen({ navigation, route }: Props) {
       loadedProfileIdRef.current = null;
     }
     setNotFound(false);
+    setBlockedByMe(false);
 
     // Incoming / Sent mock rows — render a full local profile preview.
     if (isMockProfileUserId(targetId)) {
@@ -176,8 +188,6 @@ export function UserProfileScreen({ navigation, route }: Props) {
       setAvatarUri(mock.profileImage ?? mock.photoUris[0]);
       setRelation(mock.relation);
       setFriendshipId(mock.friendshipId);
-      setHasLiked(false);
-      setLikeCount(mock.likeCount);
       setDisplayAge(mock.age ?? null);
       setFriendCount(mock.relation === 3 ? 36 : 12);
       loadedProfileIdRef.current = mock.userId;
@@ -186,19 +196,23 @@ export function UserProfileScreen({ navigation, route }: Props) {
     }
 
     try {
-      const [profileRes, photoBundle, friendsRes, likeCountRes] =
+      const other = Boolean(meId && meId !== targetId);
+      const cachedCoords = peekLastCoordinates();
+      const [profileRes, photoBundle, friendsRes, storyGroup, statusRes, blockRes] =
         await Promise.all([
           getUserProfile(targetId, accessToken),
           loadProfilePhotos(targetId, accessToken).catch(() => ({
             gallery: [] as ProfilePhoto[],
             avatarUri: undefined as string | undefined,
           })),
-          getFriends(targetId, accessToken).catch(() => ({
-            IsSuccess: true,
-            Items: [],
-          })),
-          getLikeCount(targetId, accessToken).catch(() => ({ Count: 0 })),
+          getFriends(targetId, accessToken).catch(() => ({ Items: [] })),
+          other ? getStoriesByUser(meId!, targetId, cachedCoords) : Promise.resolve(null),
+          other
+            ? getFriendshipStatus(meId!, targetId, accessToken)
+            : Promise.resolve(null),
+          other ? getBlockStatus(targetId).catch(() => null) : Promise.resolve(null),
         ]);
+      setStories(storyGroup);
       setProfile(profileRes);
       loadedProfileIdRef.current = profileRes.Id;
       const profileAvatar = await resolveMediaUrl(profileRes.ProfileImage);
@@ -215,19 +229,21 @@ export function UserProfileScreen({ navigation, route }: Props) {
         typeof profileRes.Age === 'number' ? profileRes.Age : null,
       );
       setFriendCount(friendshipItems(friendsRes).length);
-      setLikeCount(likeCountFromResponse(likeCountRes));
 
-      if (meId && meId !== targetId) {
-        const [statusRes, likeStatusRes] = await Promise.all([
-          getFriendshipStatus(meId, targetId, accessToken),
-          getLikeStatus(meId, targetId, accessToken),
-        ]);
+      if (statusRes) {
         setRelation(statusRes.Relation);
         setFriendshipId(statusRes.FriendshipId);
-        setHasLiked(
-          !!(likeStatusRes.HasLiked ??
-            (likeStatusRes as { hasLiked?: boolean }).hasLiked),
-        );
+      }
+      setBlockedByMe(isBlockedByMe(blockRes));
+
+      // Footprint stories need GPS; never block first paint on a fresh fix.
+      if (other && !storyGroup) {
+        void getCurrentCoordinates(1500).then(fresh => {
+          if (!fresh || loadedProfileIdRef.current !== targetId) return;
+          return getStoriesByUser(meId!, targetId, fresh).then(next => {
+            if (next && loadedProfileIdRef.current === targetId) setStories(next);
+          });
+        });
       }
     } catch {
       setProfile(null);
@@ -329,47 +345,10 @@ export function UserProfileScreen({ navigation, route }: Props) {
     } catch (error) {
       Alert.alert(
         t('user_profile.title'),
-        error instanceof Error ? error.message : t('user_profile.action_error'),
+        userFacingError(error, t, 'user_profile.action_error'),
       );
     } finally {
       setBusy(false);
-    }
-  };
-
-  const onToggleLike = async () => {
-    if (!profile || likeBusy || (meId != null && meId === targetId)) return;
-
-    if (isMockProfileUserId(targetId)) {
-      setHasLiked(prev => !prev);
-      setLikeCount(c => (hasLiked ? Math.max(0, c - 1) : c + 1));
-      return;
-    }
-
-    if (!meId) return;
-    const prevLiked = hasLiked;
-    const prevCount = likeCount;
-    setLikeBusy(true);
-    setHasLiked(!prevLiked);
-    setLikeCount(c => (prevLiked ? Math.max(0, c - 1) : c + 1));
-    try {
-      if (prevLiked) {
-        await unlikeUser(meId, targetId, accessToken);
-      } else {
-        await likeUser(meId, targetId, accessToken);
-      }
-      const fresh = await getLikeCount(targetId, accessToken).catch(() => null);
-      if (fresh) {
-        setLikeCount(likeCountFromResponse(fresh));
-      }
-    } catch (error) {
-      setHasLiked(prevLiked);
-      setLikeCount(prevCount);
-      Alert.alert(
-        t('user_profile.like'),
-        error instanceof Error ? error.message : t('user_profile.action_error'),
-      );
-    } finally {
-      setLikeBusy(false);
     }
   };
 
@@ -395,7 +374,6 @@ export function UserProfileScreen({ navigation, route }: Props) {
               if (isMockProfileUserId(targetId)) {
                 setRelation(FriendshipRelation.None);
                 setFriendshipId(null);
-                setHasLiked(false);
                 return;
               }
               if (!meId) return;
@@ -404,13 +382,10 @@ export function UserProfileScreen({ navigation, route }: Props) {
                 await unfriend(meId, targetId, accessToken);
                 setRelation(FriendshipRelation.None);
                 setFriendshipId(null);
-                setHasLiked(false);
               } catch (error) {
                 Alert.alert(
                   t('user_profile.unfriend'),
-                  error instanceof Error
-                    ? error.message
-                    : t('user_profile.action_error'),
+                  userFacingError(error, t, 'user_profile.action_error'),
                 );
               } finally {
                 setBusy(false);
@@ -451,12 +426,76 @@ export function UserProfileScreen({ navigation, route }: Props) {
     } catch (error) {
       Alert.alert(
         t('user_profile.message'),
-        error instanceof Error ? error.message : t('user_profile.action_error'),
+        userFacingError(error, t, 'user_profile.action_error'),
       );
     } finally {
       setBusy(false);
     }
   };
+
+  const onBlocked = () => {
+    setBlockOpen(false);
+    setBlockedByMe(true);
+    setRelation(FriendshipRelation.None);
+    setFriendshipId(null);
+    setStories(null);
+  };
+
+  const onUnblock = () => {
+    if (isMockProfileUserId(targetId)) {
+      setBlockedByMe(false);
+      return;
+    }
+    void (async () => {
+      setBusy(true);
+      try {
+        await unblockUser(targetId);
+        setBlockedByMe(false);
+      } catch (error) {
+        Alert.alert(
+          t('safety.unblock'),
+          userFacingError(error, t, 'safety.unblock_error'),
+        );
+      } finally {
+        setBusy(false);
+      }
+    })();
+  };
+
+  const openBlock = () => {
+    if (isMockProfileUserId(targetId)) {
+      onBlocked();
+      return;
+    }
+    setBlockOpen(true);
+  };
+
+  const openSafetyMenu = () => {
+    Alert.alert(name || t('user_profile.title'), undefined, [
+      ...(relation === FriendshipRelation.Friends && !blockedByMe
+        ? [{ text: t('user_profile.unfriend'), onPress: onUnfriend }]
+        : []),
+      {
+        text: blockedByMe ? t('safety.unblock') : t('safety.block'),
+        style: 'destructive' as const,
+        onPress: blockedByMe ? onUnblock : openBlock,
+      },
+      { text: t('settings.cancel'), style: 'cancel' as const },
+    ]);
+  };
+
+  const openTreat = () => {
+    if (isMockProfileUserId(targetId)) return;
+    setTreatOpen(true);
+  };
+
+  const openTreatRequested = route.params.openTreat === true;
+  React.useEffect(() => {
+    if (openTreatRequested && profile && !blockedByMe && meId !== targetId) {
+      setTreatOpen(true);
+      navigation.setParams({ openTreat: undefined });
+    }
+  }, [openTreatRequested, profile, blockedByMe, meId, targetId, navigation]);
 
   if (loading) {
     return (
@@ -516,18 +555,12 @@ export function UserProfileScreen({ navigation, route }: Props) {
           }
           style={isSelf ? styles.previewHeader : undefined}
           actions={
-            !isSelf && areFriends
+            !isSelf
               ? [
                   {
-                    icon: 'heart',
-                    onPress: () => {
-                      void onToggleLike();
-                    },
-                    accessibilityLabel: hasLiked
-                      ? t('user_profile.liked')
-                      : t('user_profile.like'),
-                    color: hasLiked ? theme.colors.danger : undefined,
-                    filled: hasLiked,
+                    icon: 'more',
+                    onPress: openSafetyMenu,
+                    accessibilityLabel: t('safety.more'),
                   },
                 ]
               : []
@@ -561,7 +594,20 @@ export function UserProfileScreen({ navigation, route }: Props) {
           ) : null}
           <View style={styles.header}>
             <View style={styles.headerTop}>
-              <View style={styles.avatarRing}>
+              <Pressable
+                style={[
+                  styles.avatarRing,
+                  stories && {
+                    borderColor: theme.colors.primary,
+                    borderWidth: 2.5,
+                    borderRadius: (AVATAR_SIZE + 8) / 2,
+                    padding: 2,
+                  },
+                ]}
+                disabled={!stories}
+                onPress={() => setStoryOpen(true)}
+                accessibilityRole="button"
+                accessibilityLabel={t('stories.view')}>
                 {avatarUri ? (
                   <Image
                     source={{ uri: avatarUri }}
@@ -606,7 +652,7 @@ export function UserProfileScreen({ navigation, route }: Props) {
                     </Text>
                   </View>
                 ) : null}
-              </View>
+              </Pressable>
 
               <View style={styles.statsRow}>
                 <View style={styles.statItem}>
@@ -631,18 +677,6 @@ export function UserProfileScreen({ navigation, route }: Props) {
                       { color: theme.colors.textMuted },
                     ]}>
                     {t('profile.stat_friends')}
-                  </Text>
-                </View>
-                <View style={styles.statItem}>
-                  <Text style={[styles.statValue, { color: theme.colors.text }]}>
-                    {likeCount}
-                  </Text>
-                  <Text
-                    style={[
-                      styles.statLabel,
-                      { color: theme.colors.textMuted },
-                    ]}>
-                    {t('profile.stat_likes')}
                   </Text>
                 </View>
               </View>
@@ -812,7 +846,25 @@ export function UserProfileScreen({ navigation, route }: Props) {
               borderTopColor: theme.colors.border,
             },
           ]}>
-          {areFriends ? (
+          {blockedByMe ? (
+            <Pressable
+              onPress={onUnblock}
+              disabled={busy}
+              style={[
+                styles.actionBtn,
+                styles.actionBtnSecondary,
+                {
+                  backgroundColor: theme.colors.surfaceAlt,
+                  borderColor: theme.colors.border,
+                  opacity: busy ? 0.7 : 1,
+                },
+              ]}>
+              <Text
+                style={[styles.actionBtnLabel, { color: theme.colors.text }]}>
+                {t('safety.unblock')}
+              </Text>
+            </Pressable>
+          ) : areFriends ? (
             <>
               <Pressable
                 key="message"
@@ -836,28 +888,30 @@ export function UserProfileScreen({ navigation, route }: Props) {
                 </Text>
               </Pressable>
               <Pressable
-                key="unfriend"
-                onPress={onUnfriend}
+                key="treat"
+                onPress={openTreat}
                 disabled={busy}
+                accessibilityRole="button"
                 style={[
                   styles.actionBtn,
                   styles.actionBtnSecondary,
+                  styles.actionBtnRow,
                   {
-                    backgroundColor: theme.colors.surfaceAlt,
-                    borderColor: theme.colors.border,
+                    backgroundColor: theme.colors.premiumSoft,
+                    borderColor: theme.colors.premium,
                     opacity: busy ? 0.7 : 1,
                   },
                 ]}>
+                <Icon name="gift" size={theme.iconSize.sm} color={theme.colors.premium} />
                 <Text
-                  style={[
-                    styles.actionBtnLabel,
-                    { color: theme.colors.danger },
-                  ]}>
-                  {t('user_profile.unfriend')}
+                  numberOfLines={1}
+                  style={[styles.actionBtnLabel, { color: theme.colors.text }]}>
+                  {t('treat.cta')}
                 </Text>
               </Pressable>
             </>
           ) : (
+            <>
             <Pressable
               key="friend-action"
               onPress={onFriendAction}
@@ -894,8 +948,66 @@ export function UserProfileScreen({ navigation, route }: Props) {
                 {friendLabel}
               </Text>
             </Pressable>
+              <Pressable
+                key="treat-nf"
+                onPress={openTreat}
+                disabled={busy}
+                accessibilityRole="button"
+                style={[
+                  styles.actionBtn,
+                  styles.actionBtnSecondary,
+                  styles.actionBtnRow,
+                  {
+                    backgroundColor: theme.colors.premiumSoft,
+                    borderColor: theme.colors.premium,
+                    opacity: busy ? 0.7 : 1,
+                  },
+                ]}>
+                <Icon name="gift" size={theme.iconSize.sm} color={theme.colors.premium} />
+                <Text
+                  numberOfLines={1}
+                  style={[styles.actionBtnLabel, { color: theme.colors.text }]}>
+                  {t('treat.cta')}
+                </Text>
+              </Pressable>
+            </>
           )}
         </View>
+      ) : null}
+
+      {!isSelf ? (
+        <>
+          <TreatSheet
+            visible={treatOpen}
+            receiverUserId={targetId}
+            receiverName={name}
+            favorites={(profile.Interests ?? []).filter(i => (i.Value ?? '').trim().length > 0)}
+            onClose={() => setTreatOpen(false)}
+            onSent={() => {
+              setTreatOpen(false);
+              Alert.alert(t('treat.title'), t('treat.sent_body').replace('{name}', name));
+            }}
+          />
+          <BlockSheet
+            visible={blockOpen}
+            targetUserId={targetId}
+            targetName={name}
+            onClose={() => setBlockOpen(false)}
+            onBlocked={onBlocked}
+          />
+        </>
+      ) : null}
+
+      {stories ? (
+        <StoryViewer
+          visible={storyOpen}
+          groups={[stories]}
+          startGroupIndex={0}
+          viewerUserId={meId ?? 0}
+          onClose={() => setStoryOpen(false)}
+          onDelete={() => undefined}
+          onOpenProfile={() => setStoryOpen(false)}
+        />
       ) : null}
     </View>
   );
@@ -1112,6 +1224,7 @@ const styles = StyleSheet.create({
     minWidth: 0,
   },
   actionBtnLabel: { fontSize: 14, fontWeight: '700' },
+  actionBtnRow: { flexDirection: 'row', gap: 6 },
 });
 
 export default UserProfileScreen;

@@ -7,8 +7,13 @@ export type AuthStackParamList = {
   ForgotPassword: undefined;
   EmailVerification: {
     email: string;
-    password: string;
-    userId: number;
+    purpose: 'register' | 'reset';
+    password?: string;
+    userId?: number;
+  };
+  ResetPassword: {
+    email: string;
+    code: string;
   };
 };
 
@@ -19,6 +24,7 @@ export type HomeStackParamList = {
   ChangePassword: undefined;
   Privacy: undefined;
   Help: undefined;
+  BlockedUsers: undefined;
   UserProfile: { userId: string };
 };
 
@@ -34,6 +40,7 @@ export type ProfileStackParamList = {
   ChangePassword: undefined;
   Privacy: undefined;
   Help: undefined;
+  BlockedUsers: undefined;
   UserProfile: { userId: string };
 };
 
@@ -52,17 +59,19 @@ export type MainTabParamList = {
   Home: NavigatorScreenParams<HomeStackParamList>;
   Nearby: NavigatorScreenParams<NearbyStackParamList>;
   Friends: NavigatorScreenParams<FriendsStackParamList>;
-  Premium: undefined;
+  Messages: undefined;
   Profile: NavigatorScreenParams<ProfileStackParamList>;
 };
 
 /** Full-screen overlays above tabs (chat, notifications, …). */
 export type AppStackParamList = {
   MainTabs: NavigatorScreenParams<MainTabParamList> | undefined;
-  Messages: undefined;
   Notifications: undefined;
+  Premium: undefined;
   ChatThread: { conversationId: string };
-  UserProfile: { userId: string };
+  UserProfile: { userId: string; openTreat?: boolean };
+  TreatRequest: { treatId: number };
+  TreatResult: { treatId: number };
 };
 
 export type RootStackParamList = {

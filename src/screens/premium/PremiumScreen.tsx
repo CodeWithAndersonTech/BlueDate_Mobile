@@ -1,5 +1,8 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import { NativeStackScreenProps } from '@react-navigation/native-stack';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
+  ActivityIndicator,
+  Alert,
   Pressable,
   StatusBar,
   StyleSheet,
@@ -14,27 +17,51 @@ import Animated, {
   withSpring,
   withTiming,
 } from 'react-native-reanimated';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { Icon, IconName, TabScreenScrollView } from '../../components';
-import { useLocale } from '../../i18n';
-import { useFloatingTabOffset } from '../../navigation/tabBarLayout';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { purchasePremium } from '../../api';
+import { Header, Icon, IconName, TabScreenScrollView, Typography } from '../../components';
+import { publishPremium, usePremium } from '../../hooks/usePremium';
+import { useLocale, userFacingError } from '../../i18n';
+import { useAuth } from '../../navigation/AuthContext';
+import { AppStackParamList } from '../../navigation/types';
+import {
+  buyProduct,
+  completePurchase,
+  getDisplayPrices,
+  getOwnedSubscriptions,
+  IAP_PRODUCTS,
+  IapCancelledError,
+  IapUnavailableError,
+} from '../../services/iap';
 import { useTheme } from '../../theme';
 import { premiumPerks, premiumPlans } from '../../utils';
 import { PremiumSkeleton } from './PremiumSkeleton';
 
-const GOLD: [string, string] = ['#F5D76E', '#E8A838'];
-const ON_GOLD = '#2C2100';
 const LOAD_MS = 650;
 // Approximate rendered height of the sticky footer card, used to pad the
 // scroll content so the last perk clears the footer.
-const FOOTER_HEIGHT = 132;
-const FOOTER_GAP = 70;
+const FOOTER_HEIGHT = 160;
+const FOOTER_GAP = 12;
 
-export function PremiumScreen() {
+const PRODUCT_FOR_PLAN: Record<string, string> = {
+  standard: IAP_PRODUCTS.standard,
+  plus: IAP_PRODUCTS.plus,
+};
+
+type Props = NativeStackScreenProps<AppStackParamList, 'Premium'>;
+
+export function PremiumScreen({ navigation }: Props) {
   const theme = useTheme();
+  const gold = theme.gradients.premium;
+  const onGold = theme.colors.onPremium;
   const { t } = useLocale();
-  // Sticky footer docks right above the floating tab pill.
-  const tabBarOffset = useFloatingTabOffset(FOOTER_GAP);
+  const insets = useSafeAreaInsets();
+  const tabBarOffset = Math.max(insets.bottom, 12) + FOOTER_GAP;
+  const { userId } = useAuth();
+  const { premium, isPremium, planCode } = usePremium();
+  const [prices, setPrices] = useState<Record<string, string>>({});
+  const [buying, setBuying] = useState(false);
+  const [restoring, setRestoring] = useState(false);
   const [loading, setLoading] = useState(true);
   const [plan, setPlan] = useState(
     premiumPlans.find(p => p.popular)?.id ?? premiumPlans[0].id,
@@ -60,6 +87,69 @@ export function PremiumScreen() {
     }, LOAD_MS);
     return () => clearTimeout(timer);
   }, [contentOpacity]);
+
+  useEffect(() => {
+    let cancelled = false;
+    getDisplayPrices([IAP_PRODUCTS.standard, IAP_PRODUCTS.plus], 'subs').then(map => {
+      if (!cancelled) setPrices(map);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const priceFor = (planId: string, fallback: string) =>
+    prices[PRODUCT_FOR_PLAN[planId]] ?? fallback;
+
+  const currentPlan = isPremium ? (planCode ?? 'standard').toLowerCase() : null;
+  const ownsActive = currentPlan === active.id || (currentPlan === 'plus' && active.id === 'standard');
+
+  const onBuy = useCallback(async () => {
+    if (!userId || buying) return;
+    setBuying(true);
+    try {
+      const { payment, purchase } = await buyProduct(PRODUCT_FOR_PLAN[active.id], 'subs');
+      const next = await purchasePremium(userId, payment);
+      await completePurchase(purchase, false);
+      publishPremium(next);
+      Alert.alert(t('premium.title'), t('premium.activated'), [
+        { text: t('common.ok'), onPress: () => navigation.goBack() },
+      ]);
+    } catch (error) {
+      if (error instanceof IapCancelledError) return;
+      Alert.alert(
+        t('premium.title'),
+        error instanceof IapUnavailableError
+          ? t('iap.unavailable')
+          : userFacingError(error, t, 'premium.purchase_error'),
+      );
+    } finally {
+      setBuying(false);
+    }
+  }, [userId, buying, active.id, navigation, t]);
+
+  const onRestore = useCallback(async () => {
+    if (!userId || restoring) return;
+    setRestoring(true);
+    try {
+      const owned = await getOwnedSubscriptions();
+      // Plus first so a stacked Standard receipt never downgrades.
+      owned.sort((a, b) => (a.ProductId === IAP_PRODUCTS.plus ? -1 : b.ProductId === IAP_PRODUCTS.plus ? 1 : 0));
+      let restored = false;
+      for (const payment of owned) {
+        try {
+          publishPremium(await purchasePremium(userId, payment));
+          restored = true;
+          break;
+        } catch {
+          /* try the next receipt */
+        }
+      }
+      Alert.alert(t('premium.title'), restored ? t('premium.restored') : t('premium.restore_none'));
+    } finally {
+      setRestoring(false);
+    }
+  }, [userId, restoring, t]);
 
   const visiblePerks = useMemo(() => {
     const ids = new Set(active.perkIds);
@@ -91,27 +181,37 @@ export function PremiumScreen() {
         translucent
       />
 
+      <Header
+        title={t('premium.title')}
+        onBack={() => navigation.goBack()}
+        backAccessibilityLabel={t('common.back')}
+      />
       <Animated.View style={[styles.flex, contentFadeStyle]}>
         <TabScreenScrollView
           style={styles.flex}
           bottomSpacing={FOOTER_HEIGHT + FOOTER_GAP + 12}
           contentContainerStyle={styles.content}>
           <View style={[styles.hero, theme.shadows.md]}>
-            <LinearGradient colors={GOLD} style={StyleSheet.absoluteFill} />
+            <LinearGradient colors={gold} style={StyleSheet.absoluteFill} />
             <View style={styles.heroInner}>
               <View style={styles.crownWrap}>
-                <Icon name="crown" size={28} color={ON_GOLD} filled />
+                <Icon name="crown" size={28} color={onGold} filled />
               </View>
-              <Text style={[styles.heroTitle, { color: ON_GOLD }]}>
+              <Text style={[styles.heroTitle, { color: onGold }]}>
                 {t('premium.title')}
               </Text>
               <Text style={styles.heroDesc}>{t('premium.subtitle')}</Text>
-              <View style={styles.trialPill}>
-                <Icon name="sparkles" size={12} color={ON_GOLD} />
-                <Text style={[styles.trialText, { color: ON_GOLD }]}>
-                  {t('premium.trial')}
-                </Text>
-              </View>
+              {premium?.isPremium ? (
+                <View style={styles.trialPill}>
+                  <Icon name="check" size={12} color={onGold} />
+                  <Text style={[styles.trialText, { color: onGold }]}>
+                    {(currentPlan === 'plus'
+                      ? t('premium.current_plus')
+                      : t('premium.current_standard')
+                    ).replace('{days}', String(premium.daysRemaining ?? 0))}
+                  </Text>
+                </View>
+              ) : null}
             </View>
           </View>
 
@@ -225,7 +325,7 @@ export function PremiumScreen() {
                     <View style={styles.planRight}>
                       <Text
                         style={[styles.planPrice, { color: theme.colors.text }]}>
-                        {p.price}
+                        {priceFor(p.id, p.price)}
                       </Text>
                       <Text
                         style={[
@@ -264,14 +364,14 @@ export function PremiumScreen() {
                       styles.perkIcon,
                       {
                         backgroundColor: perk.plusOnly
-                          ? 'rgba(245, 215, 110, 0.28)'
+                          ? theme.colors.premiumSoft
                           : theme.colors.primarySoft,
                       },
                     ]}>
                     <Icon
                       name={perk.icon as IconName}
                       size={18}
-                      color={perk.plusOnly ? ON_GOLD : theme.colors.primary}
+                      color={perk.plusOnly ? onGold : theme.colors.primary}
                       filled={perk.icon !== 'eye-off'}
                     />
                   </View>
@@ -285,8 +385,16 @@ export function PremiumScreen() {
                         {t(perk.titleKey)}
                       </Text>
                       {perk.plusOnly ? (
-                        <View style={styles.plusBadge}>
-                          <Text style={styles.plusBadgeText}>
+                        <View
+                          style={[
+                            styles.plusBadge,
+                            { backgroundColor: theme.colors.premiumSoft },
+                          ]}>
+                          <Text
+                            style={[
+                              styles.plusBadgeText,
+                              { color: onGold },
+                            ]}>
                             {t('premium.plus_badge')}
                           </Text>
                         </View>
@@ -330,7 +438,7 @@ export function PremiumScreen() {
                 {active.taglineKey ? ` · ${t(active.taglineKey)}` : ''}
               </Text>
               <Text style={[styles.footerPrice, { color: theme.colors.text }]}>
-                {active.price}
+                {priceFor(active.id, active.price)}
                 <Text
                   style={[
                     styles.footerPeriod,
@@ -342,23 +450,43 @@ export function PremiumScreen() {
               </Text>
             </View>
             <Pressable
+              disabled={buying || ownsActive}
               onPressIn={() => {
                 scale.value = withSpring(0.97, { damping: 16, stiffness: 320 });
               }}
               onPressOut={() => {
                 scale.value = withSpring(1, { damping: 14, stiffness: 260 });
               }}
-              onPress={() => {}}>
-              <Animated.View style={[ctaStyle, theme.shadows.md]}>
-                <LinearGradient colors={GOLD} style={styles.cta}>
-                  <Icon name="crown" size={18} color={ON_GOLD} filled />
-                  <Text style={[styles.ctaLabel, { color: ON_GOLD }]}>
-                    {active.id === 'plus'
-                      ? t('premium.cta_plus')
-                      : t('premium.cta')}
+              onPress={() => {
+                void onBuy();
+              }}>
+              <Animated.View style={[ctaStyle, theme.shadows.md, ownsActive && styles.ctaOwned]}>
+                <LinearGradient colors={gold} style={styles.cta}>
+                  {buying ? (
+                    <ActivityIndicator color={onGold} />
+                  ) : (
+                    <Icon name="crown" size={18} color={onGold} filled />
+                  )}
+                  <Text style={[styles.ctaLabel, { color: onGold }]}>
+                    {ownsActive
+                      ? t('premium.cta_owned')
+                      : active.id === 'plus'
+                        ? t('premium.cta_plus')
+                        : t('premium.cta')}
                   </Text>
                 </LinearGradient>
               </Animated.View>
+            </Pressable>
+            <Pressable
+              onPress={() => {
+                void onRestore();
+              }}
+              disabled={restoring}
+              hitSlop={8}
+              style={styles.restore}>
+              <Typography variant="caption" color="textMuted" align="center">
+                {restoring ? t('premium.restoring') : t('premium.restore')}
+              </Typography>
             </Pressable>
           </View>
         </View>
@@ -481,12 +609,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: 7,
     paddingVertical: 2,
     borderRadius: 999,
-    backgroundColor: 'rgba(245, 215, 110, 0.45)',
+    backgroundColor: 'transparent',
   },
   plusBadgeText: {
     fontSize: 10,
     fontWeight: '800',
-    color: ON_GOLD,
     letterSpacing: 0.3,
   },
   perkDesc: { fontSize: 12, lineHeight: 17, fontWeight: '500' },
@@ -518,6 +645,8 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   ctaLabel: { fontSize: 16, fontWeight: '700' },
+  ctaOwned: { opacity: 0.6 },
+  restore: { alignSelf: 'center', paddingVertical: 2 },
 });
 
 export default PremiumScreen;

@@ -1,39 +1,38 @@
-# BlueDate — Cloudflare tunnel + TestFlight
+# BlueDate / Meerk — TestFlight
 
-## Hızlı akış (DemoBleApp ile aynı)
+## Canlı API
+Mobil config: `src/config/api.ts`
+- `USE_PRODUCTION = true`
+- `PROD_API_URL = 'https://api.meerk.com.tr'`
 
-### 1) API
-```bash
-cd ~/RiderProjects/AD_BlueDateApp
-dotnet run --project src/AD_BlueDate.API.Package/AD_BlueDate.API --urls "http://127.0.0.1:5135"
-```
-
-### 2) Tunnel (URL’yi mobil config’e yazar)
-```bash
-chmod +x deploy/quick-tunnel.sh
-./deploy/quick-tunnel.sh
-```
-
-Çıkan `https://xxxx.trycloudflare.com` otomatik olarak şuraya yazılır:
-
-`BlueDate_Mobile/src/config/api.ts` → `PROD_API_URL`
-
-`USE_PRODUCTION = true` olmalı.
-
-### 3) TestFlight hazırlık
+## Hazırlık
 ```bash
 cd ~/BleDate_Mobile/BlueDate_Mobile
-chmod +x scripts/testflight-prepare.sh
-./scripts/testflight-prepare.sh
+npm run testflight:prepare
 ```
 
-### 4) Xcode Archive
+## Archive + Upload (CLI)
+```bash
+# Archive
+xcodebuild -workspace ios/BlueDate.xcworkspace \
+  -scheme BlueDate -configuration Release \
+  -destination 'generic/platform=iOS' \
+  -archivePath ios/build/BlueDate.xcarchive \
+  archive
+
+# App Store Connect'e yükle
+xcodebuild -exportArchive \
+  -archivePath ios/build/BlueDate.xcarchive \
+  -exportOptionsPlist ios/ExportOptions.plist \
+  -exportPath ios/build/export
+```
+
+## Xcode (manuel)
 1. `ios/BlueDate.xcworkspace` aç
 2. Destination: **Any iOS Device (arm64)**
 3. **Product → Archive**
 4. **Distribute App → App Store Connect → Upload**
 
 ## Notlar
-- Quick tunnel URL **her açılışta değişir**. TestFlight’taki build o URL’yi taşır; demo günü Mac’te **aynı tunnel + API açık** kalmalı.
-- Kalıcı domain istersen (daha sonra) named Cloudflare tunnel + kendi domain gerekir.
-- Simulator lokal debug: `USE_PRODUCTION = false`
+- Lokal debug: `USE_PRODUCTION = false`
+- Her yeni TestFlight yüklemesinde `CURRENT_PROJECT_VERSION` artmalı

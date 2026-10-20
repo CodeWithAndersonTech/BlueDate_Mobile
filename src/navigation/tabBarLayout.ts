@@ -17,7 +17,7 @@ export const TAB_ROOT_SCREENS = new Set([
   'NearbyMain',
   'FriendsMain',
   'ProfileMain',
-  'Premium',
+  'Messages',
 ]);
 
 /** Default CTA row height inside a sticky dock (button only). */

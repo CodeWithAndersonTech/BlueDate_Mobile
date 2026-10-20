@@ -11,9 +11,7 @@ import {
   Alert,
   BackHandler,
   Keyboard,
-  KeyboardAvoidingView,
   Modal,
-  Platform,
   Pressable,
   ScrollView,
   StatusBar,
@@ -43,6 +41,7 @@ import {
   updateUserBio,
 } from '../../api';
 import { Header } from '../../components';
+import { useKeyboardHeight } from '../../hooks';
 import { useLocale } from '../../i18n';
 import { useAuth } from '../../navigation/AuthContext';
 import { useStickyDockLayout } from '../../navigation/tabBarLayout';
@@ -914,6 +913,7 @@ function InterestSheet({
 }) {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
+  const keyboardHeight = useKeyboardHeight();
   const { t } = useLocale();
   const showClear = hasValue || value.trim().length > 0;
 
@@ -925,9 +925,11 @@ function InterestSheet({
       presentationStyle="overFullScreen"
       statusBarTranslucent
       onRequestClose={onClose}>
-      <KeyboardAvoidingView
-        style={styles.sheetModalRoot}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+      <View
+        style={[
+          styles.sheetModalRoot,
+          { paddingBottom: keyboardHeight },
+        ]}>
         <View style={styles.sheetModalBody}>
           <Pressable
             style={[
@@ -943,7 +945,10 @@ function InterestSheet({
               styles.sheet,
               {
                 backgroundColor: theme.colors.card,
-                paddingBottom: Math.max(insets.bottom, 16),
+                paddingBottom:
+                  keyboardHeight > 0 ? 12 : Math.max(insets.bottom, 16),
+                borderBottomLeftRadius: keyboardHeight > 0 ? 0 : 24,
+                borderBottomRightRadius: keyboardHeight > 0 ? 0 : 24,
               },
             ]}>
             <View
@@ -1034,7 +1039,7 @@ function InterestSheet({
             </View>
           </View>
         </View>
-      </KeyboardAvoidingView>
+      </View>
     </Modal>
   );
 }
@@ -1211,9 +1216,10 @@ const styles = StyleSheet.create({
   },
   savedLabel: { fontSize: 16, fontWeight: '700' },
   backdrop: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
   },
   sheet: {
+    width: '100%',
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
     paddingHorizontal: 20,

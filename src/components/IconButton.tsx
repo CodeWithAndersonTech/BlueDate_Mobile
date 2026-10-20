@@ -27,7 +27,7 @@ export interface IconButtonProps {
 export function IconButton({
   name,
   onPress,
-  size = 22,
+  size,
   color,
   filled = false,
   variant = 'surface',
@@ -37,8 +37,10 @@ export function IconButton({
   style,
 }: IconButtonProps) {
   const theme = useTheme();
+  const recipe = theme.components.iconButton;
+  const icon = size ?? theme.iconSize.lg;
   const scale = useSharedValue(1);
-  const dim = size + 22;
+  const dim = icon + recipe.pad;
   const showBadge = typeof badge === 'number' && badge > 0;
 
   const animatedStyle = useAnimatedStyle(() => ({
@@ -56,8 +58,10 @@ export function IconButton({
     <Pressable
       onPress={onPress}
       disabled={disabled}
-      onPressIn={() => (scale.value = withSpring(0.9, { damping: 14, stiffness: 320 }))}
-      onPressOut={() => (scale.value = withSpring(1, { damping: 11, stiffness: 260 }))}
+      onPressIn={() =>
+        (scale.value = withSpring(0.9, theme.motion.springIn))
+      }
+      onPressOut={() => (scale.value = withSpring(1, theme.motion.springOut))}
       hitSlop={6}
       accessibilityRole="button"
       accessibilityLabel={
@@ -82,7 +86,7 @@ export function IconButton({
         ]}>
         <Icon
           name={name}
-          size={size}
+          size={icon}
           color={color ?? theme.colors.text}
           filled={filled}
         />
@@ -90,9 +94,18 @@ export function IconButton({
           <View
             style={[
               styles.badge,
-              { backgroundColor: theme.colors.primary },
+              {
+                backgroundColor: theme.colors.primary,
+                minWidth: recipe.badge,
+                height: recipe.badge,
+                borderRadius: recipe.badge / 2,
+              },
             ]}>
-            <Text style={[styles.badgeText, { color: theme.colors.onPrimary }]}>
+            <Text
+              style={[
+                recipe.badgeText,
+                { color: theme.colors.onPrimary },
+              ]}>
               {badge > 9 ? '9+' : String(badge)}
             </Text>
           </View>
@@ -107,17 +120,9 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: 2,
     right: 2,
-    minWidth: 16,
-    height: 16,
-    borderRadius: 8,
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: 3,
-  },
-  badgeText: {
-    fontSize: 9,
-    fontWeight: '700',
-    lineHeight: 11,
   },
 });
 

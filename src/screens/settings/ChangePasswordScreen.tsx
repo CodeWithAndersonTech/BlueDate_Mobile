@@ -10,7 +10,7 @@ import {
   Screen,
   Typography,
 } from '../../components';
-import { useLocale } from '../../i18n';
+import { useLocale, userFacingError } from '../../i18n';
 import { useAuth } from '../../navigation/AuthContext';
 import { useLockTabSwipe } from '../../navigation/useLockTabSwipe';
 import {
@@ -67,11 +67,10 @@ export function ChangePasswordScreen({ navigation }: Props) {
         { text: 'OK', onPress: () => navigation.goBack() },
       ]);
     } catch (error) {
-      const message =
-        error instanceof Error
-          ? error.message
-          : t('auth.password_change_failed');
-      Alert.alert(t('settings.password'), message);
+      Alert.alert(
+        t('settings.password'),
+        userFacingError(error, t, 'auth.password_change_failed'),
+      );
     } finally {
       setLoading(false);
     }

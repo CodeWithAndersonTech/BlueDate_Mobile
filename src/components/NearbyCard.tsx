@@ -24,6 +24,8 @@ export interface NearbyUser {
   distanceKm: number;
   online: boolean;
   premium?: boolean;
+  /** Active story — ring highlights it; tap avatar on the profile to watch. */
+  hasStory?: boolean;
   bio?: string;
   photo?: string;
   accentColors?: [string, string, ...string[]];
@@ -41,7 +43,7 @@ export interface NearbyCardProps {
 
 const CIRCLE = 132;
 
-export function NearbyCard({
+function NearbyCardInner({
   user,
   onPress,
   onAdd,
@@ -76,13 +78,20 @@ export function NearbyCard({
             style={[
               styles.railAvatar,
               {
-                borderColor: user.online
+                borderColor: user.hasStory
+                  ? theme.colors.premium
+                  : user.online
                   ? theme.colors.primary
                   : theme.colors.borderStrong,
               },
             ]}>
             {user.photo ? (
-              <Image source={{ uri: user.photo }} style={styles.fill} />
+              <Image
+                source={{ uri: user.photo }}
+                style={styles.fill}
+                fadeDuration={0}
+                resizeMode="cover"
+              />
             ) : (
               <LinearGradient
                 colors={user.accentColors ?? theme.gradients.primary}
@@ -125,14 +134,21 @@ export function NearbyCard({
             style={[
               styles.circle,
               {
-                borderColor: user.online
+                borderColor: user.hasStory
+                  ? theme.colors.premium
+                  : user.online
                   ? theme.colors.primary
                   : theme.colors.borderStrong,
                 backgroundColor: theme.colors.surfaceAlt,
               },
             ]}>
             {user.photo ? (
-              <Image source={{ uri: user.photo }} style={styles.fill} />
+              <Image
+                source={{ uri: user.photo }}
+                style={styles.fill}
+                fadeDuration={0}
+                resizeMode="cover"
+              />
             ) : (
               <LinearGradient
                 colors={user.accentColors ?? theme.gradients.primary}
@@ -156,8 +172,8 @@ export function NearbyCard({
           ) : null}
 
           {user.premium ? (
-            <View style={styles.crown}>
-              <Icon name="crown" size={11} color="#3A2A00" filled />
+            <View style={[styles.crown, { backgroundColor: theme.colors.premium }]}>
+              <Icon name="crown" size={11} color={theme.colors.onPremium} filled />
             </View>
           ) : null}
 
@@ -179,7 +195,7 @@ export function NearbyCard({
               <Icon
                 name={added ? 'user-check' : 'user-plus'}
                 size={15}
-                color={added ? '#fff' : theme.colors.primary}
+                color={added ? theme.colors.white : theme.colors.primary}
               />
             </Pressable>
           ) : null}
@@ -254,7 +270,6 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#F5D76E',
   },
   name: {
     fontSize: 15,
@@ -276,4 +291,5 @@ const styles = StyleSheet.create({
   },
 });
 
+export const NearbyCard = React.memo(NearbyCardInner);
 export default NearbyCard;

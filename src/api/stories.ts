@@ -1,5 +1,5 @@
 import { API_PATHS, getApiBaseUrl } from '../config/api';
-import { apiRequest, ApiEnvelope, ApiError } from './client';
+import { apiRequest, ApiEnvelope, ApiError, genericErrorMessage } from './client';
 import { getApiLanguageCode } from './languageHeader';
 import { resolveMediaUrl } from './photos';
 
@@ -140,11 +140,67 @@ export async function getStoryFeed(
   };
 }
 
+/** Active stories of one user, or null when the viewer has no access. */
+export async function getStoriesByUser(
+  viewerUserId: number,
+  userId: number,
+  coords?: { latitude: number; longitude: number } | null,
+): Promise<StoryUserGroup | null> {
+  try {
+    const raw = await apiRequest<ApiEnvelope & RawGroup>(API_PATHS.storyByUser, {
+      query: {
+        viewerUserId,
+        userId,
+        latitude: coords?.latitude,
+        longitude: coords?.longitude,
+      },
+    });
+    const group = normalizeGroup(raw);
+    if (group.User.UserId <= 0 || group.Stories.length === 0) return null;
+    const [resolved] = await resolveStoryMediaUrls([group]);
+    return resolved;
+  } catch {
+    return null;
+  }
+}
+
+export type FootprintGroup = StoryUserGroup & { LastSharedAt: string };
+
+export type FootprintsResult = {
+  items: FootprintGroup[];
+  canOpenProfile: boolean;
+  windowHours: number;
+};
+
+export async function getFootprints(
+  latitude: number,
+  longitude: number,
+): Promise<FootprintsResult> {
+  const raw = await apiRequest<
+    ApiEnvelope & {
+      items?: (RawGroup & { lastSharedAt?: string })[];
+      canOpenProfile?: boolean;
+      windowHours?: number;
+    }
+  >(API_PATHS.storyFootprints, { query: { latitude, longitude } });
+
+  const groups = (raw.items ?? [])
+    .map(g => ({ ...normalizeGroup(g), LastSharedAt: String(g.lastSharedAt ?? '') }))
+    .filter(g => g.User.UserId > 0 && g.Stories.length > 0);
+  const resolved = await resolveStoryMediaUrls(groups);
+  return {
+    items: resolved.map((g, i) => ({ ...g, LastSharedAt: groups[i].LastSharedAt })),
+    canOpenProfile: raw.canOpenProfile ?? false,
+    windowHours: raw.windowHours ?? 6,
+  };
+}
+
 export async function createStory(
   userId: number,
   asset: { uri: string; fileName?: string; type?: string },
   caption?: string,
   token?: string | null,
+  coords?: { latitude: number; longitude: number } | null,
 ): Promise<CreateStoryResponse> {
   const baseUrl = await getApiBaseUrl();
   const url = `${baseUrl}${API_PATHS.story}`;
@@ -152,6 +208,10 @@ export async function createStory(
   form.append('userId', String(userId));
   if (caption?.trim()) {
     form.append('caption', caption.trim());
+  }
+  if (coords) {
+    form.append('latitude', coords.latitude.toFixed(6));
+    form.append('longitude', coords.longitude.toFixed(6));
   }
   form.append('file', {
     uri: asset.uri,
@@ -171,11 +231,8 @@ export async function createStory(
   let response: Response;
   try {
     response = await fetch(url, { method: 'POST', headers, body: form });
-  } catch (error) {
-    const message = error instanceof Error ? error.message : 'Network request failed';
-    throw new ApiError(0, [
-      `Backend'e ulaşılamadı (${baseUrl}). ${message}`,
-    ]);
+  } catch {
+    throw new ApiError(0, [genericErrorMessage()]);
   }
 
   let payload: (ApiEnvelope & {

@@ -10,13 +10,23 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { ErrorBoundary } from './src/components/ErrorBoundary';
 import { LocaleProvider } from './src/i18n';
-import { AuthProvider, ChatProvider, RootNavigator } from './src/navigation';
+import {
+  AuthProvider,
+  ChatProvider,
+  NotificationsProvider,
+  RootNavigator,
+} from './src/navigation';
 import { ThemeProvider } from './src/theme';
+import { hydrateApiLanguageCode } from './src/api/languageHeader';
+import { initPushNotifications } from './src/services/push';
 import { breadcrumb } from './src/utils/crashLog';
+
+void hydrateApiLanguageCode();
 
 function App() {
   React.useEffect(() => {
     breadcrumb('app_mounted');
+    void initPushNotifications();
   }, []);
 
   return (
@@ -27,7 +37,9 @@ function App() {
             <LocaleProvider>
               <AuthProvider>
                 <ChatProvider>
-                  <RootNavigator />
+                  <NotificationsProvider>
+                    <RootNavigator />
+                  </NotificationsProvider>
                 </ChatProvider>
               </AuthProvider>
             </LocaleProvider>

@@ -42,6 +42,7 @@ export function registerUser(payload: RegisterRequest) {
   return apiRequest<RegisterResponse>(API_PATHS.register, {
     method: 'POST',
     body: payload,
+    skipAuthRefresh: true,
   });
 }
 
@@ -49,6 +50,7 @@ export function loginUser(payload: LoginRequest) {
   return apiRequest<LoginResponse>(API_PATHS.login, {
     method: 'POST',
     body: payload,
+    skipAuthRefresh: true,
   });
 }
 
@@ -76,5 +78,48 @@ export function changePassword(
     method: 'POST',
     body: payload,
     token,
+  });
+}
+
+export type EmailOtpPurpose = 'register' | 'reset';
+
+export type SendEmailOtpRequest = {
+  Email: string;
+  Purpose: EmailOtpPurpose;
+};
+
+export type VerifyEmailOtpRequest = {
+  Email: string;
+  Purpose: EmailOtpPurpose;
+  Code: string;
+};
+
+export type ResetPasswordRequest = {
+  Email: string;
+  Code: string;
+  NewPassword: string;
+};
+
+export function sendEmailOtp(payload: SendEmailOtpRequest) {
+  return apiRequest<ApiEnvelope>(API_PATHS.sendEmailOtp, {
+    method: 'POST',
+    body: payload,
+    skipAuthRefresh: true,
+  });
+}
+
+export function verifyEmailOtp(payload: VerifyEmailOtpRequest) {
+  return apiRequest<ApiEnvelope>(API_PATHS.verifyEmailOtp, {
+    method: 'POST',
+    body: payload,
+    skipAuthRefresh: true,
+  });
+}
+
+export function resetPasswordWithOtp(payload: ResetPasswordRequest) {
+  return apiRequest<ApiEnvelope>(API_PATHS.resetPassword, {
+    method: 'POST',
+    body: payload,
+    skipAuthRefresh: true,
   });
 }

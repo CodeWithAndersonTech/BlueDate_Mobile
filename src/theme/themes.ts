@@ -1,4 +1,5 @@
 import { Platform, ViewStyle } from 'react-native';
+import { ThemeComponents, buildComponentRecipes } from './components';
 import {
   AccentDefinition,
   AccentKey,
@@ -7,8 +8,10 @@ import {
   accents,
   common,
   neutrals,
+  premium,
   statusColors,
 } from './palette';
+import { iconSize, layout, motion, radius, space } from './tokens';
 import { typography } from './typography';
 
 export interface ThemeColors {
@@ -29,11 +32,17 @@ export interface ThemeColors {
   secondary: string;
   onPrimary: string;
   success: string;
+  successSoft: string;
   warning: string;
+  warningSoft: string;
   danger: string;
+  dangerSoft: string;
   info: string;
   online: string;
   offline: string;
+  premium: string;
+  premiumSoft: string;
+  onPremium: string;
   overlay: string;
   backdrop: string;
   skeleton: string;
@@ -75,6 +84,12 @@ export interface Theme {
   gradients: ThemeGradients;
   typography: typeof typography;
   shadows: ThemeShadows;
+  space: typeof space;
+  radius: typeof radius;
+  iconSize: typeof iconSize;
+  motion: typeof motion;
+  layout: typeof layout;
+  components: ThemeComponents;
 }
 
 function buildShadows(mode: ColorMode, accent: AccentDefinition): ThemeShadows {
@@ -131,11 +146,17 @@ export function buildTheme(mode: ColorMode, accentKey: AccentKey): Theme {
     secondary: accent.secondary,
     onPrimary: accent.onPrimary,
     success: statusColors.success,
+    successSoft: statusColors.successSoft,
     warning: statusColors.warning,
+    warningSoft: statusColors.warningSoft,
     danger: statusColors.danger,
+    dangerSoft: statusColors.dangerSoft,
     info: statusColors.info,
     online: statusColors.online,
     offline: statusColors.offline,
+    premium: premium.start,
+    premiumSoft: premium.soft,
+    onPremium: premium.on,
     white: common.white,
     black: common.black,
     transparent: common.transparent,
@@ -143,7 +164,7 @@ export function buildTheme(mode: ColorMode, accentKey: AccentKey): Theme {
 
   const gradients: ThemeGradients = {
     primary: accent.gradient,
-    premium: statusColors.premiumGradient,
+    premium: premium.gradient,
     hero:
       mode === 'dark'
         ? [accent.primary, n.backgroundAlt, n.background]
@@ -154,15 +175,23 @@ export function buildTheme(mode: ColorMode, accentKey: AccentKey): Theme {
         : ['rgba(255,255,255,0.9)', 'rgba(255,255,255,0.7)'],
   };
 
+  const isDark = mode === 'dark';
+
   return {
     mode,
     accent,
     accentKey,
-    isDark: mode === 'dark',
+    isDark,
     colors,
     gradients,
     typography,
     shadows: buildShadows(mode, accent),
+    space,
+    radius,
+    iconSize,
+    motion,
+    layout,
+    components: buildComponentRecipes({ colors, isDark }),
   };
 }
 

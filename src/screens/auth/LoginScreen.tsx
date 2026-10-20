@@ -19,7 +19,7 @@ import {
   Screen,
   Typography,
 } from '../../components';
-import { useLocale } from '../../i18n';
+import { useLocale, userFacingError } from '../../i18n';
 import { useAuth } from '../../navigation/AuthContext';
 import { AuthStackParamList } from '../../navigation/types';
 import { useTheme } from '../../theme';
@@ -76,7 +76,7 @@ export function LoginScreen({ navigation }: Props) {
     } catch (error) {
       Alert.alert(
         t('auth.login'),
-        error instanceof Error ? error.message : 'Login failed',
+        userFacingError(error, t, 'auth.login_failed'),
       );
     } finally {
       setLoading(false);

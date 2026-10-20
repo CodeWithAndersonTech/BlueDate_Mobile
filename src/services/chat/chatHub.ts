@@ -16,8 +16,18 @@ export type ChatHubHandlers = {
 let connection: SignalR.HubConnection | null = null;
 let handlers: ChatHubHandlers = {};
 
+const notificationListeners = new Set<(unreadCount: number) => void>();
+
 export function setChatHubHandlers(next: ChatHubHandlers) {
   handlers = next;
+}
+
+/** Server pushes the new unread notification count whenever one is created or read. */
+export function onNotificationsChanged(listener: (unreadCount: number) => void) {
+  notificationListeners.add(listener);
+  return () => {
+    notificationListeners.delete(listener);
+  };
 }
 
 export async function connectChatHub(accessToken: string): Promise<boolean> {
@@ -76,6 +86,10 @@ export async function connectChatHub(accessToken: string): Promise<boolean> {
 
   connection.on('UnreadCountChanged', (unreadCount: number) => {
     handlers.onUnreadCountChanged?.(unreadCount);
+  });
+
+  connection.on('NotificationsChanged', (unreadCount: number) => {
+    notificationListeners.forEach(fn => fn(Number(unreadCount) || 0));
   });
 
   try {

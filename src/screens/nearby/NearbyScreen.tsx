@@ -9,15 +9,13 @@ import {
   StatusBar,
   StyleSheet,
   Text,
-  useWindowDimensions,
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import {
-  FriendshipRelation,
-  getFriendshipStatus,
+  FootprintGroup,
+  getFootprints,
   getUserProfile,
-  sendFriendRequest,
 } from '../../api';
 import { resolveMediaUrl } from '../../api/photos';
 import {
@@ -27,11 +25,17 @@ import {
 import { images } from '../../assets';
 import {
   EmptyState,
+  Icon,
   NearbyCard,
   NearbyUser,
   TabScreenScrollView,
+  Typography,
 } from '../../components';
 import { useBlePresence } from '../../hooks/useBlePresence';
+import { useHideTabBar } from '../../navigation/useHideTabBar';
+import { getCurrentCoordinates } from '../../services/location/currentPosition';
+import { StoryViewer } from '../home/StoryViewer';
+import { FootprintsSection, FootprintsStatus } from './FootprintsSection';
 import { useLocale } from '../../i18n';
 import { useAuth } from '../../navigation/AuthContext';
 import { NearbyStackParamList } from '../../navigation/types';
@@ -42,10 +46,11 @@ import { NearbySkeleton } from './NearbySkeleton';
 type Props = NativeStackScreenProps<NearbyStackParamList, 'NearbyMain'>;
 
 const H_PAD = 20;
-const GAP = 12;
 const LOAD_MS = 400;
 /** Keep the “searching” Meerk overlay up long enough to feel like a real scan. */
 const SEARCH_UI_MS = 15_000;
+/** Footprints are re-fetched on focus at most this often. */
+const FOOTPRINTS_STALE_MS = 60_000;
 
 function estimateDistanceKm(
   item: DirectNearbyItem | BridgeNearbyItem,
@@ -75,6 +80,8 @@ async function mapNearbyItem(
     age: item.Age ?? 0,
     distanceKm: estimateDistanceKm(item),
     online: true,
+    premium: item.IsFeatured,
+    hasStory: item.HasStory,
     photo,
     bio:
       'ViaUserId' in item && item.ViaFullName
@@ -87,7 +94,6 @@ export function NearbyScreen({ navigation }: Props) {
   const theme = useTheme();
   const { t, device } = useLocale();
   const { userId, accessToken, isSignedIn } = useAuth();
-  const { width: windowWidth } = useWindowDimensions();
   const rootNav = useNavigation();
 
   const session = useMemo(
@@ -106,17 +112,62 @@ export function NearbyScreen({ navigation }: Props) {
   const { state, start, stop, refresh, pollNearby } = useBlePresence(session);
 
   const [users, setUsers] = useState<NearbyUser[]>([]);
-  const [added, setAdded] = useState<Record<string, boolean>>({});
   const [loading, setLoading] = useState(true);
   const [verified, setVerified] = useState<boolean | null>(null);
   const [scanTipOpen, setScanTipOpen] = useState(false);
   const [searchUiActive, setSearchUiActive] = useState(false);
   const mappingRef = useRef(0);
-  const addingRef = useRef<Record<string, boolean>>({});
+  const mappedSigRef = useRef('');
   const searchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  const [footprints, setFootprints] = useState<FootprintGroup[]>([]);
+  const [footprintsStatus, setFootprintsStatus] = useState<FootprintsStatus>('loading');
+  const [footprintsHours, setFootprintsHours] = useState(6);
+  const [canOpenFootprintProfile, setCanOpenFootprintProfile] = useState(false);
+  const [viewerIndex, setViewerIndex] = useState<number | null>(null);
+  const footprintsFetchedAt = useRef(0);
+  useHideTabBar(viewerIndex !== null);
+
+  const loadFootprints = useCallback(async (force = false) => {
+    if (!force && Date.now() - footprintsFetchedAt.current < FOOTPRINTS_STALE_MS) return;
+    footprintsFetchedAt.current = Date.now();
+    const coords = await getCurrentCoordinates();
+    if (!coords) {
+      footprintsFetchedAt.current = 0;
+      setFootprintsStatus(prev => (prev === 'ready' ? prev : 'no_location'));
+      return;
+    }
+    try {
+      const res = await getFootprints(coords.latitude, coords.longitude);
+      setFootprints(res.items);
+      setCanOpenFootprintProfile(res.canOpenProfile);
+      setFootprintsHours(res.windowHours);
+      setFootprintsStatus('ready');
+    } catch {
+      footprintsFetchedAt.current = 0;
+      setFootprintsStatus(prev => (prev === 'loading' ? 'ready' : prev));
+    }
+  }, []);
+
+  const openFootprintProfile = useCallback(
+    (targetUserId: number) => {
+      setViewerIndex(null);
+      if (canOpenFootprintProfile) {
+        navigation.navigate('UserProfile', { userId: String(targetUserId) });
+        return;
+      }
+      Alert.alert(t('nearby.footprints_premium_title'), t('nearby.footprints_premium_body'), [
+        { text: t('settings.cancel'), style: 'cancel' },
+        {
+          text: t('notif.upgrade_cta'),
+          onPress: () => rootNav.navigate('Premium' as never),
+        },
+      ]);
+    },
+    [canOpenFootprintProfile, navigation, rootNav, t],
+  );
+
   const closeScanTip = () => setScanTipOpen(false);
-  const cardW = (windowWidth - H_PAD * 2 - GAP) / 2;
 
   const endSearchUi = useCallback(() => {
     if (searchTimerRef.current) {
@@ -202,6 +253,7 @@ export function NearbyScreen({ navigation }: Props) {
           if (ok) {
             beginSearchUi();
             start();
+            void loadFootprints();
           } else {
             endSearchUi();
             stop();
@@ -228,6 +280,7 @@ export function NearbyScreen({ navigation }: Props) {
       rootNav,
       beginSearchUi,
       endSearchUi,
+      loadFootprints,
     ]),
   );
 
@@ -259,40 +312,12 @@ export function NearbyScreen({ navigation }: Props) {
         Array.from(byId.values()).map(mapNearbyItem),
       );
       if (seq !== mappingRef.current) return;
+      const sig = mapped.map(u => `${u.id}:${u.photo ?? ''}:${u.hasStory ? 1 : 0}`).join('|');
+      if (sig === mappedSigRef.current) return;
+      mappedSigRef.current = sig;
       setUsers(mapped);
-
-      // Prefill added state from friendship status (friends / pending out).
-      if (userId && mapped.length > 0) {
-        const statuses = await Promise.all(
-          mapped.map(async u => {
-            try {
-              const res = await getFriendshipStatus(
-                userId,
-                Number(u.id),
-                accessToken,
-              );
-              return {
-                id: u.id,
-                added:
-                  res.Relation === FriendshipRelation.Friends ||
-                  res.Relation === FriendshipRelation.PendingOutgoing,
-              };
-            } catch {
-              return { id: u.id, added: false };
-            }
-          }),
-        );
-        if (seq !== mappingRef.current) return;
-        setAdded(prev => {
-          const next = { ...prev };
-          for (const row of statuses) {
-            if (row.added) next[row.id] = true;
-          }
-          return next;
-        });
-      }
     })();
-  }, [state.direct, state.bridge, verified, userId, accessToken]);
+  }, [state.direct, state.bridge, verified]);
 
   useEffect(() => {
     const parent = rootNav.getParent();
@@ -311,28 +336,13 @@ export function NearbyScreen({ navigation }: Props) {
     return unsub;
   }, [rootNav, navigation, state.status, pollNearby, verified]);
 
-  const onAddFriend = async (id: string) => {
-    if (!userId || added[id] || addingRef.current[id]) return;
-    addingRef.current[id] = true;
-    try {
-      await sendFriendRequest(userId, Number(id), accessToken);
-      setAdded(prev => ({ ...prev, [id]: true }));
-    } catch (error) {
-      Alert.alert(
-        t('user_profile.add_friend'),
-        error instanceof Error ? error.message : t('nearby.add_friend_error'),
-      );
-    } finally {
-      addingRef.current[id] = false;
-    }
-  };
-
   const onRefresh = () => {
     if (verified !== true) return;
     if (users.length === 0) {
       beginSearchUi();
     }
     void refresh();
+    void loadFootprints(true);
   };
 
   const emptyDesc =
@@ -395,12 +405,19 @@ export function NearbyScreen({ navigation }: Props) {
             />
           ) : null}
 
+          <View
+            style={[
+              styles.pinChip,
+              { backgroundColor: theme.colors.premiumSoft },
+            ]}>
+            <Icon name="map-pin" size={18} color={theme.colors.premium} />
+          </View>
           <View style={styles.headerText}>
-            <Text style={[styles.eyebrow, { color: theme.colors.textMuted }]}>
-              {t('nearby.eyebrow')}
-            </Text>
             <Text style={[styles.title, { color: theme.colors.text }]}>
               {t('nearby.title')}
+            </Text>
+            <Text style={[styles.subtitle, { color: theme.colors.textMuted }]}>
+              {t('nearby.subtitle')}
             </Text>
           </View>
 
@@ -460,58 +477,70 @@ export function NearbyScreen({ navigation }: Props) {
           </View>
         </View>
 
-        {users.length === 0 ? (
-          <TabScreenScrollView
-            contentContainerStyle={styles.emptyScroll}
-            onScrollBeginDrag={closeScanTip}
-            refreshControl={
-              <RefreshControl
-                refreshing={false}
-                onRefresh={onRefresh}
-                tintColor={theme.colors.primary}
-              />
-            }>
-            <EmptyState
-              image={images.appLogo}
-              onImagePress={kickOffScan}
-              imageAccessibilityLabel={t('nearby.scan_action')}
-              title={t('nearby.empty_title')}
-              description={emptyDesc}
+        <TabScreenScrollView
+          contentContainerStyle={[styles.scroll, { gap: theme.space.xl }]}
+          onScrollBeginDrag={closeScanTip}
+          refreshControl={
+            <RefreshControl
+              refreshing={state.refreshing}
+              onRefresh={onRefresh}
+              tintColor={theme.colors.primary}
             />
-          </TabScreenScrollView>
-        ) : (
-          <TabScreenScrollView
-            contentContainerStyle={styles.grid}
-            onScrollBeginDrag={closeScanTip}
-            refreshControl={
-              <RefreshControl
-                refreshing={state.refreshing}
-                onRefresh={onRefresh}
-                tintColor={theme.colors.primary}
+          }>
+          {footprints.length > 0 ? (
+            <View style={styles.section}>
+              <FootprintsSection
+                items={footprints}
+                status={footprintsStatus}
+                windowHours={footprintsHours}
+                onOpen={setViewerIndex}
               />
-            }>
-            {users.map(user => (
-              <NearbyCard
-                key={user.id}
-                user={user}
-                variant="grid"
-                style={{ width: cardW }}
-                added={!!added[user.id]}
-                onAdd={() => {
-                  void onAddFriend(user.id);
-                }}
-                onPress={() =>
-                  navigation.navigate('UserProfile', { userId: user.id })
-                }
+            </View>
+          ) : null}
+
+          <View style={[styles.section, { gap: theme.space.sm }]}>
+            <View style={styles.liveHeader}>
+              <View style={[styles.liveDot, { backgroundColor: theme.colors.online }]} />
+              <Typography variant="title">{t('nearby.live_title')}</Typography>
+            </View>
+            {users.length === 0 ? (
+              <EmptyState
+                image={images.appLogo}
+                onImagePress={kickOffScan}
+                imageAccessibilityLabel={t('nearby.scan_action')}
+                title={t('nearby.empty_title')}
+                description={emptyDesc}
               />
-            ))}
-          </TabScreenScrollView>
-        )}
+            ) : (
+              <View style={styles.liveGrid}>
+                {users.map(user => (
+                  <NearbyCard
+                    key={user.id}
+                    user={user}
+                    variant="rail"
+                    onPress={() =>
+                      navigation.navigate('UserProfile', { userId: user.id })
+                    }
+                  />
+                ))}
+              </View>
+            )}
+          </View>
+        </TabScreenScrollView>
       </View>
 
       <NearbyScanOverlay
         visible={showScanOverlay}
         onCancel={endSearchUi}
+      />
+
+      <StoryViewer
+        visible={viewerIndex !== null}
+        groups={footprints}
+        startGroupIndex={viewerIndex ?? 0}
+        viewerUserId={userId ?? 0}
+        onClose={() => setViewerIndex(null)}
+        onOpenProfile={openFootprintProfile}
       />
     </SafeAreaView>
   );
@@ -532,16 +561,24 @@ const styles = StyleSheet.create({
     zIndex: 4,
     overflow: 'visible',
   },
-  headerText: { flex: 1, gap: 2 },
-  eyebrow: {
-    fontSize: 12,
-    fontWeight: '600',
-    letterSpacing: 0.2,
+  pinChip: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 2,
   },
+  headerText: { flex: 1, gap: 4, minWidth: 0 },
   title: {
-    fontSize: 28,
+    fontSize: 22,
     fontWeight: '700',
-    letterSpacing: -0.6,
+    letterSpacing: -0.4,
+  },
+  subtitle: {
+    fontSize: 13,
+    lineHeight: 18,
+    fontWeight: '500',
   },
   scanBtnWrap: {
     position: 'relative',
@@ -596,17 +633,14 @@ const styles = StyleSheet.create({
   },
   scanTipTitle: { fontSize: 13, fontWeight: '700' },
   scanTipText: { fontSize: 12, lineHeight: 17, fontWeight: '500' },
-  emptyScroll: {
-    flexGrow: 1,
-    justifyContent: 'center',
-  },
-  grid: {
+  scroll: { flexGrow: 1, paddingTop: 8 },
+  section: { paddingHorizontal: H_PAD },
+  liveHeader: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  liveDot: { width: 8, height: 8, borderRadius: 4 },
+  liveGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    justifyContent: 'space-between',
-    rowGap: 18,
-    paddingHorizontal: H_PAD,
-    paddingTop: 8,
+    gap: 12,
   },
 });
 

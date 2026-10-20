@@ -17,15 +17,6 @@ export interface AvatarProps {
   style?: StyleProp<ViewStyle>;
 }
 
-const SIZE_MAP: Record<AvatarSize, number> = {
-  xs: 32,
-  sm: 40,
-  md: 52,
-  lg: 72,
-  xl: 96,
-  xxl: 128,
-};
-
 function initials(name?: string) {
   if (!name) return '?';
   return name
@@ -37,7 +28,7 @@ function initials(name?: string) {
     .join('');
 }
 
-export function Avatar({
+function AvatarInner({
   uri,
   name,
   size = 'md',
@@ -46,7 +37,7 @@ export function Avatar({
   style,
 }: AvatarProps) {
   const theme = useTheme();
-  const dim = SIZE_MAP[size];
+  const dim = theme.components.avatar.sizes[size];
   const ring = Math.max(2, dim * 0.04);
   const dotSize = Math.max(10, dim * 0.26);
   const initialSize = Math.round(dim * 0.38);
@@ -63,7 +54,12 @@ export function Avatar({
         },
       ]}>
       {uri ? (
-        <Image source={{ uri }} style={styles.image} />
+        <Image
+          source={{ uri }}
+          style={styles.image}
+          fadeDuration={0}
+          resizeMode="cover"
+        />
       ) : (
         <Typography
           variant="title"
@@ -135,4 +131,5 @@ const styles = StyleSheet.create({
   },
 });
 
+export const Avatar = React.memo(AvatarInner);
 export default Avatar;

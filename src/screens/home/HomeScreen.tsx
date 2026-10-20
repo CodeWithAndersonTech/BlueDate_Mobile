@@ -1,5 +1,5 @@
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useRef, useState } from 'react';
 import {
   Alert,
   Image,
@@ -16,7 +16,6 @@ import {
   Avatar,
   Icon,
   IconButton,
-  IconName,
   StatusEditModal,
   TabScreenScrollView,
   Typography,
@@ -24,9 +23,6 @@ import {
 import {
   createStory,
   deleteStory,
-  displayName,
-  formatRelativeTime,
-  getSocialActivity,
   getStoryFeed,
   getUserProfile,
   resolveMediaUrl,
@@ -35,10 +31,10 @@ import {
   StoryUserGroup,
   updateUserStatus,
 } from '../../api';
-import { useLocale } from '../../i18n';
+import { useLocale, userFacingError } from '../../i18n';
 import { usePremium } from '../../hooks/usePremium';
 import { useAuth } from '../../navigation/AuthContext';
-import { useChat } from '../../navigation/ChatContext';
+import { useNotifications } from '../../navigation/NotificationsContext';
 import { useHideTabBar } from '../../navigation/useHideTabBar';
 import { HomeStackParamList } from '../../navigation/types';
 import { loadProfilePhotos } from '../../services/photos/photoStore';
@@ -48,50 +44,30 @@ import {
   type PickedStoryAsset,
   type StoryPickResult,
 } from '../../services/stories/pickStoryMedia';
-import { ThemeColors, useTheme } from '../../theme';
-import { ActivityItem } from '../../utils';
+import { getCurrentCoordinates } from '../../services/location/currentPosition';
+import { useTheme } from '../../theme';
+import { NotificationRow } from '../notifications/NotificationRow';
+import { useOpenNotification } from '../notifications/notificationMeta';
 import { StoryComposeOverlay } from './StoryComposeOverlay';
 import { StoryRail } from './StoryRail';
 import { StoryViewer } from './StoryViewer';
 
 type Props = NativeStackScreenProps<HomeStackParamList, 'HomeFeed'>;
 
-/** Same gold palette as PremiumScreen. */
-const GOLD: [string, string] = ['#F5D76E', '#E8A838'];
-const ON_GOLD = '#2C2100';
-
-const ACTIVITY_META: Record<
-  string,
-  { icon: IconName; labelKey: string; color: keyof ThemeColors }
-> = {
-  match: {
-    icon: 'sparkles',
-    labelKey: 'home.activity.match',
-    color: 'primary',
-  },
-  like: {
-    icon: 'heart',
-    labelKey: 'home.activity.like',
-    color: 'danger',
-  },
-  visit: {
-    icon: 'eye',
-    labelKey: 'home.activity.visit',
-    color: 'info',
-  },
-  request: {
-    icon: 'user-plus',
-    labelKey: 'home.activity.request',
-    color: 'warning',
-  },
-};
-
 export function HomeScreen({ navigation }: Props) {
   const theme = useTheme();
   const { t } = useLocale();
   const insets = useSafeAreaInsets();
   const { userId, accessToken } = useAuth();
-  const { unreadCount, refreshUnread } = useChat();
+  const {
+    items: notifications,
+    unreadCount: unreadNotifications,
+    refresh: refreshNotifications,
+  } = useNotifications();
+  const openNotification = useOpenNotification();
+  const recentActivity = notifications
+    .filter(n => n.type !== 'like' && n.type !== 'match')
+    .slice(0, 5);
   const { isPremium, refresh: refreshPremium } = usePremium();
   const [firstName, setFirstName] = useState('');
   const [fullName, setFullName] = useState('');
@@ -99,7 +75,6 @@ export function HomeScreen({ navigation }: Props) {
   const [statusText, setStatusText] = useState('');
   const [statusModalOpen, setStatusModalOpen] = useState(false);
   const [statusSaving, setStatusSaving] = useState(false);
-  const [recentActivity, setRecentActivity] = useState<ActivityItem[]>([]);
   const [storyGroups, setStoryGroups] = useState<StoryUserGroup[]>([]);
   const [composeAsset, setComposeAsset] = useState<PickedStoryAsset | null>(
     null,
@@ -109,7 +84,11 @@ export function HomeScreen({ navigation }: Props) {
   const [viewerVisible, setViewerVisible] = useState(false);
   const [viewerStartIndex, setViewerStartIndex] = useState(0);
   useHideTabBar(composeVisible || viewerVisible);
-  const goToTab = (tab: string) => navigation.getParent()?.navigate(tab as never);
+  const goToTab = useCallback(
+    (tab: string) => navigation.getParent()?.navigate(tab as never),
+    [navigation],
+  );
+  const lastHomeFetchAt = useRef(0);
 
   const refreshStories = useCallback(async () => {
     if (!userId) return;
@@ -126,7 +105,14 @@ export function HomeScreen({ navigation }: Props) {
     useCallback(() => {
       if (!userId) return;
       let cancelled = false;
-      refreshUnread();
+      void refreshNotifications();
+      const fresh =
+        lastHomeFetchAt.current > 0 &&
+        Date.now() - lastHomeFetchAt.current < 25_000;
+      if (fresh) {
+        return undefined;
+      }
+      lastHomeFetchAt.current = Date.now();
       void refreshPremium();
       void refreshStories();
 
@@ -158,36 +144,10 @@ export function HomeScreen({ navigation }: Props) {
         }
       })();
 
-      getSocialActivity(userId, 20, accessToken)
-        .then(async activity => {
-          if (cancelled) return;
-          const mapped = await Promise.all(
-            (activity.Items ?? activity.items ?? []).map(async item => ({
-              id: `${item.Type}-${item.EntityId}`,
-              userId: String(item.User.UserId),
-              type:
-                item.Type === 'friend_request'
-                  ? ('request' as const)
-                  : ('like' as const),
-              name: displayName(item.User),
-              avatar:
-                (await resolveMediaUrl(item.User.ProfileImage)) ??
-                item.User.ProfileImage ??
-                undefined,
-              time: formatRelativeTime(item.CreatedDate),
-            })),
-          );
-          if (cancelled) return;
-          setRecentActivity(mapped);
-        })
-        .catch(() => {
-          /* keep previous activity */
-        });
-
       return () => {
         cancelled = true;
       };
-    }, [userId, accessToken, refreshUnread, refreshPremium, refreshStories]),
+    }, [userId, accessToken, refreshNotifications, refreshPremium, refreshStories]),
   );
 
   const openComposeWithPick = useCallback(
@@ -227,7 +187,7 @@ export function HomeScreen({ navigation }: Props) {
       } catch (error) {
         Alert.alert(
           t('profile.status_title'),
-          error instanceof Error ? error.message : t('profile.status_error'),
+          userFacingError(error, t, 'profile.status_error'),
         );
       } finally {
         setStatusSaving(false);
@@ -251,7 +211,8 @@ export function HomeScreen({ navigation }: Props) {
     if (!userId || !composeAsset) return;
     setUploadingStory(true);
     try {
-      await createStory(userId, composeAsset, undefined, accessToken);
+      const coords = await getCurrentCoordinates(5000);
+      await createStory(userId, composeAsset, undefined, accessToken, coords);
       setComposeVisible(false);
       setComposeAsset(null);
       await refreshStories();
@@ -366,20 +327,18 @@ export function HomeScreen({ navigation }: Props) {
           </View>
           <View style={styles.headerActions}>
             <IconButton
-              name="message"
-              badge={unreadCount}
+              name="bell"
+              badge={unreadNotifications}
               onPress={() =>
                 // Bubbles to AppStack above tabs — full-screen, no tab bar.
-                navigation.navigate('Messages' as never)
-              }
-              accessibilityLabel={t('home.messages')}
-            />
-            <IconButton
-              name="bell"
-              onPress={() =>
                 navigation.navigate('Notifications' as never)
               }
               accessibilityLabel={t('notifications.title')}
+            />
+            <IconButton
+              name="crown"
+              onPress={() => navigation.navigate('Premium' as never)}
+              accessibilityLabel={t('premium.title')}
             />
           </View>
         </View>
@@ -402,7 +361,7 @@ export function HomeScreen({ navigation }: Props) {
 
         {!isPremium ? (
           <Pressable
-            onPress={() => goToTab('Premium')}
+            onPress={() => navigation.navigate('Premium' as never)}
             style={({ pressed }) => [
               styles.premiumCard,
               {
@@ -412,7 +371,7 @@ export function HomeScreen({ navigation }: Props) {
               theme.shadows.sm,
             ]}>
             <LinearGradient
-              colors={GOLD}
+              colors={theme.gradients.premium}
               start={{ x: 0, y: 0 }}
               end={{ x: 1, y: 1 }}
               style={StyleSheet.absoluteFill}
@@ -420,12 +379,12 @@ export function HomeScreen({ navigation }: Props) {
             <View style={styles.premiumContent}>
               <View style={styles.premiumTextCol}>
                 <View style={styles.premiumBadge}>
-                  <Icon name="crown" size={12} color={ON_GOLD} filled />
-                  <Typography variant="overline" tint={ON_GOLD}>
+                  <Icon name="crown" size={12} color={theme.colors.onPremium} filled />
+                  <Typography variant="overline" tint={theme.colors.onPremium}>
                     {t('home.hero_badge')}
                   </Typography>
                 </View>
-                <Typography variant="title" tint={ON_GOLD} numberOfLines={2}>
+                <Typography variant="title" tint={theme.colors.onPremium} numberOfLines={2}>
                   {t('home.hero_title').replace(/\n/g, ' ')}
                 </Typography>
                 <Typography
@@ -436,10 +395,10 @@ export function HomeScreen({ navigation }: Props) {
                 </Typography>
               </View>
               <View style={styles.premiumCta}>
-                <Typography variant="caption" tint={ON_GOLD}>
+                <Typography variant="caption" tint={theme.colors.onPremium}>
                   {t('home.hero_cta')}
                 </Typography>
-                <Icon name="chevron-right" size={14} color={ON_GOLD} />
+                <Icon name="chevron-right" size={14} color={theme.colors.onPremium} />
               </View>
             </View>
           </Pressable>
@@ -524,53 +483,19 @@ export function HomeScreen({ navigation }: Props) {
                 { backgroundColor: theme.colors.card },
                 theme.shadows.sm,
               ]}>
-              {recentActivity.map((item, i) => {
-                const meta = ACTIVITY_META[item.type] ?? ACTIVITY_META.like;
-                return (
-                  <View key={item.id}>
-                    <Pressable
-                      style={styles.activityRow}
-                      onPress={() =>
-                        navigation.navigate('UserProfile', {
-                          userId: item.userId,
-                        })
-                      }>
-                      <Avatar uri={item.avatar} name={item.name} size="md" />
-                      <View style={styles.activityText}>
-                        <Typography variant="body" numberOfLines={2}>
-                          <Typography variant="bodyStrong">
-                            {item.name}
-                          </Typography>
-                          {` ${t(meta.labelKey)}`}
-                        </Typography>
-                        <Typography variant="caption" color="textMuted">
-                          {item.time}
-                        </Typography>
-                      </View>
-                      <View
-                        style={[
-                          styles.activityIcon,
-                          { backgroundColor: theme.colors.surfaceAlt },
-                        ]}>
-                        <Icon
-                          name={meta.icon}
-                          size={16}
-                          color={theme.colors[meta.color]}
-                          filled
-                        />
-                      </View>
-                    </Pressable>
-                    {i < recentActivity.length - 1 && (
-                      <View
-                        style={[
-                          styles.sep,
-                          { backgroundColor: theme.colors.border },
-                        ]}
-                      />
-                    )}
-                  </View>
-                );
-              })}
+              {recentActivity.map((item, i) => (
+                <View key={item.id}>
+                  <NotificationRow item={item} onPress={openNotification} compact />
+                  {i < recentActivity.length - 1 && (
+                    <View
+                      style={[
+                        styles.sep,
+                        { backgroundColor: theme.colors.border },
+                      ]}
+                    />
+                  )}
+                </View>
+              ))}
             </View>
           )}
         </View>
@@ -756,22 +681,6 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     paddingVertical: 4,
     paddingHorizontal: 4,
-  },
-  activityRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    paddingVertical: 12,
-    paddingHorizontal: 12,
-  },
-  activityText: { flex: 1, gap: 2, minWidth: 0 },
-  activityIcon: {
-    width: 36,
-    height: 36,
-    borderRadius: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
-    flexShrink: 0,
   },
   sep: { height: StyleSheet.hairlineWidth, marginLeft: 68 },
 });

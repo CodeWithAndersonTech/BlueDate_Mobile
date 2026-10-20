@@ -183,7 +183,7 @@ export const premiumPlans: PremiumPlan[] = [
     periodKey: 'premium.plan.period',
     taglineKey: 'premium.plan.standard.tagline',
     highlightKey: 'premium.plan.standard.highlight',
-    perkIds: ['visitors', 'treats', 'adfree', 'featured'],
+    perkIds: ['visitors', 'treats', 'featured'],
   },
   {
     id: 'plus',
@@ -194,7 +194,7 @@ export const premiumPlans: PremiumPlan[] = [
     taglineKey: 'premium.plan.plus.tagline',
     popular: true,
     highlightKey: 'premium.plan.plus.highlight',
-    perkIds: ['visitors', 'treats', 'adfree', 'featured', 'ghost'],
+    perkIds: ['visitors', 'treats', 'featured', 'ghost'],
   },
 ];
 
@@ -210,12 +210,6 @@ export const premiumPerks: PremiumPerk[] = [
     icon: 'sparkles',
     titleKey: 'premium.perk.treats.title',
     descriptionKey: 'premium.perk.treats.desc',
-  },
-  {
-    id: 'adfree',
-    icon: 'zap',
-    titleKey: 'premium.perk.adfree.title',
-    descriptionKey: 'premium.perk.adfree.desc',
   },
   {
     id: 'featured',

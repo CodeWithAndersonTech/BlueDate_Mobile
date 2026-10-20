@@ -1,6 +1,7 @@
 export * from './types';
 export * from './AuthContext';
 export * from './ChatContext';
+export * from './NotificationsContext';
 export * from './AppStack';
 export * from './RootNavigator';
 export * from './useLockTabSwipe';

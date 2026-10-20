@@ -1,6 +1,6 @@
 import React from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
-import { formatCrashEntry, logCrash } from '../utils/crashLog';
+import { logCrash } from '../utils/crashLog';
+import { RecoveryScreen } from './RecoveryScreen';
 
 type Props = {
   children: React.ReactNode;
@@ -8,7 +8,6 @@ type Props = {
 
 type State = {
   error: Error | null;
-  dump: string | null;
 };
 
 /**
@@ -16,7 +15,7 @@ type State = {
  * instead of a blank native kill when the failure is JS-side.
  */
 export class ErrorBoundary extends React.Component<Props, State> {
-  state: State = { error: null, dump: null };
+  state: State = { error: null };
 
   static getDerivedStateFromError(error: Error): Partial<State> {
     return { error };
@@ -25,13 +24,11 @@ export class ErrorBoundary extends React.Component<Props, State> {
   componentDidCatch(error: Error, info: React.ErrorInfo) {
     void logCrash('render', error, {
       componentStack: info.componentStack ?? '',
-    }).then(entry => {
-      this.setState({ dump: formatCrashEntry(entry) });
     });
   }
 
   private retry = () => {
-    this.setState({ error: null, dump: null });
+    this.setState({ error: null });
   };
 
   render() {
@@ -39,60 +36,8 @@ export class ErrorBoundary extends React.Component<Props, State> {
       return this.props.children;
     }
 
-    return (
-      <View style={styles.root}>
-        <Text style={styles.title}>Something went wrong</Text>
-        <Text style={styles.message}>{this.state.error.message}</Text>
-        {this.state.dump ? (
-          <Text style={styles.dump} selectable>
-            {this.state.dump}
-          </Text>
-        ) : null}
-        <Pressable onPress={this.retry} style={styles.btn}>
-          <Text style={styles.btnLabel}>Try again</Text>
-        </Pressable>
-      </View>
-    );
+    return <RecoveryScreen onRetry={this.retry} />;
   }
 }
-
-const styles = StyleSheet.create({
-  root: {
-    flex: 1,
-    backgroundColor: '#0B0B10',
-    paddingHorizontal: 24,
-    paddingTop: 80,
-    gap: 12,
-  },
-  title: {
-    color: '#FFFFFF',
-    fontSize: 22,
-    fontWeight: '700',
-  },
-  message: {
-    color: '#FF8A80',
-    fontSize: 15,
-    lineHeight: 22,
-  },
-  dump: {
-    color: '#A0A0B0',
-    fontSize: 11,
-    lineHeight: 16,
-    marginTop: 8,
-  },
-  btn: {
-    marginTop: 16,
-    alignSelf: 'flex-start',
-    backgroundColor: '#5B5CFF',
-    paddingHorizontal: 18,
-    paddingVertical: 12,
-    borderRadius: 12,
-  },
-  btnLabel: {
-    color: '#FFFFFF',
-    fontWeight: '700',
-    fontSize: 15,
-  },
-});
 
 export default ErrorBoundary;

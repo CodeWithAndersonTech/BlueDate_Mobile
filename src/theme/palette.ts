@@ -54,12 +54,24 @@ export const accentOrder: AccentKey[] = ['cosmic', 'aurora', 'sunset'];
 
 export const statusColors = {
   success: '#30D158',
+  successSoft: 'rgba(48, 209, 88, 0.16)',
   warning: '#FFB020',
+  warningSoft: 'rgba(255, 176, 32, 0.16)',
   danger: '#FF453A',
+  dangerSoft: 'rgba(255, 69, 58, 0.16)',
   info: '#64D2FF',
   online: '#30D158',
   offline: '#8E8E93',
-  premiumGradient: ['#F5D76E', '#E8A838'] as [string, string],
+} as const;
+
+export const premium = {
+  start: '#F5D76E',
+  end: '#E8A838',
+  gradient: ['#F5D76E', '#E8A838'] as [string, string],
+  on: '#2C2100',
+  ink: '#3A2A00',
+  soft: 'rgba(245, 215, 110, 0.28)',
+  softStrong: 'rgba(245, 215, 110, 0.45)',
 } as const;
 
 /** Soft, product-grade neutrals (Apple / Linear inspired). */

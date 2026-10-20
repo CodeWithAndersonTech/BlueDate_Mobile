@@ -15,7 +15,9 @@ export function decodeJwtPayload(
     const normalized = parts[1].replace(/-/g, '+').replace(/_/g, '/');
     const padded = normalized + '='.repeat((4 - (normalized.length % 4)) % 4);
     // atob is available in RN Hermes / JSC
-    const json = globalThis.atob(padded);
+    const atobFn = (globalThis as { atob?: (data: string) => string }).atob;
+    if (!atobFn) return null;
+    const json = atobFn(padded);
     return JSON.parse(json) as Record<string, unknown>;
   } catch {
     return null;

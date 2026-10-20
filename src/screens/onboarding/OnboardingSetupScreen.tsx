@@ -20,7 +20,8 @@ import {
   saveUserInterest,
 } from '../../api';
 import { Button, Screen, Typography } from '../../components';
-import { useLocale } from '../../i18n';
+import { useKeyboardHeight } from '../../hooks';
+import { useLocale, userFacingError } from '../../i18n';
 import { useAuth } from '../../navigation/AuthContext';
 import {
   assetFromPickerResponse,
@@ -52,6 +53,7 @@ type Props = {
 export function OnboardingSetupScreen({ onCompleted }: Props) {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
+  const keyboardHeight = useKeyboardHeight();
   const { t } = useLocale();
   const { userId, accessToken } = useAuth();
 
@@ -168,7 +170,7 @@ export function OnboardingSetupScreen({ onCompleted }: Props) {
     } catch (error) {
       Alert.alert(
         t('onboarding.title'),
-        error instanceof Error ? error.message : t('onboarding.save_error'),
+        userFacingError(error, t, 'onboarding.save_error'),
       );
     } finally {
       setSaving(false);
@@ -326,9 +328,11 @@ export function OnboardingSetupScreen({ onCompleted }: Props) {
         animationType="fade"
         presentationStyle="overFullScreen"
         onRequestClose={() => setSheetType(null)}>
-        <KeyboardAvoidingView
-          style={styles.modalRoot}
-          behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+        <View
+          style={[
+            styles.modalRoot,
+            { paddingBottom: keyboardHeight },
+          ]}>
           <Pressable
             style={[styles.backdrop, { backgroundColor: theme.colors.backdrop }]}
             onPress={() => setSheetType(null)}
@@ -338,7 +342,10 @@ export function OnboardingSetupScreen({ onCompleted }: Props) {
               styles.sheet,
               {
                 backgroundColor: theme.colors.card,
-                paddingBottom: Math.max(insets.bottom, 16),
+                paddingBottom:
+                  keyboardHeight > 0 ? 12 : Math.max(insets.bottom, 16),
+                borderBottomLeftRadius: keyboardHeight > 0 ? 0 : 24,
+                borderBottomRightRadius: keyboardHeight > 0 ? 0 : 24,
               },
             ]}>
             <Typography variant="h3">
@@ -390,7 +397,7 @@ export function OnboardingSetupScreen({ onCompleted }: Props) {
               </Pressable>
             </View>
           </View>
-        </KeyboardAvoidingView>
+        </View>
       </Modal>
     </Screen>
   );
@@ -445,8 +452,9 @@ const styles = StyleSheet.create({
     borderTopWidth: StyleSheet.hairlineWidth,
   },
   modalRoot: { flex: 1, justifyContent: 'flex-end' },
-  backdrop: { ...StyleSheet.absoluteFillObject },
+  backdrop: { ...StyleSheet.absoluteFill },
   sheet: {
+    width: '100%',
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
     paddingHorizontal: 20,

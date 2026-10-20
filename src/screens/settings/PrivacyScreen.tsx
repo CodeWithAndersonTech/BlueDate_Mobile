@@ -42,6 +42,11 @@ const SECTIONS: Section[] = [
     titleKey: 'privacy.section_ble_title',
     bodyKey: 'privacy.section_ble_body',
   },
+  {
+    icon: 'shield',
+    titleKey: 'privacy.section_safety_title',
+    bodyKey: 'privacy.section_safety_body',
+  },
 ];
 
 export function PrivacyScreen({ navigation }: Props) {

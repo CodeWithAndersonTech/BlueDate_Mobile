@@ -1,5 +1,5 @@
 import { API_PATHS, getApiBaseUrl } from '../config/api';
-import { apiRequest, ApiEnvelope, ApiError } from './client';
+import { apiRequest, ApiEnvelope, ApiError, genericErrorMessage } from './client';
 import { getApiLanguageCode } from './languageHeader';
 
 export const UserPhotoKind = {
@@ -148,10 +148,7 @@ async function uploadMultipart(
   try {
     response = await fetch(url, { method: 'POST', headers, body: form });
   } catch (error) {
-    const message = error instanceof Error ? error.message : 'Network request failed';
-    throw new ApiError(0, [
-      `Backend'e ulaşılamadı (${baseUrl}). ${message}`,
-    ]);
+    throw new ApiError(0, [genericErrorMessage()]);
   }
 
   let payload: RawUploadResponse | null = null;

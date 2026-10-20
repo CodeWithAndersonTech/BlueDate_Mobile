@@ -24,7 +24,7 @@ import {
   Typography,
   UsernameInput,
 } from '../../components';
-import { useLocale } from '../../i18n';
+import { useLocale, userFacingError } from '../../i18n';
 import { useAuth } from '../../navigation/AuthContext';
 import { AuthStackParamList } from '../../navigation/types';
 import { useTheme } from '../../theme';
@@ -122,11 +122,10 @@ export function RegisterScreen({ navigation }: Props) {
         email: result.email,
         password: result.password,
         userId: result.userId,
+        purpose: 'register',
       });
     } catch (error) {
-      const message =
-        error instanceof Error ? error.message : t('auth.register');
-      Alert.alert(t('auth.register'), message);
+      Alert.alert(t('auth.register'), userFacingError(error, t, 'auth.register'));
     } finally {
       setLoading(false);
     }

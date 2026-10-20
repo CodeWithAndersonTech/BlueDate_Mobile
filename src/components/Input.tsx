@@ -23,8 +23,6 @@ export interface InputProps extends Omit<TextInputProps, 'style'> {
   containerStyle?: StyleProp<ViewStyle>;
 }
 
-const FIELD_HEIGHT = 56;
-
 export const Input = forwardRef<TextInput, InputProps>(function Input(
   {
     label,
@@ -41,6 +39,7 @@ export const Input = forwardRef<TextInput, InputProps>(function Input(
   ref,
 ) {
   const theme = useTheme();
+  const recipe = theme.components.input;
   const [focused, setFocused] = useState(false);
   const [hidden, setHidden] = useState(password);
 
@@ -69,7 +68,10 @@ export const Input = forwardRef<TextInput, InputProps>(function Input(
   return (
     <View style={[styles.wrapper, containerStyle]}>
       {label ? (
-        <Typography variant="caption" color="textSecondary" style={styles.label}>
+        <Typography
+          variant="caption"
+          color="textSecondary"
+          style={[styles.label, { marginBottom: recipe.labelGap }]}>
           {label}
         </Typography>
       ) : null}
@@ -79,14 +81,16 @@ export const Input = forwardRef<TextInput, InputProps>(function Input(
           {
             backgroundColor: theme.colors.surfaceAlt,
             borderColor,
-            borderRadius: 16,
-            paddingHorizontal: 16,
+            borderRadius: recipe.radius,
+            paddingHorizontal: recipe.paddingH,
+            height: recipe.height,
+            borderWidth: recipe.borderWidth,
           },
         ]}>
         {leftIcon ? (
           <Icon
             name={leftIcon}
-            size={20}
+            size={recipe.icon}
             color={focused ? theme.colors.primary : theme.colors.textMuted}
           />
         ) : null}
@@ -119,7 +123,7 @@ export const Input = forwardRef<TextInput, InputProps>(function Input(
             accessibilityLabel={hidden ? 'Şifreyi göster' : 'Şifreyi gizle'}>
             <Icon
               name={hidden ? 'eye-off' : 'eye'}
-              size={20}
+              size={recipe.icon}
               color={theme.colors.textMuted}
             />
           </Pressable>
@@ -129,7 +133,7 @@ export const Input = forwardRef<TextInput, InputProps>(function Input(
         <Typography
           variant="caption"
           tint={error ? theme.colors.danger : theme.colors.textMuted}
-          style={styles.helper}>
+          style={[styles.helper, { marginTop: recipe.helperGap }]}>
           {error ?? hint}
         </Typography>
       ) : null}
@@ -139,13 +143,11 @@ export const Input = forwardRef<TextInput, InputProps>(function Input(
 
 const styles = StyleSheet.create({
   wrapper: { width: '100%' },
-  label: { marginBottom: 6, marginLeft: 4 },
+  label: { marginLeft: 4 },
   field: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
-    height: FIELD_HEIGHT,
-    borderWidth: 1.5,
   },
   input: {
     flex: 1,
@@ -159,7 +161,7 @@ const styles = StyleSheet.create({
       default: {},
     }),
   },
-  helper: { marginTop: 6, marginLeft: 4 },
+  helper: { marginLeft: 4 },
 });
 
 export default Input;

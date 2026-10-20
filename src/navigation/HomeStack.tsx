@@ -7,6 +7,7 @@ import { FilterScreen } from '../screens/settings/FilterScreen';
 import { HelpScreen } from '../screens/settings/HelpScreen';
 import { PrivacyScreen } from '../screens/settings/PrivacyScreen';
 import { SettingsScreen } from '../screens/settings/SettingsScreen';
+import { BlockedUsersScreen } from '../screens/settings/BlockedUsersScreen';
 import { HomeStackParamList } from './types';
 
 const Stack = createNativeStackNavigator<HomeStackParamList>();
@@ -46,6 +47,11 @@ export function HomeStack() {
       <Stack.Screen
         name="Help"
         component={HelpScreen}
+        options={nestedOptions}
+      />
+      <Stack.Screen
+        name="BlockedUsers"
+        component={BlockedUsersScreen}
         options={nestedOptions}
       />
       <Stack.Screen

@@ -7,8 +7,9 @@ import {
   TextInput,
   View,
 } from 'react-native';
+import { sendEmailOtp, verifyEmailOtp } from '../../api/auth';
 import { Button, Header, Screen, Typography } from '../../components';
-import { useLocale } from '../../i18n';
+import { useLocale, userFacingError } from '../../i18n';
 import { useAuth } from '../../navigation/AuthContext';
 import { AuthStackParamList } from '../../navigation/types';
 import { useTheme } from '../../theme';
@@ -17,13 +18,12 @@ type Props = NativeStackScreenProps<AuthStackParamList, 'EmailVerification'>;
 
 const CODE_LENGTH = 6;
 const RESEND_SECONDS = 60;
-const DEMO_SUCCESS_CODE = '111111';
 
 export function EmailVerificationScreen({ navigation, route }: Props) {
   const theme = useTheme();
   const { t } = useLocale();
   const { completeEmailVerification } = useAuth();
-  const { email, password, userId } = route.params;
+  const { email, password, userId, purpose } = route.params;
 
   const [digits, setDigits] = useState<string[]>(
     Array.from({ length: CODE_LENGTH }, () => ''),
@@ -74,7 +74,6 @@ export function EmailVerificationScreen({ navigation, route }: Props) {
       return;
     }
 
-    // Paste / autofill support for multiple digits.
     if (cleaned.length > 1) {
       const chars = cleaned.slice(0, CODE_LENGTH).split('');
       const next = Array.from({ length: CODE_LENGTH }, (_, i) => chars[i] ?? '');
@@ -109,31 +108,46 @@ export function EmailVerificationScreen({ navigation, route }: Props) {
       return;
     }
 
-    if (value !== DEMO_SUCCESS_CODE) {
-      setError(t('auth.verify_invalid_code'));
-      return;
-    }
-
     try {
       setSubmitting(true);
+      await verifyEmailOtp({
+        Email: email,
+        Purpose: purpose,
+        Code: value,
+      });
+
+      if (purpose === 'reset') {
+        navigation.replace('ResetPassword', { email, code: value });
+        return;
+      }
+
+      if (!password || !userId) {
+        throw new Error(t('auth.verify_invalid_code'));
+      }
+
       await completeEmailVerification({ email, password, userId });
     } catch (err) {
-      Alert.alert(
-        t('auth.verify_title'),
-        err instanceof Error ? err.message : 'Verification failed',
-      );
+      setError(userFacingError(err, t, 'auth.verify_invalid_code'));
       setSubmitting(false);
     }
   };
 
-  const onResend = () => {
+  const onResend = async () => {
     if (secondsLeft > 0) {
       return;
     }
-    setSecondsLeft(RESEND_SECONDS);
-    setDigits(Array.from({ length: CODE_LENGTH }, () => ''));
-    setError(null);
-    focusIndex(0);
+    try {
+      await sendEmailOtp({ Email: email, Purpose: purpose });
+      setSecondsLeft(RESEND_SECONDS);
+      setDigits(Array.from({ length: CODE_LENGTH }, () => ''));
+      setError(null);
+      focusIndex(0);
+    } catch (err) {
+      Alert.alert(
+        t('auth.verify_title'),
+        userFacingError(err, t),
+      );
+    }
   };
 
   return (
@@ -171,7 +185,7 @@ export function EmailVerificationScreen({ navigation, route }: Props) {
                 }
                 keyboardType="number-pad"
                 textContentType="oneTimeCode"
-                autoComplete="sms-otp"
+                autoComplete="one-time-code"
                 maxLength={index === 0 ? CODE_LENGTH : 1}
                 selectTextOnFocus
                 style={[
@@ -203,7 +217,7 @@ export function EmailVerificationScreen({ navigation, route }: Props) {
               </Typography>
             </Typography>
           ) : (
-            <Pressable hitSlop={8} onPress={onResend}>
+            <Pressable hitSlop={8} onPress={() => void onResend()}>
               <Typography
                 variant="bodyStrong"
                 tint={theme.colors.primary}

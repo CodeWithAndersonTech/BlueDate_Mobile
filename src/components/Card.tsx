@@ -37,21 +37,15 @@ export function Card({
   const theme = useTheme();
   const scale = useSharedValue(1);
 
-  const paddingValue =
-    padding === 'none'
-      ? 0
-      : padding === 'sm'
-      ? 12
-      : padding === 'lg'
-      ? 32
-      : 16;
+  const recipe = theme.components.card;
+  const paddingValue = recipe.padding[padding];
 
   const animatedStyle = useAnimatedStyle(() => ({
     transform: [{ scale: scale.value }],
   }));
 
   const baseStyle: ViewStyle = {
-    borderRadius: 24,
+    borderRadius: recipe.radius,
     padding: paddingValue,
     overflow: 'hidden',
   };
@@ -91,8 +85,13 @@ export function Card({
   return (
     <Pressable
       onPress={onPress}
-      onPressIn={() => (scale.value = withSpring(0.98, { damping: 16, stiffness: 320 }))}
-      onPressOut={() => (scale.value = withSpring(1, { damping: 12, stiffness: 260 }))}>
+      onPressIn={() =>
+        (scale.value = withSpring(
+          theme.motion.cardPressScale,
+          theme.motion.springIn,
+        ))
+      }
+      onPressOut={() => (scale.value = withSpring(1, theme.motion.springOut))}>
       <Animated.View style={animatedStyle}>{content}</Animated.View>
     </Pressable>
   );

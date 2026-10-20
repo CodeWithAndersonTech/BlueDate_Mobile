@@ -14,7 +14,7 @@ import {
   SectionHeader,
   Typography,
 } from '../../components';
-import { useLocale } from '../../i18n';
+import { useLocale, userFacingError } from '../../i18n';
 import { useAuth } from '../../navigation/AuthContext';
 import {
   DOCK_ACTION_HEIGHT,
@@ -160,7 +160,7 @@ export function FilterScreen() {
       navigation.goBack();
     } catch (error) {
       const message =
-        error instanceof Error ? error.message : t('filter.save_failed');
+        userFacingError(error, t, 'filter.save_failed');
       Alert.alert(t('filter.title'), message);
     } finally {
       setSaving(false);

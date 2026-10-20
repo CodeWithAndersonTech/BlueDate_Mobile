@@ -3,7 +3,7 @@ import {
   MaterialTopTabBarProps,
 } from '@react-navigation/material-top-tabs';
 import React from 'react';
-import { PremiumScreen } from '../screens/premium/PremiumScreen';
+import { MessagesScreen } from '../screens/messages/MessagesScreen';
 import { CustomTabBar } from './CustomTabBar';
 import { FriendsStack } from './FriendsStack';
 import { HomeStack } from './HomeStack';
@@ -36,7 +36,7 @@ export function MainTabs() {
       <Tab.Screen name="Home" component={HomeStack} />
       <Tab.Screen name="Friends" component={FriendsStack} />
       <Tab.Screen name="Nearby" component={NearbyStack} />
-      <Tab.Screen name="Premium" component={PremiumScreen} />
+      <Tab.Screen name="Messages" component={MessagesScreen} />
       <Tab.Screen name="Profile" component={ProfileStack} />
     </Tab.Navigator>
   );

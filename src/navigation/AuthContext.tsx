@@ -16,6 +16,7 @@ import {
 } from '../api/sessionStore';
 import { useLocale } from '../i18n';
 import { isJwtExpired } from '../utils/jwt';
+import { withTimeout } from '../utils/withTimeout';
 
 type AuthStatus = 'bootstrapping' | 'signedOut' | 'signedIn';
 
@@ -67,7 +68,7 @@ function hasActiveAccessToken(token: string | null | undefined): boolean {
 }
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const { status: localeStatus, bindUser } = useLocale();
+  const { bindUser } = useLocale();
   const [status, setStatus] = useState<AuthStatus>('bootstrapping');
   const [userId, setUserId] = useState<number | null>(null);
   const [accessToken, setAccessToken] = useState<string | null>(null);
@@ -94,17 +95,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     let cancelled = false;
 
     async function hydrate() {
-      if (localeStatus === 'loading') {
-        return;
-      }
-
       try {
         const session = await hydrateSessionFromStorage();
         if (cancelled) {
           return;
         }
 
-        // Fresh access token → enter the app.
+        // Fresh access token → enter the app. Do not wait on locale/API.
         if (hasActiveAccessToken(session.accessToken)) {
           setAccessToken(session.accessToken);
           setUserId(session.userId);
@@ -114,9 +111,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
         // Expired/missing access token — try refresh before kicking to login.
         if (session.refreshToken) {
-          const nextAccess = await refreshAccessToken(refreshToken =>
-            refreshSession({ RefreshToken: refreshToken }),
-          );
+          const nextAccess = await withTimeout(
+            refreshAccessToken(refreshToken =>
+              refreshSession({ RefreshToken: refreshToken }),
+            ),
+            4000,
+            'auth refresh timeout',
+          ).catch(() => null);
           if (cancelled) {
             return;
           }
@@ -150,7 +151,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return () => {
       cancelled = true;
     };
-  }, [localeStatus]);
+  }, []);
 
   const persistSession = useCallback(
     async (

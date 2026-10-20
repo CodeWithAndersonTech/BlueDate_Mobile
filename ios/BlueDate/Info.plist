@@ -41,6 +41,8 @@
 	<array>
 		<string>bluetooth-central</string>
 		<string>bluetooth-peripheral</string>
+		<string>remote-notification</string>
+		<string>fetch</string>
 	</array>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>Yakınınızdaki kişileri gösterebilmemiz için konumunuza erişmemize izin verin.</string>

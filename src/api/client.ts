@@ -31,10 +31,19 @@ type RequestOptions = {
   skipAuthRefresh?: boolean;
 };
 
+function isTr(languageCode = getApiLanguageCode()): boolean {
+  return (languageCode || 'en').replace('_', '-').split('-')[0].toLowerCase() === 'tr';
+}
+
 /** tr → Turkish; every other language → English. */
 export function genericErrorMessage(languageCode = getApiLanguageCode()): string {
-  const code = (languageCode || 'en').replace('_', '-').split('-')[0].toLowerCase();
-  return code === 'tr' ? 'Bir hata oluştu.' : 'Something went wrong.';
+  return isTr(languageCode) ? 'Bir hata oluştu.' : 'Something went wrong.';
+}
+
+export function networkErrorMessage(languageCode = getApiLanguageCode()): string {
+  return isTr(languageCode)
+    ? 'Sunucuya ulaşılamıyor. Biraz sonra tekrar dene.'
+    : 'Could not reach the server. Try again in a moment.';
 }
 
 function isTechnicalHttpMessage(message: string | undefined | null): boolean {
@@ -125,24 +134,42 @@ export async function apiRequest<T>(
     headers.Authorization = `Bearer ${bearer}`;
   }
 
+  const FETCH_TIMEOUT_MS = 8000;
+
   let response: Response;
   try {
     const url = await buildUrl(path, query);
     if (__DEV__) {
       console.log(`[API] ${method} ${url}`);
     }
-    response = await fetch(url, {
-      method,
-      headers,
-      body: body === undefined ? undefined : JSON.stringify(body),
-    });
-  } catch {
-    throw new ApiError(0, [genericErrorMessage()]);
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+    try {
+      response = await fetch(url, {
+        method,
+        headers,
+        body: body === undefined ? undefined : JSON.stringify(body),
+        signal: controller.signal,
+      });
+    } finally {
+      clearTimeout(timer);
+    }
+  } catch (err) {
+    if (__DEV__) {
+      console.warn(`[API] network ${method} ${path}`, err);
+    }
+    throw new ApiError(0, [networkErrorMessage()]);
   }
 
   let payload = await parsePayload<T>(response);
 
-  if (response.status === 401 && !skipAuthRefresh && path !== API_PATHS.refresh) {
+  // Login/register 401 is invalid credentials — never treat it as an expired JWT.
+  if (
+    response.status === 401 &&
+    !skipAuthRefresh &&
+    path !== API_PATHS.refresh &&
+    bearer
+  ) {
     const { refreshSession } = await import('./auth');
     const nextAccess = await refreshAccessToken(refreshToken =>
       refreshSession({ RefreshToken: refreshToken }),

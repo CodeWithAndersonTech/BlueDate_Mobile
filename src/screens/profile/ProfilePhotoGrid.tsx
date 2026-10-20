@@ -224,7 +224,11 @@ export function ProfilePhotoGrid({
                 ]}>
                 <Image source={{ uri: item.uri }} style={styles.image} />
                 {item.localOnly ? (
-                  <View style={styles.localBadge}>
+                  <View
+                    style={[
+                      styles.localBadge,
+                      { backgroundColor: theme.colors.premium },
+                    ]}>
                     <Text style={styles.localBadgeText}>•</Text>
                   </View>
                 ) : null}
@@ -294,7 +298,6 @@ const styles = StyleSheet.create({
     width: 10,
     height: 10,
     borderRadius: 5,
-    backgroundColor: '#F5D76E',
   },
   localBadgeText: { fontSize: 1, color: 'transparent' },
 });

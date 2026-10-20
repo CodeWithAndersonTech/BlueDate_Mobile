@@ -3,8 +3,10 @@ import {
   NavigationState,
   PartialState,
 } from '@react-navigation/native';
-import React, { useCallback } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { useOnboardingGate } from '../hooks/useOnboardingGate';
+import { RecoveryScreen } from '../components/RecoveryScreen';
+import { useLocale } from '../i18n';
 import { SplashScreen } from '../screens/auth/SplashScreen';
 import { OnboardingSetupScreen } from '../screens/onboarding/OnboardingSetupScreen';
 import { useTheme } from '../theme';
@@ -26,15 +28,29 @@ function activeRouteName(
 
 export function RootNavigator() {
   const theme = useTheme();
-  const { status, isSignedIn } = useAuth();
-  const { ready, needsOnboarding, refresh } = useOnboardingGate();
+  const { languageCode } = useLocale();
+  const { status, isSignedIn, signOut } = useAuth();
+  const { ready, needsOnboarding, accountGone, refresh } = useOnboardingGate();
+  const [splashGaveUp, setSplashGaveUp] = useState(false);
 
   const onOnboardingCompleted = useCallback(() => {
     void refresh();
   }, [refresh]);
 
   const showSplash =
-    status === 'bootstrapping' || (isSignedIn && !ready);
+    !splashGaveUp && (status === 'bootstrapping' || (isSignedIn && !ready));
+
+  useEffect(() => {
+    if (status === 'bootstrapping' || !isSignedIn) {
+      setSplashGaveUp(false);
+      return;
+    }
+    if (showSplash) {
+      const timer = setTimeout(() => setSplashGaveUp(true), 3500);
+      return () => clearTimeout(timer);
+    }
+    setSplashGaveUp(true);
+  }, [showSplash, status, isSignedIn]);
 
   return (
     <NavigationContainer
@@ -44,6 +60,16 @@ export function RootNavigator() {
       }}>
       {showSplash ? (
         <SplashScreen />
+      ) : accountGone ? (
+        <RecoveryScreen
+          languageCode={languageCode}
+          onRetry={() => {
+            void refresh();
+          }}
+          onLeave={() => {
+            void signOut();
+          }}
+        />
       ) : !isSignedIn ? (
         <AuthStack />
       ) : needsOnboarding ? (

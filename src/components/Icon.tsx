@@ -59,7 +59,10 @@ export type IconName =
   | 'bookmark'
   | 'globe'
   | 'trash'
-  | 'play';
+  | 'play'
+  | 'gift'
+  | 'flag'
+  | 'footprints';
 
 export interface IconProps {
   name: IconName;
@@ -402,6 +405,30 @@ function renderIcon(name: IconName, p: CommonProps): React.ReactNode {
       );
     case 'play':
       return <Polygon {...p} points="6 3 20 12 6 21 6 3" />;
+    case 'gift':
+      return (
+        <>
+          <Polyline {...p} points="20 12 20 22 4 22 4 12" />
+          <Rect {...p} x={2} y={7} width={20} height={5} />
+          <Line {...p} x1={12} y1={22} x2={12} y2={7} />
+          <Path {...p} d="M12 7H7.5a2.5 2.5 0 0 1 0-5C11 2 12 7 12 7z" />
+          <Path {...p} d="M12 7h4.5a2.5 2.5 0 0 0 0-5C13 2 12 7 12 7z" />
+        </>
+      );
+    case 'flag':
+      return (
+        <>
+          <Path {...p} d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z" />
+          <Line {...p} x1={4} y1={22} x2={4} y2={15} />
+        </>
+      );
+    case 'footprints':
+      return (
+        <>
+          <Path {...p} d="M4 16v-2.4C4 11.5 3 10.5 3 8c0-2.7 1.5-6 4.5-6C9.4 2 10 3.8 10 5.5c0 3.1-2 5.7-2 8.7V16a2 2 0 1 1-4 0z" />
+          <Path {...p} d="M20 20v-2.4c0-2.1 1-3.1 1-5.6 0-2.7-1.5-6-4.5-6C14.6 6 14 7.8 14 9.5c0 3.1 2 5.7 2 8.7V20a2 2 0 1 0 4 0z" />
+        </>
+      );
     default:
       return null;
   }

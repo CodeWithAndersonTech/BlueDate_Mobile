@@ -2,18 +2,13 @@ import { Platform } from 'react-native';
 import { isEmulator } from 'react-native-device-info';
 
 /**
- * true  = Cloudflare HTTPS (TestFlight / gerçek cihaz)
+ * true  = canlı API (TestFlight / App Store)
  * false = lokal debug (simulator / aynı Wi‑Fi)
- *
- * TestFlight öncesi: quick-tunnel.sh çalıştır → USE_PRODUCTION = true yap.
  */
 const USE_PRODUCTION = true;
 
-/**
- * Cloudflare QUICK tunnel URL — her tunnel açılışında değişir.
- * Terminal: AD_BlueDateApp/deploy/quick-tunnel.sh  (bu satırı otomatik günceller)
- */
-const PROD_API_URL = 'https://lender-installing-laptops-includes.trycloudflare.com';
+/** Production API — https://api.meerk.com.tr */
+const PROD_API_URL = 'https://api.meerk.com.tr';
 
 /** Lokal debug (USE_PRODUCTION = false) */
 const DEV_PORT = 5135;
@@ -22,7 +17,7 @@ const DEV_PORT = 5135;
  * Mac'in Wi‑Fi IP'si — fiziksel telefon/tablet için gerekli.
  * Terminal: ipconfig getifaddr en0
  */
-const DEV_MAC_HOST = '172.16.4.109';
+const DEV_MAC_HOST = '192.168.1.29';
 
 let resolvedDevUrl: string | null = null;
 
@@ -80,6 +75,9 @@ export const API_PATHS = {
   login: '/api/Authroizations/authorization-login',
   refresh: '/api/Authroizations/refresh',
   changePassword: '/api/Authroizations/change-password',
+  sendEmailOtp: '/api/Authroizations/send-email-otp',
+  verifyEmailOtp: '/api/Authroizations/verify-email-otp',
+  resetPassword: '/api/Authroizations/reset-password',
   userProfile: '/api/User/profile',
   userBio: '/api/User/bio',
   userStatus: '/api/User/status',
@@ -107,7 +105,7 @@ export const API_PATHS = {
   userPhotoAvatar: '/api/UserPhoto/avatar',
   userPhoto: '/api/UserPhoto',
   story: '/api/Story',
-  storyFeed: '/api/Story/feed',
+  storyFeed: '/api/Story/feed', 
   storyByUser: '/api/Story/by-user',
   storyById: (id: number) => `/api/Story/${id}`,
   bleDevice: '/api/Ble/device',
@@ -123,4 +121,23 @@ export const API_PATHS = {
   messageDelete: (id: number) => `/api/Message/${id}`,
   userFilter: '/api/UserFilter',
   userPremium: '/api/UserPremium',
+  safetyBlock: '/api/UserSafety/block',
+  safetyUnblock: '/api/UserSafety/block',
+  safetyBlocks: '/api/UserSafety/blocks',
+  safetyStatus: '/api/UserSafety/status',
+  safetyReport: '/api/UserSafety/report',
+  safetyReportAndBlock: '/api/UserSafety/report-and-block',
+  notifications: '/api/Notification',
+  notificationsUnreadCount: '/api/Notification/unread-count',
+  notificationsReadAll: '/api/Notification/read-all',
+  notificationRead: (id: number) => `/api/Notification/${id}/read`,
+  treat: '/api/Treat',
+  treatQuote: '/api/Treat/quote',
+  treatById: (id: number) => `/api/Treat/${id}`,
+  treatAccept: (id: number) => `/api/Treat/${id}/accept`,
+  treatReject: (id: number) => `/api/Treat/${id}/reject`,
+  userPreference: '/api/UserPreference',
+  premiumProducts: '/api/UserPremium/products',
+  premiumPurchase: '/api/UserPremium/purchase',
+  storyFootprints: '/api/Story/footprints',
 } as const;

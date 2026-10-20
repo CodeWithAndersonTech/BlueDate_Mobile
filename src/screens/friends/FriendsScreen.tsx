@@ -1,6 +1,6 @@
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useFocusEffect } from '@react-navigation/native';
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -33,7 +33,7 @@ import {
   rejectFriendRequest,
   resolveFriendshipAvatars,
 } from '../../api';
-import { useLocale } from '../../i18n';
+import { useLocale, userFacingError } from '../../i18n';
 import { useAuth } from '../../navigation/AuthContext';
 import { FriendsStackParamList } from '../../navigation/types';
 import { useTheme } from '../../theme';
@@ -54,8 +54,9 @@ export function FriendsScreen({ navigation }: Props) {
   >([]);
   const [sentRequests, setSentRequests] = useState<FriendshipListItem[]>([]);
   const [busyId, setBusyId] = useState<number | null>(null);
+  const lastLoadAt = useRef(0);
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (opts?: { silent?: boolean }) => {
     if (!userId) {
       setFriends([]);
       setIncomingRequests([]);
@@ -63,7 +64,9 @@ export function FriendsScreen({ navigation }: Props) {
       setLoading(false);
       return;
     }
-    setLoading(true);
+    if (!opts?.silent) {
+      setLoading(true);
+    }
     try {
       const [friendsRes, incomingRes, sentRes] = await Promise.all([
         getFriends(userId, accessToken),
@@ -79,13 +82,15 @@ export function FriendsScreen({ navigation }: Props) {
       setIncomingRequests(nextIncoming);
       setSentRequests(nextSent);
     } catch (error) {
-      setFriends([]);
-      setIncomingRequests([]);
-      setSentRequests([]);
-      Alert.alert(
-        t('friends.title'),
-        error instanceof Error ? error.message : t('user_profile.action_error'),
-      );
+      if (!opts?.silent) {
+        setFriends([]);
+        setIncomingRequests([]);
+        setSentRequests([]);
+        Alert.alert(
+          t('friends.title'),
+          userFacingError(error, t, 'user_profile.action_error'),
+        );
+      }
     } finally {
       setLoading(false);
     }
@@ -93,7 +98,11 @@ export function FriendsScreen({ navigation }: Props) {
 
   useFocusEffect(
     useCallback(() => {
-      load();
+      const silent =
+        lastLoadAt.current > 0 && Date.now() - lastLoadAt.current < 20_000;
+      void load({ silent }).finally(() => {
+        lastLoadAt.current = Date.now();
+      });
     }, [load]),
   );
 
@@ -128,7 +137,7 @@ export function FriendsScreen({ navigation }: Props) {
     } catch (error) {
       Alert.alert(
         t('friends.accept'),
-        error instanceof Error ? error.message : t('user_profile.action_error'),
+        userFacingError(error, t, 'user_profile.action_error'),
       );
     } finally {
       setBusyId(null);
@@ -144,7 +153,7 @@ export function FriendsScreen({ navigation }: Props) {
     } catch (error) {
       Alert.alert(
         t('friends.reject'),
-        error instanceof Error ? error.message : t('user_profile.action_error'),
+        userFacingError(error, t, 'user_profile.action_error'),
       );
     } finally {
       setBusyId(null);
@@ -160,7 +169,7 @@ export function FriendsScreen({ navigation }: Props) {
     } catch (error) {
       Alert.alert(
         t('friends.cancel'),
-        error instanceof Error ? error.message : t('user_profile.action_error'),
+        userFacingError(error, t, 'user_profile.action_error'),
       );
     } finally {
       setBusyId(null);

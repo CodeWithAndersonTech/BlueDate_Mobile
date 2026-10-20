@@ -1,73 +1,54 @@
+import { useFocusEffect } from '@react-navigation/native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
-import React, { useMemo, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import React, { useCallback, useState } from 'react';
 import {
-  Avatar,
-  EmptyState,
-  Header,
-  Icon,
-  IconName,
-  Screen,
-  Typography,
-} from '../../components';
+  ActivityIndicator,
+  Pressable,
+  RefreshControl,
+  ScrollView,
+  StyleSheet,
+  View,
+} from 'react-native';
+import { EmptyState, Header, Icon, Screen, Typography } from '../../components';
 import { useLocale } from '../../i18n';
+import { useNotifications } from '../../navigation/NotificationsContext';
 import { useScreenBottomPad } from '../../navigation/tabBarLayout';
 import { AppStackParamList } from '../../navigation/types';
 import { useTheme } from '../../theme';
-import {
-  AppNotification,
-  AppNotificationType,
-  appNotifications,
-} from '../../utils';
+import { NotificationRow } from './NotificationRow';
+import { useOpenNotification } from './notificationMeta';
 
 type Props = NativeStackScreenProps<AppStackParamList, 'Notifications'>;
-
-const TYPE_ICON: Record<AppNotificationType, IconName> = {
-  like: 'heart',
-  match: 'sparkles',
-  visit: 'eye',
-  friend_request: 'user-plus',
-  friend_accept: 'user-check',
-  message: 'message',
-};
-
-const TYPE_COPY_KEY: Record<AppNotificationType, string> = {
-  like: 'notifications.type.like',
-  match: 'notifications.type.match',
-  visit: 'notifications.type.visit',
-  friend_request: 'notifications.type.friend_request',
-  friend_accept: 'notifications.type.friend_accept',
-  message: 'notifications.type.message',
-};
 
 export function NotificationsScreen({ navigation }: Props) {
   const theme = useTheme();
   const { t } = useLocale();
   const bottomPad = useScreenBottomPad(24);
-  const [items, setItems] = useState<AppNotification[]>(appNotifications);
+  const {
+    items,
+    unreadCount,
+    visitorsThisWeek,
+    canSeeVisitors,
+    initialLoading,
+    refresh,
+    markAllRead,
+  } = useNotifications();
+  const openNotification = useOpenNotification();
+  const [refreshing, setRefreshing] = useState(false);
 
-  const unreadTotal = useMemo(
-    () => items.reduce((n, item) => n + (item.unread ? 1 : 0), 0),
-    [items],
+  useFocusEffect(
+    useCallback(() => {
+      void refresh();
+    }, [refresh]),
   );
 
-  const markAllRead = () => {
-    setItems(prev => prev.map(item => ({ ...item, unread: false })));
-  };
-
-  const onPressItem = (item: AppNotification) => {
-    setItems(prev =>
-      prev.map(n => (n.id === item.id ? { ...n, unread: false } : n)),
-    );
-
-    if (item.conversationId) {
-      navigation.navigate('ChatThread', {
-        conversationId: item.conversationId,
-      });
-      return;
+  const onRefresh = async () => {
+    setRefreshing(true);
+    try {
+      await refresh();
+    } finally {
+      setRefreshing(false);
     }
-
-    navigation.navigate('UserProfile', { userId: item.userId });
   };
 
   return (
@@ -75,21 +56,20 @@ export function NotificationsScreen({ navigation }: Props) {
       <Header
         title={t('notifications.title')}
         subtitle={
-          unreadTotal > 0
-            ? t('notifications.subtitle_unread').replace(
-                '{count}',
-                String(unreadTotal),
-              )
+          unreadCount > 0
+            ? t('notifications.subtitle_unread').replace('{count}', String(unreadCount))
             : t('notifications.subtitle')
         }
         onBack={() => navigation.goBack()}
         backAccessibilityLabel={t('common.back')}
         actions={
-          unreadTotal > 0
+          unreadCount > 0
             ? [
                 {
                   icon: 'check',
-                  onPress: markAllRead,
+                  onPress: () => {
+                    void markAllRead();
+                  },
                   accessibilityLabel: t('notifications.mark_all_read'),
                 },
               ]
@@ -97,131 +77,82 @@ export function NotificationsScreen({ navigation }: Props) {
         }
       />
 
-      <ScrollView
-        showsVerticalScrollIndicator={false}
-        contentContainerStyle={[
-          styles.content,
-          { paddingBottom: bottomPad, flexGrow: 1 },
-        ]}>
-        {items.length === 0 ? (
-          <EmptyState
-            fill
-            icon="bell"
-            title={t('notifications.empty_title')}
-            description={t('notifications.empty_desc')}
-          />
-        ) : (
-          items.map(item => {
-            const body = t(TYPE_COPY_KEY[item.type]).replace(
-              '{name}',
-              item.name,
-            );
-            return (
-              <Pressable
-                key={item.id}
-                onPress={() => onPressItem(item)}
-                style={({ pressed }) => [
-                  styles.row,
-                  {
-                    backgroundColor: pressed
-                      ? theme.colors.surfaceAlt
-                      : item.unread
-                        ? theme.colors.primarySoft
-                        : 'transparent',
-                  },
-                ]}>
-                <View style={styles.avatarWrap}>
-                  <Avatar
-                    uri={item.avatar}
-                    name={item.name}
-                    size="md"
-                    premium={item.premium}
-                  />
-                  <View
-                    style={[
-                      styles.typeBadge,
-                      {
-                        backgroundColor: theme.colors.card,
-                        borderColor: theme.colors.border,
-                      },
-                    ]}>
-                    <Icon
-                      name={TYPE_ICON[item.type]}
-                      size={12}
-                      color={theme.colors.primary}
-                      filled={item.type === 'like'}
-                    />
-                  </View>
-                </View>
-
-                <View style={styles.texts}>
-                  <Typography
-                    variant={item.unread ? 'bodyStrong' : 'body'}
-                    numberOfLines={2}
-                    style={styles.body}>
-                    {body}
+      {initialLoading && items.length === 0 ? (
+        <View style={styles.loading}>
+          <ActivityIndicator color={theme.colors.primary} />
+        </View>
+      ) : (
+        <ScrollView
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={[styles.content, { paddingBottom: bottomPad, flexGrow: 1 }]}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={onRefresh}
+              tintColor={theme.colors.primary}
+            />
+          }>
+          {visitorsThisWeek > 0 ? (
+            <Pressable
+              disabled={canSeeVisitors}
+              onPress={() => navigation.navigate('Premium')}
+              style={[
+                styles.visitorCard,
+                { backgroundColor: theme.colors.premiumSoft, borderColor: theme.colors.premium },
+              ]}>
+              <Icon name="eye" size={20} color={theme.colors.premium} />
+              <View style={styles.visitorTexts}>
+                <Typography variant="bodyStrong">
+                  {t('notif.visitors_week').replace('{count}', String(visitorsThisWeek))}
+                </Typography>
+                {!canSeeVisitors ? (
+                  <Typography variant="caption" color="premium">
+                    {t('notif.upgrade_to_see')}
                   </Typography>
-                  <Typography variant="caption" color="textMuted">
-                    {item.createdAt}
-                  </Typography>
-                </View>
+                ) : null}
+              </View>
+              {!canSeeVisitors ? (
+                <Icon name="chevron-right" size={18} color={theme.colors.premium} />
+              ) : null}
+            </Pressable>
+          ) : null}
 
-                {item.unread ? (
-                  <View
-                    style={[
-                      styles.unreadDot,
-                      { backgroundColor: theme.colors.primary },
-                    ]}
-                  />
-                ) : (
-                  <View style={styles.unreadSpacer} />
-                )}
-              </Pressable>
-            );
-          })
-        )}
-      </ScrollView>
+          {items.length === 0 ? (
+            <EmptyState
+              fill
+              icon="bell"
+              title={t('notifications.empty_title')}
+              description={t('notifications.empty_desc')}
+            />
+          ) : (
+            items.map(item => (
+              <NotificationRow key={item.id} item={item} onPress={openNotification} />
+            ))
+          )}
+        </ScrollView>
+      )}
     </Screen>
   );
 }
 
 const styles = StyleSheet.create({
+  loading: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   content: {
     paddingHorizontal: 12,
     paddingTop: 4,
     gap: 2,
   },
-  row: {
+  visitorCard: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
-    paddingVertical: 12,
-    paddingHorizontal: 12,
+    marginHorizontal: 4,
+    marginBottom: 10,
+    padding: 14,
     borderRadius: 16,
-  },
-  avatarWrap: { position: 'relative' },
-  typeBadge: {
-    position: 'absolute',
-    right: -2,
-    bottom: -2,
-    width: 22,
-    height: 22,
-    borderRadius: 11,
     borderWidth: StyleSheet.hairlineWidth,
-    alignItems: 'center',
-    justifyContent: 'center',
   },
-  texts: { flex: 1, gap: 4, minWidth: 0 },
-  body: { flexShrink: 1 },
-  unreadDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-  },
-  unreadSpacer: {
-    width: 8,
-    height: 8,
-  },
+  visitorTexts: { flex: 1, gap: 2 },
 });
 
 export default NotificationsScreen;

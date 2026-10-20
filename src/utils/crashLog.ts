@@ -142,7 +142,7 @@ export async function clearCrashLogs() {
 
 export function formatCrashEntry(entry: CrashEntry): string {
   const lines = [
-    `id: ${entry.id}`,
+    `crashId ${entry.id}`,
     `at: ${entry.at}`,
     `kind: ${entry.kind}`,
     `message: ${entry.message}`,

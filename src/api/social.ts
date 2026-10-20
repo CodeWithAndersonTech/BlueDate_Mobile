@@ -31,7 +31,7 @@ export type FriendshipListResponse = ApiEnvelope & {
 
 /** Normalize list payload whether API emits `Items` or `items`. */
 export function friendshipItems(
-  res: FriendshipListResponse | null | undefined,
+  res: { Items?: FriendshipListItem[]; items?: FriendshipListItem[] } | null | undefined,
 ): FriendshipListItem[] {
   return res?.Items ?? res?.items ?? [];
 }

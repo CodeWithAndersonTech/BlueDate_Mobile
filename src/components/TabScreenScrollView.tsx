@@ -103,6 +103,7 @@ export const TabScreenScrollView = forwardRef<
     <ScrollView
       ref={setRefs}
       showsVerticalScrollIndicator={false}
+      keyboardShouldPersistTaps="handled"
       {...props}
       contentContainerStyle={[
         contentContainerStyle,

@@ -16,7 +16,7 @@ export interface UserListItemProps {
   style?: StyleProp<ViewStyle>;
 }
 
-export function UserListItem({
+function UserListItemInner({
   name,
   subtitle,
   avatarUri,
@@ -67,4 +67,5 @@ const styles = StyleSheet.create({
   nameRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
 });
 
+export const UserListItem = React.memo(UserListItemInner);
 export default UserListItem;

@@ -1,6 +1,6 @@
 import React from 'react';
 import { StyleProp, Text, TextProps, TextStyle } from 'react-native';
-import { TextVariant, useTheme } from '../theme';
+import { TextVariant, fontFamilyForWeight, useTheme } from '../theme';
 import { ThemeColors } from '../theme/themes';
 
 type ColorToken = keyof ThemeColors;
@@ -41,7 +41,9 @@ export function Typography({
         variantStyle,
         { color: tint ?? theme.colors[color] },
         align ? { textAlign: align } : null,
-        weight ? { fontWeight: weight } : null,
+        weight
+          ? { fontWeight: weight, fontFamily: fontFamilyForWeight(weight) }
+          : null,
         style,
       ]}
       {...rest}>

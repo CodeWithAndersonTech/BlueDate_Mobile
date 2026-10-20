@@ -16,8 +16,10 @@ import Animated, {
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { images } from '../assets';
-import { Icon, IconName } from '../components';
+import { Icon, IconName, Typography } from '../components';
+import { useLocale } from '../i18n';
 import { useTheme } from '../theme';
+import { useChat } from './ChatContext';
 import { FLOATING_TAB_BAR_HEIGHT, TAB_ROOT_SCREENS } from './tabBarLayout';
 import { useTabBarForceHidden } from './useHideTabBar';
 
@@ -36,16 +38,16 @@ const TAB_ICONS: Record<string, IconName> = {
   Home: 'home',
   Nearby: 'map-pin',
   Friends: 'users',
-  Premium: 'crown',
+  Messages: 'message',
   Profile: 'user',
 };
 
-const TAB_A11Y_LABELS: Record<string, string> = {
-  Home: 'Ana Sayfa',
-  Nearby: 'Yakındakiler',
-  Friends: 'Arkadaşlar',
-  Premium: 'Premium',
-  Profile: 'Profil',
+const TAB_A11Y_KEYS: Record<string, string> = {
+  Home: 'tabs.home',
+  Nearby: 'tabs.nearby',
+  Friends: 'tabs.friends',
+  Messages: 'tabs.messages',
+  Profile: 'tabs.profile',
 };
 
 const SPRING = { damping: 18, stiffness: 200, mass: 0.7 };
@@ -99,6 +101,8 @@ export function CustomTabBar({
   layout,
 }: MaterialTopTabBarProps) {
   const theme = useTheme();
+  const { t } = useLocale();
+  const { unreadCount: unreadMessages } = useChat();
   const insets = useSafeAreaInsets();
   const { width: windowWidth } = useWindowDimensions();
   const forceHidden = useTabBarForceHidden();
@@ -213,8 +217,11 @@ export function CustomTabBar({
                   icon={TAB_ICONS[route.name] ?? 'home'}
                   useAppLogo={route.name === 'Nearby'}
                   accessibilityLabel={
-                    TAB_A11Y_LABELS[route.name] ?? route.name
+                    TAB_A11Y_KEYS[route.name]
+                      ? t(TAB_A11Y_KEYS[route.name])
+                      : route.name
                   }
+                  badge={route.name === 'Messages' ? unreadMessages : 0}
                   onPress={onPress}
                 />
               );
@@ -231,6 +238,7 @@ interface TabItemProps {
   icon: IconName;
   useAppLogo?: boolean;
   accessibilityLabel: string;
+  badge?: number;
   onPress: () => void;
 }
 
@@ -239,6 +247,7 @@ function TabItem({
   icon,
   useAppLogo = false,
   accessibilityLabel,
+  badge = 0,
   onPress,
 }: TabItemProps) {
   const theme = useTheme();
@@ -282,6 +291,17 @@ function TabItem({
         ) : (
           <Icon name={icon} size={26} color={iconColor} filled={focused} />
         )}
+        {badge > 0 ? (
+          <View
+            style={[
+              styles.badge,
+              { backgroundColor: theme.colors.danger, borderColor: theme.colors.surface },
+            ]}>
+            <Typography variant="overline" tint={theme.colors.onPrimary}>
+              {badge > 9 ? '9+' : String(badge)}
+            </Typography>
+          </View>
+        ) : null}
       </Animated.View>
     </Pressable>
   );
@@ -327,6 +347,18 @@ const styles = StyleSheet.create({
   item: {
     flex: 1,
     height: '100%',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  badge: {
+    position: 'absolute',
+    top: -6,
+    right: -10,
+    minWidth: 18,
+    height: 18,
+    borderRadius: 9,
+    borderWidth: 2,
+    paddingHorizontal: 4,
     alignItems: 'center',
     justifyContent: 'center',
   },

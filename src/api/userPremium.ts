@@ -1,5 +1,6 @@
 import { API_PATHS } from '../config/api';
 import { apiRequest, ApiEnvelope } from './client';
+import type { StorePayment } from './treats';
 
 export type UserPremium = {
   userId: number;
@@ -71,6 +72,21 @@ export async function fetchUserPremium(
     token,
   });
   return fromDto(response.Premium ?? response.premium, userId);
+}
+
+export async function purchasePremium(
+  userId: number,
+  payment: StorePayment,
+): Promise<UserPremium> {
+  const response = await apiRequest<GetResponse>(API_PATHS.premiumPurchase, {
+    method: 'POST',
+    body: payment,
+  });
+  return fromDto(response.Premium ?? response.premium, userId);
+}
+
+export function isPlusPlan(premium: UserPremium | null | undefined): boolean {
+  return Boolean(premium?.isPremium && premium.planCode?.toLowerCase() === 'plus');
 }
 
 export function hasPremiumFeature(

@@ -18,26 +18,16 @@ export interface BadgeProps {
 
 export function Badge({ label, tone = 'neutral', size = 'sm', icon, style }: BadgeProps) {
   const theme = useTheme();
-
-  const paddingV = size === 'sm' ? 4 : 6;
-  const paddingH = size === 'sm' ? 10 : 14;
-  const iconSize = size === 'sm' ? 12 : 14;
-
-  const toneColors: Record<Exclude<BadgeTone, 'premium'>, { bg: string; fg: string }> = {
-    neutral: { bg: theme.colors.surfaceAlt, fg: theme.colors.textSecondary },
-    primary: { bg: theme.colors.primarySoft, fg: theme.colors.primary },
-    success: { bg: 'rgba(34,197,94,0.16)', fg: theme.colors.success },
-    warning: { bg: 'rgba(244,183,64,0.16)', fg: theme.colors.warning },
-    danger: { bg: 'rgba(255,77,109,0.16)', fg: theme.colors.danger },
-  };
+  const recipe = theme.components.badge;
+  const dims = recipe.sizes[size];
 
   const containerBase: ViewStyle = {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
-    paddingVertical: paddingV,
-    paddingHorizontal: paddingH,
-    borderRadius: 999,
+    gap: recipe.gap,
+    paddingVertical: dims.paddingV,
+    paddingHorizontal: dims.paddingH,
+    borderRadius: recipe.radius,
     alignSelf: 'flex-start',
   };
 
@@ -50,18 +40,18 @@ export function Badge({ label, tone = 'neutral', size = 'sm', icon, style }: Bad
           end={{ x: 1, y: 0 }}
           style={StyleSheet.absoluteFill}
         />
-        <Icon name={icon ?? 'crown'} size={iconSize} color="#3A2A00" filled />
-        <Typography variant="overline" tint="#3A2A00" style={styles.text}>
+        <Icon name={icon ?? 'crown'} size={dims.icon} color={recipe.premiumFg} filled />
+        <Typography variant="overline" tint={recipe.premiumFg} style={styles.text}>
           {label}
         </Typography>
       </View>
     );
   }
 
-  const c = toneColors[tone];
+  const c = recipe.tones[tone];
   return (
     <View style={[containerBase, { backgroundColor: c.bg }, style]}>
-      {icon && <Icon name={icon} size={iconSize} color={c.fg} />}
+      {icon && <Icon name={icon} size={dims.icon} color={c.fg} />}
       <Typography variant="overline" tint={c.fg} style={styles.text}>
         {label}
       </Typography>

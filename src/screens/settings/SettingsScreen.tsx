@@ -25,8 +25,9 @@ import {
   Switch,
 } from '../../components';
 import { useScreenBottomPad } from '../../navigation/tabBarLayout';
+import { getUserPreference, updateUserPreference, UserPreference } from '../../api';
 import { usePremium } from '../../hooks/usePremium';
-import { useLocale } from '../../i18n';
+import { useLocale, userFacingError } from '../../i18n';
 import { useAuth } from '../../navigation/AuthContext';
 import { useLockTabSwipe } from '../../navigation/useLockTabSwipe';
 import { ProfileStackParamList } from '../../navigation/types';
@@ -38,6 +39,12 @@ import {
   useTheme,
   useThemeController,
 } from '../../theme';
+import {
+  disablePushNotifications,
+  enablePushNotifications,
+  getNotificationPrefs,
+  patchNotificationPref,
+} from '../../services/push';
 import {
   clearCrashLogs,
   CrashEntry,
@@ -56,7 +63,8 @@ export function SettingsScreen() {
   const { preference, setPreference, accentKey, setAccent } =
     useThemeController();
   const { signOut } = useAuth();
-  const { isPremium } = usePremium();
+  const { isPremium, isPlus } = usePremium();
+  const [pref, setPref] = useState<UserPreference | null>(null);
 
   const [notif, setNotif] = useState({
     push: true,
@@ -65,35 +73,75 @@ export function SettingsScreen() {
     marketing: false,
   });
   const [lastCrash, setLastCrash] = useState<CrashEntry | null>(null);
-  const setNotifKey = (key: keyof typeof notif) => (value: boolean) =>
+  const setNotifKey = (key: keyof typeof notif) => (value: boolean) => {
     setNotif(prev => ({ ...prev, [key]: value }));
+    void patchNotificationPref(key, value);
+  };
+
+  const onPushChange = (value: boolean) => {
+    setNotif(prev => ({ ...prev, push: value }));
+    void (async () => {
+      await patchNotificationPref('push', value);
+      if (value) {
+        await enablePushNotifications();
+        return;
+      }
+      await disablePushNotifications();
+    })();
+  };
 
   useFocusEffect(
     useCallback(() => {
       void getLastCrash().then(setLastCrash);
+      void getNotificationPrefs().then(setNotif);
+      getUserPreference()
+        .then(setPref)
+        .catch(() => undefined);
     }, []),
   );
 
+  const savePref = async (patch: Partial<Pick<UserPreference, 'ghostMode' | 'notifyNearby'>>) => {
+    const prev = pref;
+    if (prev) setPref({ ...prev, ...patch });
+    try {
+      setPref(await updateUserPreference(patch));
+    } catch (error) {
+      setPref(prev);
+      Alert.alert(t('settings.title'), userFacingError(error, t, 'settings.pref_error'));
+    }
+  };
+
+  const onGhostChange = (value: boolean) => {
+    if (value && !isPlus) {
+      Alert.alert(t('settings.ghost'), t('settings.ghost_requires_plus'), [
+        { text: t('settings.cancel'), style: 'cancel' },
+        { text: t('notif.upgrade_cta'), onPress: () => openPremium() },
+      ]);
+      return;
+    }
+    void savePref({ ghostMode: value });
+  };
+
   const openCrashLog = () => {
     if (!lastCrash) {
-      Alert.alert('Crash log', 'Henüz kaydedilmiş bir crash yok.');
+      Alert.alert(t('settings.crash_title'), t('settings.crash_empty'));
       return;
     }
     const dump = formatCrashEntry(lastCrash);
     Alert.alert(
-      `Crash · ${lastCrash.kind}`,
+      `${t('settings.crash_title')} · ${lastCrash.kind}`,
       `${lastCrash.at}\n\n${lastCrash.message}`,
       [
-        { text: 'Kapat', style: 'cancel' },
+        { text: t('settings.crash_close'), style: 'cancel' },
         {
-          text: 'Temizle',
+          text: t('settings.crash_clear'),
           style: 'destructive',
           onPress: () => {
             void clearCrashLogs().then(() => setLastCrash(null));
           },
         },
         {
-          text: 'Paylaş',
+          text: t('settings.crash_share'),
           onPress: () => {
             void Share.share({ message: dump });
           },
@@ -121,9 +169,9 @@ export function SettingsScreen() {
     ]);
   };
 
-  const openPremium = () => {
-    navigation.getParent()?.navigate('Premium' as never);
-  };
+  function openPremium() {
+    navigation.navigate('Premium' as never);
+  }
 
   const languageOptions = languages.length ? languages : FALLBACK_LANGUAGES;
 
@@ -214,6 +262,21 @@ export function SettingsScreen() {
             onPress={openPremium}
             style={styles.rowPad}
           />
+          <SettingsSep />
+          <ListRow
+            icon="eye-off"
+            iconColor={theme.colors.premium}
+            title={t('settings.ghost')}
+            subtitle={isPlus ? t('settings.ghost_desc') : t('settings.ghost_plus_only')}
+            showChevron={false}
+            right={
+              <Switch
+                value={Boolean(pref?.ghostMode && isPlus)}
+                onValueChange={onGhostChange}
+              />
+            }
+            style={styles.rowPad}
+          />
         </SettingsGroup>
 
         <SectionLabel label={t('settings.notifications')} />
@@ -223,19 +286,22 @@ export function SettingsScreen() {
             title={t('settings.notif_push')}
             showChevron={false}
             right={
-              <Switch value={notif.push} onValueChange={setNotifKey('push')} />
+              <Switch value={notif.push} onValueChange={onPushChange} />
             }
             style={styles.rowPad}
           />
           <SettingsSep />
           <ListRow
-            icon="sparkles"
-            title={t('settings.notif_matches')}
+            icon="map-pin"
+            title={t('settings.notif_nearby')}
+            subtitle={t('settings.notif_nearby_desc')}
             showChevron={false}
             right={
               <Switch
-                value={notif.matches}
-                onValueChange={setNotifKey('matches')}
+                value={pref?.notifyNearby ?? true}
+                onValueChange={value => {
+                  void savePref({ notifyNearby: value });
+                }}
               />
             }
             style={styles.rowPad}
@@ -270,6 +336,14 @@ export function SettingsScreen() {
 
         <SectionLabel label={t('settings.privacy_support')} />
         <SettingsGroup>
+          <ListRow
+            icon="shield"
+            title={t('settings.blocked')}
+            subtitle={t('settings.blocked_desc')}
+            onPress={() => navigation.navigate('BlockedUsers')}
+            style={styles.rowPad}
+          />
+          <SettingsSep />
           <ListRow
             icon="shield"
             title={t('settings.privacy')}

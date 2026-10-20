@@ -25,7 +25,7 @@ import {
   SocialUser,
   withResolvedAvatar,
 } from '../../api';
-import { useLocale } from '../../i18n';
+import { useLocale, userFacingError } from '../../i18n';
 import { useAuth } from '../../navigation/AuthContext';
 import { useScreenBottomPad } from '../../navigation/tabBarLayout';
 import { useLockTabSwipe } from '../../navigation/useLockTabSwipe';
@@ -129,7 +129,7 @@ export function SearchUsersScreen({ navigation }: Props) {
       }));
       Alert.alert(
         t('friends.add'),
-        error instanceof Error ? error.message : t('user_profile.action_error'),
+        userFacingError(error, t, 'user_profile.action_error'),
       );
     }
   };

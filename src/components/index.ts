@@ -32,6 +32,8 @@ export * from './LanguagePicker';
 export * from './LanguageFlagButton';
 export * from './BioEditModal';
 export * from './StatusEditModal';
+export * from './SheetModal';
 export * from './ErrorBoundary';
+export * from './RecoveryScreen';
 export * from './SettingsGroup';
 export * from './ReadOnlyRow';

@@ -37,6 +37,8 @@ export type DirectNearbyItem = {
   StrengthScore: number;
   LastSeenAt: string;
   HopCount: number;
+  IsFeatured: boolean;
+  HasStory: boolean;
 };
 
 export type BridgeNearbyItem = {
@@ -49,6 +51,8 @@ export type BridgeNearbyItem = {
   StrengthScore: number;
   LastSeenAt: string;
   HopCount: number;
+  IsFeatured: boolean;
+  HasStory: boolean;
 };
 
 export type NearbyProximityResponse = ApiEnvelope & {
@@ -79,6 +83,10 @@ type RawNearbyItem = {
   viaUserId?: number | null;
   ViaFullName?: string | null;
   viaFullName?: string | null;
+  IsFeatured?: boolean;
+  isFeatured?: boolean;
+  HasStory?: boolean;
+  hasStory?: boolean;
 };
 
 function pickNum(a?: number | null, b?: number | null): number | null {
@@ -98,6 +106,8 @@ function normalizeDirect(item: RawNearbyItem): DirectNearbyItem {
     StrengthScore: item.StrengthScore ?? item.strengthScore ?? 0,
     LastSeenAt: item.LastSeenAt ?? item.lastSeenAt ?? '',
     HopCount: item.HopCount ?? item.hopCount ?? 1,
+    IsFeatured: Boolean(item.IsFeatured ?? item.isFeatured),
+    HasStory: Boolean(item.HasStory ?? item.hasStory),
   };
 }
 
@@ -112,6 +122,8 @@ function normalizeBridge(item: RawNearbyItem): BridgeNearbyItem {
     StrengthScore: item.StrengthScore ?? item.strengthScore ?? 0,
     LastSeenAt: item.LastSeenAt ?? item.lastSeenAt ?? '',
     HopCount: item.HopCount ?? item.hopCount ?? 2,
+    IsFeatured: Boolean(item.IsFeatured ?? item.isFeatured),
+    HasStory: Boolean(item.HasStory ?? item.hasStory),
   };
 }
 

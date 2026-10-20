@@ -18,9 +18,9 @@ export type PickedPhotoAsset = {
  */
 export function isImagePickerAvailable(): boolean {
   try {
-    const turbo = TurboModuleRegistry.get<{
-      launchImageLibrary: unknown;
-    }>('ImagePicker');
+    const turbo = TurboModuleRegistry.get('ImagePicker') as
+      | { launchImageLibrary?: unknown }
+      | null;
     if (turbo?.launchImageLibrary) {
       return true;
     }

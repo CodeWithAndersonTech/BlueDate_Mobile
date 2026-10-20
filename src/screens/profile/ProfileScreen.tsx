@@ -25,16 +25,14 @@ import {
   friendshipItems,
   getFriends,
   getInterestTypes,
-  getLikeCount,
   getUserProfile,
   InterestTypeItem,
-  likeCountFromResponse,
   resolveMediaUrl,
   updateUserStatus,
   UserProfileResponse,
 } from '../../api';
 import { Icon, StatusEditModal, TabScreenScrollView } from '../../components';
-import { useLocale } from '../../i18n';
+import { useLocale, userFacingError } from '../../i18n';
 import { useAuth } from '../../navigation/AuthContext';
 import { useTabBarClearance } from '../../navigation/tabBarLayout';
 import { ProfileStackParamList } from '../../navigation/types';
@@ -104,7 +102,6 @@ export function ProfileScreen({ navigation }: Props) {
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [friendCount, setFriendCount] = useState(0);
-  const [likeCount, setLikeCount] = useState(0);
   const [verifyTipOpen, setVerifyTipOpen] = useState(false);
   const [statusModalOpen, setStatusModalOpen] = useState(false);
   const [statusSaving, setStatusSaving] = useState(false);
@@ -144,7 +141,6 @@ export function ProfileScreen({ navigation }: Props) {
           interestTypesResponse,
           photoBundle,
           friendsRes,
-          likeCountRes,
         ] = await Promise.all([
           getUserProfile(userId, accessToken),
           getInterestTypes(accessToken).catch(() => null),
@@ -153,7 +149,6 @@ export function ProfileScreen({ navigation }: Props) {
             avatarUri: undefined as string | undefined,
           })),
           getFriends(userId, accessToken).catch(() => ({ Items: [] })),
-          getLikeCount(userId, accessToken).catch(() => ({ Count: 0 })),
         ]);
         setProfile(profileResponse);
         setInterestTypes(
@@ -164,7 +159,6 @@ export function ProfileScreen({ navigation }: Props) {
         );
         setPhotos(photoBundle.gallery);
         setFriendCount(friendshipItems(friendsRes).length);
-        setLikeCount(likeCountFromResponse(likeCountRes));
         const profileAvatar = await resolveMediaUrl(profileResponse.ProfileImage);
         setAvatarUri(photoBundle.avatarUri ?? profileAvatar);
         // Soft settle after skeleton — only when this was a cold load.
@@ -257,7 +251,7 @@ export function ProfileScreen({ navigation }: Props) {
       });
       Alert.alert(
         t('profile.status_title'),
-        error instanceof Error ? error.message : t('profile.status_error'),
+        userFacingError(error, t, 'profile.status_error'),
       );
     } finally {
       setStatusSaving(false);
@@ -425,7 +419,7 @@ export function ProfileScreen({ navigation }: Props) {
             <Pressable
               onPress={() => {
                 closeVerifyTip();
-                navigation.navigate('EditProfile');
+                navigation.navigate('EditProfile' as never);
               }}
               hitSlop={8}
               accessibilityRole="button"
@@ -561,15 +555,6 @@ export function ProfileScreen({ navigation }: Props) {
                   {t('profile.stat_friends')}
                 </Text>
               </View>
-              <View style={styles.statItem}>
-                <Text style={[styles.statValue, { color: theme.colors.text }]}>
-                  {likeCount}
-                </Text>
-                <Text
-                  style={[styles.statLabel, { color: theme.colors.textMuted }]}>
-                  {t('profile.stat_likes')}
-                </Text>
-              </View>
             </View>
           </View>
 
@@ -656,7 +641,7 @@ export function ProfileScreen({ navigation }: Props) {
                       <Pressable
                         onPress={() => {
                           closeVerifyTip();
-                          navigation.navigate('EditProfile');
+                          navigation.navigate('EditProfile' as never);
                         }}
                         hitSlop={8}
                         style={styles.verifyTipAction}>

@@ -39,8 +39,9 @@ export function Screen({
   const theme = useTheme();
   const bg = backgroundColor ?? theme.colors.background;
 
+  const pad = theme.components.screen.paddingH;
   const innerStyle = [
-    padded ? { paddingHorizontal: 24 } : null,
+    padded ? { paddingHorizontal: pad } : null,
     style,
   ];
 
@@ -55,7 +56,7 @@ export function Screen({
         <ScrollView
           style={styles.flex}
           contentContainerStyle={[
-            padded ? { paddingHorizontal: 24 } : null,
+            padded ? { paddingHorizontal: pad } : null,
             contentContainerStyle,
           ]}
           showsVerticalScrollIndicator={false}

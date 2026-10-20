@@ -133,18 +133,26 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
     });
   }, [userId, refreshInbox]);
 
+  const tokenRef = useRef(accessToken);
+  tokenRef.current = accessToken;
+
   useEffect(() => {
     let cancelled = false;
 
     (async () => {
-      if (!isSignedIn || !accessToken || !userId) {
+      if (!isSignedIn || !userId) {
         await disconnectChatHub();
         setUnreadCount(0);
         setConversations([]);
         return;
       }
 
-      await connectChatHub(accessToken);
+      const token = tokenRef.current;
+      if (!token) {
+        return;
+      }
+
+      await connectChatHub(token);
       if (cancelled) return;
       await refreshUnread();
       await refreshInbox();
@@ -153,7 +161,9 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
     return () => {
       cancelled = true;
     };
-  }, [isSignedIn, accessToken, userId, refreshUnread, refreshInbox]);
+    // Token rotation must not reconnect or full-refetch — that flashes the app.
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- session identity only
+  }, [isSignedIn, userId]);
 
   useEffect(() => {
     return () => {

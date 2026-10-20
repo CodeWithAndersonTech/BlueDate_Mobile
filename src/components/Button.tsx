@@ -40,15 +40,6 @@ export interface ButtonProps {
   style?: StyleProp<ViewStyle>;
 }
 
-const SIZES: Record<
-  ButtonSize,
-  { height: number; paddingH: number; fontSize: number; icon: number }
-> = {
-  sm: { height: 42, paddingH: 16, fontSize: 13, icon: 16 },
-  md: { height: 54, paddingH: 22, fontSize: 16, icon: 18 },
-  lg: { height: 58, paddingH: 26, fontSize: 17, icon: 20 },
-};
-
 export function Button({
   label,
   onPress,
@@ -65,11 +56,12 @@ export function Button({
   const theme = useTheme();
   const scale = useSharedValue(1);
   const pressed = useSharedValue(0);
-  const dims = SIZES[size];
+  const recipe = theme.components.button;
+  const dims = recipe.sizes[size];
   const isDisabled = disabled || loading;
   /** Blocks presses vs. *looks* unavailable — loading is busy, not inactive. */
   const isInactive = disabled && !loading;
-  const radius = 999;
+  const radius = recipe.radius;
 
   const animatedStyle = useAnimatedStyle(() => ({
     transform: [{ scale: scale.value }],
@@ -80,12 +72,12 @@ export function Button({
   }));
 
   const onPressIn = () => {
-    scale.value = withSpring(0.965, { damping: 16, stiffness: 340 });
-    pressed.value = withTiming(1, { duration: 90 });
+    scale.value = withSpring(theme.motion.pressScale, theme.motion.springIn);
+    pressed.value = withTiming(1, { duration: theme.motion.pressInMs });
   };
   const onPressOut = () => {
-    scale.value = withSpring(1, { damping: 13, stiffness: 260 });
-    pressed.value = withTiming(0, { duration: 160 });
+    scale.value = withSpring(1, theme.motion.springOut);
+    pressed.value = withTiming(0, { duration: theme.motion.pressOutMs });
   };
 
   const isSolid = variant === 'primary' || variant === 'danger';
@@ -105,16 +97,9 @@ export function Button({
     ? theme.colors.primary
     : theme.colors.text;
 
-  const softGlow: ViewStyle = {
-    shadowColor: theme.colors.primary,
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: theme.isDark ? 0.28 : 0.18,
-    shadowRadius: 10,
-    elevation: 6,
-  };
   const shadow =
     variant === 'primary'
-      ? softGlow
+      ? recipe.glow
       : variant === 'ghost' || variant === 'outline'
       ? theme.shadows.none
       : theme.shadows.sm;
@@ -200,7 +185,7 @@ export function Button({
           {loading ? (
             <ActivityIndicator color={contentColor} />
           ) : (
-            <View style={styles.labelRow}>
+            <View style={[styles.labelRow, { gap: recipe.gap }]}>
               {leftIcon && (
                 <Icon name={leftIcon} size={dims.icon} color={contentColor} />
               )}
@@ -241,7 +226,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 8,
   },
   fill: {
     position: 'absolute',

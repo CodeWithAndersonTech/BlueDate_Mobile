@@ -1,5 +1,6 @@
 import { Appearance, NativeModules, Platform } from 'react-native';
 import { getSystemVersion, getUniqueId } from 'react-native-device-info';
+import { withTimeout } from './withTimeout';
 
 export type DeviceLaunchInfo = {
   platform: 'ios' | 'android' | string;
@@ -52,7 +53,12 @@ function getSystemColorScheme(): DeviceLaunchInfo['colorScheme'] {
 }
 
 export async function getDeviceLaunchInfo(): Promise<DeviceLaunchInfo> {
-  const uniqueId = await getUniqueId();
+  let uniqueId = `${Platform.OS}-unknown`;
+  try {
+    uniqueId = await withTimeout(getUniqueId(), 1500, 'uniqueId timeout');
+  } catch (error) {
+    console.warn('[DeviceInfo] uniqueId timed out', error);
+  }
   const language = getDeviceLanguage();
 
   return {

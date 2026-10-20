@@ -117,3 +117,8 @@ dependencies {
         implementation jscFlavor
     }
 }
+
+// Applied only after android/app/google-services.json is copied from the Console.
+if (file("google-services.json").exists()) {
+    apply plugin: "com.google.gms.google-services"
+}

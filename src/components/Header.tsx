@@ -39,7 +39,12 @@ export function Header({
 
   if (large) {
     return (
-      <View style={[styles.largeContainer, { paddingHorizontal: 24 }, style]}>
+      <View
+        style={[
+          styles.largeContainer,
+          { paddingHorizontal: theme.components.header.largePaddingH },
+          style,
+        ]}>
         <View style={styles.largeText}>
           {subtitle && (
             <Typography variant="overline" color="primary">
@@ -48,7 +53,7 @@ export function Header({
           )}
           <Typography variant="h1">{title}</Typography>
         </View>
-        <View style={styles.actions}>
+        <View style={[styles.actions, { gap: theme.components.header.actionGap }]}>
           {actions.map((a, i) => (
             <IconButton
               key={`${a.icon}-${i}`}
@@ -65,7 +70,16 @@ export function Header({
   }
 
   return (
-    <View style={[styles.container, { paddingHorizontal: 16 }, style]}>
+    <View
+      style={[
+        styles.container,
+        {
+          paddingHorizontal: theme.components.header.paddingH,
+          minHeight: theme.components.header.height,
+          gap: theme.components.header.actionGap,
+        },
+        style,
+      ]}>
       <View style={styles.side}>
         {onBack && (
           <IconButton
@@ -108,8 +122,6 @@ const styles = StyleSheet.create({
   container: {
     flexDirection: 'row',
     alignItems: 'center',
-    minHeight: 56,
-    gap: 8,
   },
   side: { minWidth: 44, justifyContent: 'center', flexDirection: 'row' },
   right: { justifyContent: 'flex-end' },
@@ -122,7 +134,7 @@ const styles = StyleSheet.create({
     paddingBottom: 12,
   },
   largeText: { flex: 1, gap: 2 },
-  actions: { flexDirection: 'row', gap: 8 },
+  actions: { flexDirection: 'row' },
 });
 
 export default Header;
