@@ -1,8 +1,20 @@
 import { useCallback, useEffect, useState } from 'react';
+import { AppState } from 'react-native';
+import { ApiError } from '../api/client';
 import { isAccountGoneError } from '../i18n';
 import { useAuth } from '../navigation/AuthContext';
 import { loadProfileCompleteness } from '../services/onboarding/profileCompleteness';
 import { withTimeout } from '../utils/withTimeout';
+
+function isOwnAccountDead(error: unknown): boolean {
+  if (isAccountGoneError(error)) {
+    return true;
+  }
+  return (
+    error instanceof ApiError &&
+    (error.status === 401 || error.status === 403 || error.status === 404)
+  );
+}
 
 /**
  * After sign-in, blocks the main app until the user has filled every interest
@@ -34,7 +46,7 @@ export function useOnboardingGate() {
       setAccountGone(false);
       setNeedsOnboarding(!completeness.isComplete);
     } catch (error) {
-      if (isAccountGoneError(error)) {
+      if (isOwnAccountDead(error)) {
         setAccountGone(true);
         setNeedsOnboarding(false);
       } else {
@@ -51,6 +63,12 @@ export function useOnboardingGate() {
       return;
     }
     void refresh();
+    const sub = AppState.addEventListener('change', state => {
+      if (state === 'active') {
+        void refresh();
+      }
+    });
+    return () => sub.remove();
   }, [status, refresh]);
 
   const ready =

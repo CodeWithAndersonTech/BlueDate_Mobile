@@ -350,3 +350,20 @@ export function deleteUserInterest(id: number, token?: string | null) {
     token,
   });
 }
+
+/** True only when the signed-in user still exists on the server. */
+export async function assertOwnProfileExists(
+  userId: number,
+  token?: string | null,
+): Promise<boolean> {
+  if (!userId || !token) {
+    return false;
+  }
+  const raw = await apiRequest<
+    ApiEnvelope & { Id?: number; id?: number }
+  >(API_PATHS.userProfile, {
+    query: { userId },
+    token,
+  });
+  return Number(raw.Id ?? raw.id ?? 0) === userId;
+}

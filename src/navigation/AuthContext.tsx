@@ -7,17 +7,22 @@ import React, {
   useState,
 } from 'react';
 import { AppState } from 'react-native';
-import { loginUser, refreshSession, registerUser } from '../api';
+import { assertOwnProfileExists, loginUser, refreshSession, registerUser } from '../api';
+import { ApiError } from '../api/client';
 import {
   clearSessionTokens,
+  getAccessToken,
+  getSessionUserId,
   hydrateSessionFromStorage,
   persistSessionTokens,
   refreshAccessToken,
   subscribeSession,
 } from '../api/sessionStore';
-import { useLocale } from '../i18n';
+import { isAccountGoneError, useLocale } from '../i18n';
 import { isJwtExpired } from '../utils/jwt';
 import { withTimeout } from '../utils/withTimeout';
+
+const SESSION_PROBE_MS = 15000;
 
 type AuthStatus = 'bootstrapping' | 'signedOut' | 'signedIn';
 
@@ -68,6 +73,16 @@ function hasActiveAccessToken(token: string | null | undefined): boolean {
   return Boolean(token) && !isJwtExpired(token);
 }
 
+function isDeadAccountError(error: unknown): boolean {
+  if (isAccountGoneError(error)) {
+    return true;
+  }
+  if (error instanceof ApiError) {
+    return error.status === 401 || error.status === 403 || error.status === 404;
+  }
+  return false;
+}
+
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const { bindUser } = useLocale();
   const [status, setStatus] = useState<AuthStatus>('bootstrapping');
@@ -102,8 +117,35 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           return;
         }
 
-        // Fresh access token → enter the app. Do not wait on locale/API.
-        if (hasActiveAccessToken(session.accessToken)) {
+        // Fresh access token — still confirm the user exists (deleted
+        // accounts keep a valid JWT until we ask the API).
+        if (hasActiveAccessToken(session.accessToken) && session.userId) {
+          const alive = await withTimeout(
+            assertOwnProfileExists(session.userId, session.accessToken),
+            4000,
+            'auth session probe timeout',
+          ).catch(error => {
+            if (error instanceof ApiError && error.status === 0) {
+              return true;
+            }
+            if (/timeout/i.test(String((error as Error)?.message ?? error))) {
+              return true;
+            }
+            return !isDeadAccountError(error);
+          });
+          if (cancelled) {
+            return;
+          }
+          if (!alive) {
+            await clearSessionTokens();
+            if (cancelled) {
+              return;
+            }
+            setAccessToken(null);
+            setUserId(null);
+            setStatus('signedOut');
+            return;
+          }
           setAccessToken(session.accessToken);
           setUserId(session.userId);
           setStatus('signedIn');
@@ -124,8 +166,41 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           }
 
           if (hasActiveAccessToken(nextAccess)) {
+            const uid = session.userId ?? getSessionUserId();
+            const stillThere = uid
+              ? await withTimeout(
+                  assertOwnProfileExists(uid, nextAccess),
+                  4000,
+                  'auth session probe timeout',
+                ).catch(error => {
+                  if (error instanceof ApiError && error.status === 0) {
+                    return true;
+                  }
+                  if (
+                    /timeout/i.test(
+                      String((error as Error)?.message ?? error),
+                    )
+                  ) {
+                    return true;
+                  }
+                  return !isDeadAccountError(error);
+                })
+              : false;
+            if (cancelled) {
+              return;
+            }
+            if (!stillThere) {
+              await clearSessionTokens();
+              if (cancelled) {
+                return;
+              }
+              setAccessToken(null);
+              setUserId(null);
+              setStatus('signedOut');
+              return;
+            }
             setAccessToken(nextAccess);
-            setUserId(session.userId);
+            setUserId(uid);
             setStatus('signedIn');
             return;
           }
@@ -276,28 +351,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     let cancelled = false;
 
-    const dropExpiredSession = async () => {
-      if (hasActiveAccessToken(accessToken)) {
-        return;
-      }
-
-      const nextAccess = await withTimeout(
-        refreshAccessToken(refreshToken =>
-          refreshSession({ RefreshToken: refreshToken }),
-        ),
-        4000,
-        'auth refresh timeout',
-      ).catch(() => null);
-
-      if (cancelled) {
-        return;
-      }
-
-      if (hasActiveAccessToken(nextAccess)) {
-        setAccessToken(nextAccess);
-        return;
-      }
-
+    const kickOut = async () => {
       await clearSessionTokens();
       if (cancelled) {
         return;
@@ -307,19 +361,83 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setStatus('signedOut');
     };
 
-    void dropExpiredSession();
+    const assertSession = async () => {
+      const token = getAccessToken() ?? accessToken;
+      const uid = getSessionUserId() ?? userId;
+
+      if (!token || !uid) {
+        await kickOut();
+        return;
+      }
+
+      let liveToken = token;
+      if (!hasActiveAccessToken(liveToken)) {
+        const nextAccess = await withTimeout(
+          refreshAccessToken(refreshToken =>
+            refreshSession({ RefreshToken: refreshToken }),
+          ),
+          4000,
+          'auth refresh timeout',
+        ).catch(() => null);
+
+        if (cancelled) {
+          return;
+        }
+
+        if (!hasActiveAccessToken(nextAccess)) {
+          await kickOut();
+          return;
+        }
+
+        liveToken = nextAccess;
+        setAccessToken(nextAccess);
+      }
+
+      try {
+        const alive = await withTimeout(
+          assertOwnProfileExists(uid, liveToken),
+          4000,
+          'auth session probe timeout',
+        );
+        if (cancelled) {
+          return;
+        }
+        if (!alive) {
+          await kickOut();
+        }
+      } catch (error) {
+        if (cancelled) {
+          return;
+        }
+        if (error instanceof ApiError && error.status === 0) {
+          return;
+        }
+        if (/timeout/i.test(String((error as Error)?.message ?? error))) {
+          return;
+        }
+        if (isDeadAccountError(error)) {
+          await kickOut();
+        }
+      }
+    };
+
+    void assertSession();
 
     const sub = AppState.addEventListener('change', state => {
       if (state === 'active') {
-        void dropExpiredSession();
+        void assertSession();
       }
     });
+    const timer = setInterval(() => {
+      void assertSession();
+    }, SESSION_PROBE_MS);
 
     return () => {
       cancelled = true;
       sub.remove();
+      clearInterval(timer);
     };
-  }, [status, accessToken]);
+  }, [status, accessToken, userId]);
 
   const value = useMemo<AuthContextValue>(
     () => ({
