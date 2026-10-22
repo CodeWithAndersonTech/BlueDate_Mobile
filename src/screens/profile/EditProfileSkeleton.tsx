@@ -13,16 +13,15 @@ import {
   SkeletonLine,
 } from '../../components/skeleton/SkeletonBone';
 
-const TILE_HEIGHT = 100;
 const SAVE_BTN_HEIGHT = 54;
+const PHOTO_TILE_W = 149;
+const PHOTO_TILE_H = 173;
 
 type Props = {
   visible?: boolean;
 };
 
-/**
- * Edit Profile skeleton — account card, bio field, interest tiles, save bar.
- */
+/** Edit Profile skeleton — basics, photo rail, favorites, save bar. */
 export function EditProfileSkeleton({ visible = true }: Props) {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
@@ -39,73 +38,52 @@ export function EditProfileSkeleton({ visible = true }: Props) {
 
   return (
     <Animated.View style={[styles.root, fadeStyle]} pointerEvents="none">
-      <View style={styles.header}>
-        <SkeletonLine width={120} height={17} radius={8} />
-      </View>
-
       <View style={styles.content}>
-        <SkeletonLine width={64} height={10} style={styles.sectionLabel} />
-        <View
-          style={[
-            styles.card,
-            { backgroundColor: theme.colors.card },
-            theme.shadows.sm,
-          ]}>
-          {[0, 1, 2, 3].map((key, index) => (
-            <View key={key}>
-              <View style={styles.infoRow}>
-                <View style={styles.infoText}>
-                  <SkeletonLine width={72} height={11} />
-                  <SkeletonLine width="58%" height={15} style={styles.infoValue} />
-                </View>
-                <SkeletonLine width={14} height={14} radius={4} />
-              </View>
-              {index < 3 ? (
-                <View
-                  style={[
-                    styles.sep,
-                    { backgroundColor: theme.colors.border },
-                  ]}
-                />
-              ) : null}
+        <View style={[styles.card, { backgroundColor: theme.colors.card }]}>
+          <View style={styles.cardHead}>
+            <SkeletonBlock width={20} height={20} radius={6} />
+            <SkeletonLine width={110} height={15} />
+          </View>
+          {[0, 1, 2, 3, 4].map(key => (
+            <View key={key} style={styles.infoRow}>
+              <SkeletonLine width={100} height={13} />
+              <SkeletonLine width="46%" height={15} />
             </View>
           ))}
         </View>
-        <SkeletonLine width="88%" height={11} style={styles.hint} />
 
-        <SkeletonLine
-          width={56}
-          height={10}
-          style={[styles.sectionLabel, styles.bioLabel]}
-        />
-        <SkeletonBlock height={110} radius={16} />
-        <SkeletonLine width={40} height={11} style={styles.bioCounter} />
-
-        <View style={styles.sectionHead}>
-          <View style={styles.sectionHeadText}>
-            <SkeletonLine width={96} height={11} />
-            <SkeletonLine width="78%" height={11} style={styles.hintTight} />
+        <View style={[styles.card, { backgroundColor: theme.colors.card }]}>
+          <View style={styles.cardHead}>
+            <SkeletonBlock width={20} height={20} radius={6} />
+            <SkeletonLine width={88} height={15} />
+            <View style={styles.flex} />
+            <SkeletonBlock width={43} height={18} radius={8} />
           </View>
-          <SkeletonBlock width={64} height={24} radius={999} />
+          <View style={styles.photoRail}>
+            {[0, 1].map(key => (
+              <SkeletonBlock
+                key={key}
+                width={PHOTO_TILE_W}
+                height={PHOTO_TILE_H}
+                radius={10}
+              />
+            ))}
+          </View>
         </View>
 
-        <View style={styles.tileGrid}>
+        <View style={[styles.card, { backgroundColor: theme.colors.card }]}>
+          <View style={styles.cardHead}>
+            <SkeletonBlock width={20} height={20} radius={6} />
+            <SkeletonLine width={96} height={15} />
+          </View>
           {[0, 1, 2, 3].map(key => (
-            <View
-              key={key}
-              style={[
-                styles.tile,
-                {
-                  backgroundColor: theme.colors.card,
-                  borderColor: theme.colors.border,
-                },
-              ]}>
-              <View style={styles.tileTop}>
-                <SkeletonBlock width={28} height={28} radius={10} />
-                <SkeletonLine width={18} height={18} radius={9} />
+            <View key={key} style={styles.favRow}>
+              <SkeletonBlock width={30} height={30} radius={8} />
+              <View style={styles.favText}>
+                <SkeletonLine width={72} height={11} />
+                <SkeletonLine width="58%" height={15} />
               </View>
-              <SkeletonLine width="68%" height={10} />
-              <SkeletonLine width="86%" height={13} style={styles.tileValue} />
+              <SkeletonBlock width={62} height={27} radius={8} />
             </View>
           ))}
         </View>
@@ -128,69 +106,43 @@ export function EditProfileSkeleton({ visible = true }: Props) {
 
 const styles = StyleSheet.create({
   root: { flex: 1 },
-  header: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 20,
-    paddingBottom: 4,
-    minHeight: 36,
-  },
+  flex: { flex: 1 },
   content: {
     flex: 1,
-    paddingHorizontal: 20,
+    paddingHorizontal: 10,
     paddingTop: 0,
-    paddingBottom: 24,
+    gap: 10,
   },
-  sectionLabel: { marginBottom: 8 },
-  bioLabel: { marginTop: 22 },
-  card: { borderRadius: 16, overflow: 'hidden' },
+  card: {
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+    gap: 4,
+  },
+  cardHead: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 8,
+  },
   infoRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    gap: 12,
-  },
-  infoText: { flex: 1, gap: 6 },
-  infoValue: { marginTop: 0 },
-  sep: {
-    height: StyleSheet.hairlineWidth,
-    marginLeft: 16,
-  },
-  hint: { marginTop: 8, marginBottom: 4 },
-  hintTight: { marginTop: 6 },
-  bioCounter: { alignSelf: 'flex-end', marginTop: 6 },
-  sectionHead: {
-    marginTop: 18,
-    marginBottom: 12,
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    justifyContent: 'space-between',
-    gap: 12,
-  },
-  sectionHeadText: { flex: 1, gap: 2 },
-  tileGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'space-between',
-    rowGap: 10,
-  },
-  tile: {
-    width: '48%',
-    height: TILE_HEIGHT,
-    borderRadius: 16,
-    borderWidth: 1,
-    paddingHorizontal: 10,
-    paddingVertical: 10,
+    minHeight: 32,
     gap: 6,
   },
-  tileTop: {
+  photoRail: {
+    flexDirection: 'row',
+    gap: 5,
+    paddingVertical: 4,
+  },
+  favRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 2,
+    height: 52,
+    gap: 10,
   },
-  tileValue: { marginTop: 2 },
+  favText: { flex: 1, gap: 4 },
   saveBar: {
     flexShrink: 0,
     paddingHorizontal: 20,

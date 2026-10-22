@@ -15,11 +15,14 @@ import Animated, {
   withSpring,
 } from 'react-native-reanimated';
 import { useTheme } from '../theme';
+import { FigmaIcon } from './FigmaIcon';
 import { Icon } from './Icon';
 
 export interface NearbyUser {
   id: string;
   name: string;
+  /** Figma rail label — username when the API sends one. */
+  handle?: string;
   age: number;
   distanceKm: number;
   online: boolean;
@@ -65,6 +68,7 @@ function NearbyCardInner({
   };
 
   const firstName = user.name.split(' ')[0] || user.name;
+  const railLabel = user.handle || firstName;
 
   if (variant === 'rail') {
     return (
@@ -74,46 +78,57 @@ function NearbyCardInner({
         onPressOut={pressOut}
         style={style}>
         <Animated.View style={[styles.rail, animated]}>
-          <View
-            style={[
-              styles.railAvatar,
-              {
-                borderColor: user.hasStory
-                  ? theme.colors.premium
-                  : user.online
-                  ? theme.colors.primary
-                  : theme.colors.borderStrong,
-              },
-            ]}>
-            {user.photo ? (
-              <Image
-                source={{ uri: user.photo }}
-                style={styles.fill}
-                fadeDuration={0}
-                resizeMode="cover"
-              />
-            ) : (
-              <LinearGradient
-                colors={user.accentColors ?? theme.gradients.primary}
-                style={styles.fill}
-              />
-            )}
-            {user.online ? (
+          {user.hasStory ? (
+            <LinearGradient
+              colors={theme.gradients.storyRing}
+              start={{ x: 0, y: 1 }}
+              end={{ x: 1, y: 0 }}
+              style={styles.railRing}>
               <View
                 style={[
-                  styles.railOnline,
-                  {
-                    backgroundColor: theme.colors.online,
-                    borderColor: theme.colors.background,
-                  },
-                ]}
-              />
-            ) : null}
-          </View>
+                  styles.railPhoto,
+                  { backgroundColor: theme.colors.surfaceAlt },
+                ]}>
+                {user.photo ? (
+                  <Image
+                    source={{ uri: user.photo }}
+                    style={styles.fill}
+                    fadeDuration={0}
+                    resizeMode="cover"
+                  />
+                ) : (
+                  <LinearGradient
+                    colors={user.accentColors ?? theme.gradients.primary}
+                    style={styles.fill}
+                  />
+                )}
+              </View>
+            </LinearGradient>
+          ) : (
+            <View
+              style={[
+                styles.railAvatar,
+                { borderColor: theme.colors.borderStrong },
+              ]}>
+              {user.photo ? (
+                <Image
+                  source={{ uri: user.photo }}
+                  style={styles.fill}
+                  fadeDuration={0}
+                  resizeMode="cover"
+                />
+              ) : (
+                <LinearGradient
+                  colors={user.accentColors ?? theme.gradients.primary}
+                  style={styles.fill}
+                />
+              )}
+            </View>
+          )}
           <Text
             style={[styles.railName, { color: theme.colors.text }]}
             numberOfLines={1}>
-            {firstName}
+            {railLabel}
           </Text>
         </Animated.View>
       </Pressable>
@@ -135,9 +150,9 @@ function NearbyCardInner({
               styles.circle,
               {
                 borderColor: user.hasStory
-                  ? theme.colors.premium
+                  ? theme.colors.plusCta
                   : user.online
-                  ? theme.colors.primary
+                  ? theme.colors.online
                   : theme.colors.borderStrong,
                 backgroundColor: theme.colors.surfaceAlt,
               },
@@ -173,7 +188,7 @@ function NearbyCardInner({
 
           {user.premium ? (
             <View style={[styles.crown, { backgroundColor: theme.colors.premium }]}>
-              <Icon name="crown" size={11} color={theme.colors.onPremium} filled />
+              <FigmaIcon name="crown" size={11} color={theme.colors.onPremium} />
             </View>
           ) : null}
 
@@ -195,7 +210,7 @@ function NearbyCardInner({
               <Icon
                 name={added ? 'user-check' : 'user-plus'}
                 size={15}
-                color={added ? theme.colors.white : theme.colors.primary}
+                color={added ? theme.colors.white : theme.colors.plusCta}
               />
             </Pressable>
           ) : null}
@@ -215,25 +230,34 @@ function NearbyCardInner({
 }
 
 const styles = StyleSheet.create({
-  rail: { width: 76, alignItems: 'center', gap: 6 },
-  railAvatar: {
-    width: 68,
-    height: 68,
-    borderRadius: 34,
-    borderWidth: 2.5,
+  rail: { width: 75, alignItems: 'center', gap: 5 },
+  railRing: {
+    width: 75,
+    height: 75,
+    borderRadius: 38,
+    padding: 4.5,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  railPhoto: {
+    width: 66,
+    height: 66,
+    borderRadius: 33,
     overflow: 'hidden',
-    position: 'relative',
   },
-  railOnline: {
-    position: 'absolute',
-    right: 2,
-    bottom: 2,
-    width: 14,
-    height: 14,
-    borderRadius: 7,
-    borderWidth: 2.5,
+  railAvatar: {
+    width: 75,
+    height: 75,
+    borderRadius: 38,
+    borderWidth: 2,
+    overflow: 'hidden',
   },
-  railName: { fontSize: 12, fontWeight: '600', maxWidth: 72 },
+  railName: {
+    fontSize: 10,
+    fontWeight: '400',
+    maxWidth: 75,
+    textAlign: 'center',
+  },
   gridCard: {
     alignItems: 'center',
     gap: 10,

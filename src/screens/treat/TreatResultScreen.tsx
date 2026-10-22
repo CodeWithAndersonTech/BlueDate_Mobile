@@ -1,8 +1,8 @@
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import React, { useEffect, useState } from 'react';
-import { ActivityIndicator, ScrollView, StyleSheet, View } from 'react-native';
+import { ScrollView, StyleSheet, View } from 'react-native';
 import { getTreat, Treat, treatUserName } from '../../api';
-import { Button, EmptyState, Header, Screen } from '../../components';
+import { EmptyState, FigmaButton, FigmaSpinner, Header, Screen } from '../../components';
 import { useLocale } from '../../i18n';
 import { useScreenBottomPad } from '../../navigation/tabBarLayout';
 import { AppStackParamList } from '../../navigation/types';
@@ -43,13 +43,13 @@ export function TreatResultScreen({ navigation, route }: Props) {
       ? t('treat.result_accepted')
       : treat?.status === 'rejected'
         ? t('treat.result_rejected')
-        : t('treat.result_pending');
+        : t('treat.sent_title');
   const subtitle =
     treat?.status === 'accepted'
       ? t('treat.result_accepted_body')
       : treat?.status === 'rejected'
         ? t('treat.result_rejected_body').replace('{name}', receiverName)
-        : undefined;
+        : `${t('treat.sent_to').replace('{name}', receiverName)}\n${t('treat.sent_wait')}`;
 
   return (
     <Screen edges={['top']}>
@@ -59,11 +59,9 @@ export function TreatResultScreen({ navigation, route }: Props) {
         backAccessibilityLabel={t('common.back')}
       />
       {failed ? (
-        <EmptyState fill icon="gift" title={t('treat.not_found')} />
+        <EmptyState fill figmaIcon="gift" title={t('treat.not_found')} />
       ) : !treat ? (
-        <View style={styles.loading}>
-          <ActivityIndicator color={theme.colors.primary} />
-        </View>
+        <FigmaSpinner fill />
       ) : (
         <ScrollView
           contentContainerStyle={[
@@ -79,9 +77,10 @@ export function TreatResultScreen({ navigation, route }: Props) {
 
           <View style={{ gap: theme.space.md }}>
             {treat.status === 'accepted' && treat.conversationId ? (
-              <Button
+              <FigmaButton
                 label={t('treat.go_chat')}
-                leftIcon="message"
+                size="md"
+                fullWidth
                 onPress={() =>
                   navigation.replace('ChatThread', {
                     conversationId: String(treat.conversationId),
@@ -90,9 +89,10 @@ export function TreatResultScreen({ navigation, route }: Props) {
               />
             ) : null}
             {treat.status === 'rejected' ? (
-              <Button
+              <FigmaButton
                 label={t('treat.send_again')}
-                leftIcon="gift"
+                size="md"
+                fullWidth
                 onPress={() =>
                   navigation.replace('UserProfile', {
                     userId: String(treat.receiver.UserId),
@@ -101,7 +101,13 @@ export function TreatResultScreen({ navigation, route }: Props) {
                 }
               />
             ) : null}
-            <Button label={t('treat.back_home')} variant="secondary" onPress={goHome} />
+            <FigmaButton
+              label={t('treat.back_home')}
+              tone="text"
+              size="md"
+              fullWidth
+              onPress={goHome}
+            />
           </View>
         </ScrollView>
       )}
@@ -110,7 +116,6 @@ export function TreatResultScreen({ navigation, route }: Props) {
 }
 
 const styles = StyleSheet.create({
-  loading: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   content: { flexGrow: 1, justifyContent: 'center' },
 });
 

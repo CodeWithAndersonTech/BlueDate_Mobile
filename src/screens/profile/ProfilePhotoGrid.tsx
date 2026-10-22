@@ -1,6 +1,5 @@
 import React, { useMemo, useState } from 'react';
 import {
-  ActivityIndicator,
   Alert,
   Dimensions,
   Image,
@@ -9,6 +8,7 @@ import {
   Text,
   View,
 } from 'react-native';
+import { FigmaSpinner } from '../../components';
 import { useLocale } from '../../i18n';
 import { useTheme } from '../../theme';
 import {
@@ -162,7 +162,7 @@ export function ProfilePhotoGrid({
               ? `${photos.length}/${MAX_GALLERY_PHOTOS}`
               : String(photos.length)}
           </Text>
-          {busy ? <ActivityIndicator color={theme.colors.primary} /> : null}
+          {busy ? <FigmaSpinner size={16} color={theme.colors.plusCta} /> : null}
         </View>
       </View>
 
@@ -176,7 +176,7 @@ export function ProfilePhotoGrid({
               borderColor: theme.colors.borderStrong,
             },
           ]}>
-          <Text style={[styles.emptyPlus, { color: theme.colors.primary }]}>＋</Text>
+          <Text style={[styles.emptyPlus, { color: theme.colors.plusCta }]}>＋</Text>
           <Text style={[styles.emptyText, { color: theme.colors.textMuted }]}>
             {t('profile.photos_empty')}
           </Text>
@@ -198,7 +198,7 @@ export function ProfilePhotoGrid({
                       borderColor: theme.colors.border,
                     },
                   ]}>
-                  <Text style={[styles.addGlyph, { color: theme.colors.primary }]}>
+                  <Text style={[styles.addGlyph, { color: theme.colors.plusCta }]}>
                     ＋
                   </Text>
                   <Text

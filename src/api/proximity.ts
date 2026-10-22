@@ -30,6 +30,7 @@ export type SubmitSightingsResponse = ApiEnvelope & {
 export type DirectNearbyItem = {
   UserId: number;
   FullName: string;
+  Username?: string | null;
   ProfilePhotoUrl?: string | null;
   Age?: number | null;
   Rssi?: number | null;
@@ -44,6 +45,7 @@ export type DirectNearbyItem = {
 export type BridgeNearbyItem = {
   UserId: number;
   FullName: string;
+  Username?: string | null;
   ProfilePhotoUrl?: string | null;
   Age?: number | null;
   ViaUserId?: number | null;
@@ -65,6 +67,8 @@ type RawNearbyItem = {
   userId?: number;
   FullName?: string;
   fullName?: string;
+  Username?: string | null;
+  username?: string | null;
   ProfilePhotoUrl?: string | null;
   profilePhotoUrl?: string | null;
   Age?: number | null;
@@ -99,6 +103,7 @@ function normalizeDirect(item: RawNearbyItem): DirectNearbyItem {
   return {
     UserId: item.UserId ?? item.userId ?? 0,
     FullName: item.FullName ?? item.fullName ?? '',
+    Username: item.Username ?? item.username ?? null,
     ProfilePhotoUrl: item.ProfilePhotoUrl ?? item.profilePhotoUrl ?? null,
     Age: pickNum(item.Age, item.age),
     Rssi: pickNum(item.Rssi, item.rssi),
@@ -115,6 +120,7 @@ function normalizeBridge(item: RawNearbyItem): BridgeNearbyItem {
   return {
     UserId: item.UserId ?? item.userId ?? 0,
     FullName: item.FullName ?? item.fullName ?? '',
+    Username: item.Username ?? item.username ?? null,
     ProfilePhotoUrl: item.ProfilePhotoUrl ?? item.profilePhotoUrl ?? null,
     Age: pickNum(item.Age, item.age),
     ViaUserId: pickNum(item.ViaUserId, item.viaUserId),

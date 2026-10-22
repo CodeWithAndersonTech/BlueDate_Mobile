@@ -10,6 +10,7 @@
 
 export const images = {
   appLogo: require('./app-logo.png'),
+  crownHero: require('./figma/crown-hero.png'),
 } as const;
 
 export const fonts = {} as const;

@@ -58,9 +58,9 @@ export function HelpScreen({ navigation }: Props) {
             <View
               style={[
                 styles.iconChip,
-                { backgroundColor: theme.colors.primarySoft },
+                { backgroundColor: theme.colors.plusSoft },
               ]}>
-              <Icon name="sparkles" size={18} color={theme.colors.primary} />
+              <Icon name="sparkles" size={18} color={theme.colors.plusCta} />
             </View>
             <Typography variant="bodyStrong">{t('help.tips_title')}</Typography>
           </View>
@@ -117,9 +117,9 @@ export function HelpScreen({ navigation }: Props) {
             <View
               style={[
                 styles.iconChip,
-                { backgroundColor: theme.colors.primarySoft },
+                { backgroundColor: theme.colors.plusSoft },
               ]}>
-              <Icon name="mail" size={18} color={theme.colors.primary} />
+              <Icon name="mail" size={18} color={theme.colors.plusCta} />
             </View>
             <Typography variant="bodyStrong">
               {t('help.contact_title')}

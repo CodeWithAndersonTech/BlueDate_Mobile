@@ -1,7 +1,33 @@
 import * as SignalR from '@microsoft/signalr';
 import { getApiBaseUrl } from '../../config/api';
 import { ChatMessageDto, normalizeMessageDto } from '../../api/chat';
+import {
+  AppNotification,
+  normalizeNotification,
+} from '../../api/notifications';
+import { getAccessToken } from '../../api/sessionStore';
 import { isJwtExpired } from '../../utils/jwt';
+
+/** IIS returns 411 Length Required on empty SignalR negotiate POSTs from RN fetch. */
+class RnHttpClient extends SignalR.DefaultHttpClient {
+  constructor() {
+    super(SignalR.NullLogger.instance);
+  }
+
+  send(request: SignalR.HttpRequest) {
+    const method = (request.method ?? 'GET').toUpperCase();
+    const empty =
+      request.content == null ||
+      request.content === '' ||
+      (typeof ArrayBuffer !== 'undefined' &&
+        request.content instanceof ArrayBuffer &&
+        request.content.byteLength === 0);
+    if (empty && (method === 'POST' || method === 'PUT' || method === 'PATCH')) {
+      request.headers = { ...request.headers, 'Content-Length': '0' };
+    }
+    return super.send(request);
+  }
+}
 
 export type ChatHubHandlers = {
   onReceiveMessage?: (message: ChatMessageDto) => void;
@@ -17,6 +43,9 @@ let connection: SignalR.HubConnection | null = null;
 let handlers: ChatHubHandlers = {};
 
 const notificationListeners = new Set<(unreadCount: number) => void>();
+const notificationItemListeners = new Set<
+  (item: AppNotification, unreadCount: number) => void
+>();
 
 export function setChatHubHandlers(next: ChatHubHandlers) {
   handlers = next;
@@ -27,6 +56,16 @@ export function onNotificationsChanged(listener: (unreadCount: number) => void) 
   notificationListeners.add(listener);
   return () => {
     notificationListeners.delete(listener);
+  };
+}
+
+/** Live inbox row for in-app banners. Persist still happens on the API. */
+export function onNotificationReceived(
+  listener: (item: AppNotification, unreadCount: number) => void,
+) {
+  notificationItemListeners.add(listener);
+  return () => {
+    notificationItemListeners.delete(listener);
   };
 }
 
@@ -53,10 +92,11 @@ export async function connectChatHub(accessToken: string): Promise<boolean> {
 
   connection = new SignalR.HubConnectionBuilder()
     .withUrl(hubUrl, {
-      accessTokenFactory: () => accessToken,
+      httpClient: new RnHttpClient(),
+      accessTokenFactory: () => getAccessToken() || accessToken,
       // RN WebSockets accept Authorization headers; also keep factory for negotiate.
       headers: {
-        Authorization: `Bearer ${accessToken}`,
+        Authorization: `Bearer ${getAccessToken() || accessToken}`,
       },
       // React Native / some proxies prefer long polling fallback.
       transport:
@@ -92,6 +132,20 @@ export async function connectChatHub(accessToken: string): Promise<boolean> {
     notificationListeners.forEach(fn => fn(Number(unreadCount) || 0));
   });
 
+  connection.on(
+    'ReceiveNotification',
+    (raw: unknown, unreadCount: number) => {
+      try {
+        const item = normalizeNotification(raw);
+        if (!item) return;
+        const count = Number(unreadCount) || 0;
+        notificationItemListeners.forEach(fn => fn(item, count));
+      } catch (e) {
+        console.warn('[ChatHub] ReceiveNotification parse error', e);
+      }
+    },
+  );
+
   try {
     await connection.start();
     return true;
@@ -118,7 +172,11 @@ export function isChatHubConnected() {
 
 export async function hubJoinConversation(conversationId: number) {
   if (!isChatHubConnected()) return;
-  await connection!.invoke('JoinConversation', conversationId);
+  try {
+    await connection!.invoke('JoinConversation', conversationId);
+  } catch (e) {
+    console.warn('[ChatHub] join failed', e);
+  }
 }
 
 export async function hubLeaveConversation(conversationId: number) {

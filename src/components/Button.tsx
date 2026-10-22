@@ -1,6 +1,5 @@
 import React from 'react';
 import {
-  ActivityIndicator,
   Pressable,
   StyleProp,
   StyleSheet,
@@ -15,6 +14,7 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated';
 import { useTheme } from '../theme';
+import { FigmaSpinner } from './FigmaUi';
 import { Icon, IconName } from './Icon';
 import { Typography } from './Typography';
 
@@ -183,7 +183,7 @@ export function Button({
           )}
 
           {loading ? (
-            <ActivityIndicator color={contentColor} />
+            <FigmaSpinner size={18} color={contentColor} />
           ) : (
             <View style={[styles.labelRow, { gap: recipe.gap }]}>
               {leftIcon && (

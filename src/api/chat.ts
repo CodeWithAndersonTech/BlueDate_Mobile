@@ -1,6 +1,7 @@
 import { API_PATHS } from '../config/api';
-import { apiRequest, ApiEnvelope } from './client';
-import { resolveMediaUrl } from './photos';
+import { apiRequest, ApiEnvelope, ApiError } from './client';
+import { resolveMediaUrlWithBase } from './photos';
+import { getApiBaseUrl } from '../config/api';
 import { formatRelativeTime } from './social';
 
 export type InboxItemDto = {
@@ -33,6 +34,7 @@ export type ChatConversationUi = {
   online: boolean;
   lastMessage: string;
   lastMessageAt: string;
+  lastMessageAtIso: string | null;
   unreadCount: number;
 };
 
@@ -129,8 +131,10 @@ function formatClock(iso: string): string {
 
 export async function toConversationUi(
   item: InboxItemDto,
+  apiBase?: string,
 ): Promise<ChatConversationUi> {
-  const avatar = await resolveMediaUrl(item.OtherProfileImage);
+  const base = apiBase ?? (await getApiBaseUrl());
+  const avatar = resolveMediaUrlWithBase(base, item.OtherProfileImage);
   return {
     id: String(item.ConversationId),
     userId: String(item.OtherUserId),
@@ -144,6 +148,7 @@ export async function toConversationUi(
     online: false,
     lastMessage: item.LastMessagePreview?.trim() || '',
     lastMessageAt: formatRelativeTime(item.LastMessageAt),
+    lastMessageAtIso: item.LastMessageAt ?? null,
     unreadCount: item.UnreadCount ?? 0,
   };
 }
@@ -180,8 +185,8 @@ export async function fetchInbox(userId: number, token?: string | null) {
   });
 
   const items = (raw.Items ?? raw.items ?? []).map(normalizeInboxItem);
-  const ui = await Promise.all(items.map(toConversationUi));
-  return ui;
+  const base = await getApiBaseUrl();
+  return Promise.all(items.map(item => toConversationUi(item, base)));
 }
 
 export async function fetchUnreadCount(userId: number, token?: string | null) {
@@ -268,7 +273,10 @@ export async function sendMessageRest(
   });
 
   const msg = raw.Message ?? raw.message;
-  return msg ? normalizeMessageDto(msg) : null;
+  if (!msg) {
+    throw new ApiError(400, ['Failed to send message.']);
+  }
+  return normalizeMessageDto(msg);
 }
 
 export async function markConversationRead(

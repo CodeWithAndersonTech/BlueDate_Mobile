@@ -17,7 +17,7 @@ const DEV_PORT = 5135;
  * Mac'in Wi‑Fi IP'si — fiziksel telefon/tablet için gerekli.
  * Terminal: ipconfig getifaddr en0
  */
-const DEV_MAC_HOST = '192.168.1.29';
+const DEV_MAC_HOST = '172.16.4.115';
 
 let resolvedDevUrl: string | null = null;
 
@@ -80,6 +80,7 @@ export const API_PATHS = {
   resetPassword: '/api/Authroizations/reset-password',
   userProfile: '/api/User/profile',
   userBio: '/api/User/bio',
+  userBasics: '/api/User/basics',
   userStatus: '/api/User/status',
   userSearch: '/api/User/search',
   interestTypes: '/api/InterestType',
@@ -130,6 +131,7 @@ export const API_PATHS = {
   notifications: '/api/Notification',
   notificationsUnreadCount: '/api/Notification/unread-count',
   notificationsReadAll: '/api/Notification/read-all',
+  notificationsClear: '/api/Notification/clear',
   notificationRead: (id: number) => `/api/Notification/${id}/read`,
   treat: '/api/Treat',
   treatQuote: '/api/Treat/quote',

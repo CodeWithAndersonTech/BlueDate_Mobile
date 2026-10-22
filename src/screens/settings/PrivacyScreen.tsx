@@ -78,12 +78,12 @@ export function PrivacyScreen({ navigation }: Props) {
               <View
                 style={[
                   styles.iconChip,
-                  { backgroundColor: theme.colors.primarySoft },
+                  { backgroundColor: theme.colors.plusSoft },
                 ]}>
                 <Icon
                   name={section.icon}
                   size={18}
-                  color={theme.colors.primary}
+                  color={theme.colors.plusCta}
                 />
               </View>
               <Typography variant="bodyStrong" style={styles.cardTitle}>

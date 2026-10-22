@@ -46,7 +46,7 @@ export const Input = forwardRef<TextInput, InputProps>(function Input(
   const borderColor = error
     ? theme.colors.danger
     : focused
-    ? theme.colors.primary
+    ? theme.colors.plusCta
     : theme.colors.border;
 
   const handleFocus = useCallback(
@@ -91,7 +91,7 @@ export const Input = forwardRef<TextInput, InputProps>(function Input(
           <Icon
             name={leftIcon}
             size={recipe.icon}
-            color={focused ? theme.colors.primary : theme.colors.textMuted}
+            color={focused ? theme.colors.plusCta : theme.colors.textMuted}
           />
         ) : null}
         <TextInput

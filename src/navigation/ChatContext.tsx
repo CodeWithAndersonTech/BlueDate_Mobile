@@ -25,13 +25,15 @@ import {
   setChatHubHandlers,
 } from '../services/chat/chatHub';
 import { sendMessageRest } from '../api/chat';
+import { prefetchMediaUris } from '../services/photos/prefetchMedia';
+import { ApiError } from '../api/client';
 import { useAuth } from './AuthContext';
 
 type ChatContextValue = {
   unreadCount: number;
   conversations: ChatConversationUi[];
   loadingInbox: boolean;
-  refreshInbox: () => Promise<void>;
+  refreshInbox: (opts?: { force?: boolean }) => Promise<void>;
   refreshUnread: () => Promise<void>;
   joinConversation: (conversationId: number) => Promise<void>;
   leaveConversation: (conversationId: number) => Promise<void>;
@@ -58,6 +60,8 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
   const [unreadCount, setUnreadCount] = useState(0);
   const [conversations, setConversations] = useState<ChatConversationUi[]>([]);
   const [loadingInbox, setLoadingInbox] = useState(false);
+  const inboxHydrated = useRef(false);
+  const lastInboxAt = useRef(0);
 
   const threadListeners = useRef(
     new Map<number, Set<(message: ChatMessageDto) => void>>(),
@@ -76,15 +80,32 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
     }
   }, [userId, accessToken]);
 
-  const refreshInbox = useCallback(async () => {
+  const refreshInbox = useCallback(async (opts?: { force?: boolean }) => {
     if (!userId) {
       setConversations([]);
+      inboxHydrated.current = false;
+      lastInboxAt.current = 0;
       return;
     }
-    setLoadingInbox(true);
+    if (
+      !opts?.force &&
+      inboxHydrated.current &&
+      Date.now() - lastInboxAt.current < 12_000
+    ) {
+      return;
+    }
+    lastInboxAt.current = Date.now();
+    if (!inboxHydrated.current) {
+      setLoadingInbox(true);
+    }
     try {
       const items = await fetchInbox(userId, accessToken);
+      inboxHydrated.current = true;
       setConversations(items);
+      void prefetchMediaUris(
+        items.map(c => c.avatar).filter(Boolean).slice(0, 12),
+        1500,
+      );
       const total = items.reduce((n, c) => n + (c.unreadCount || 0), 0);
       setUnreadCount(total);
     } catch (e) {
@@ -114,6 +135,7 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
           const row = { ...next[idx] };
           row.lastMessage = message.Body;
           row.lastMessageAt = 'now';
+          row.lastMessageAtIso = new Date().toISOString();
           if (!mine) {
             row.unreadCount = (row.unreadCount || 0) + 1;
           }
@@ -187,25 +209,30 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
     ): Promise<ChatMessageDto | null> => {
       if (!userId) return null;
 
-      if (isChatHubConnected()) {
+      // Persist via REST first. Hub invoke on IIS/RN often 411/times out and
+      // the thread then shows a generic “check your connection” alert even
+      // when the API is reachable. Server still broadcasts ReceiveMessage.
+      try {
+        return await sendMessageRest(
+          conversationId,
+          userId,
+          body,
+          clientMessageId,
+          accessToken,
+        );
+      } catch (e) {
+        const business = e instanceof ApiError && e.status !== 0;
+        if (business || !isChatHubConnected()) {
+          throw e;
+        }
         try {
           await hubSendMessage(conversationId, body, clientMessageId);
-          // Hub broadcasts to group including sender; listener will append.
-          // Also optimistically return a stub so UI can wait on echo or use REST fallback path.
           return null;
-        } catch (e) {
-          console.warn('[Chat] hub send failed, falling back to REST', e);
+        } catch (hubErr) {
+          console.warn('[Chat] hub send failed after REST', hubErr);
+          throw e;
         }
       }
-
-      const dto = await sendMessageRest(
-        conversationId,
-        userId,
-        body,
-        clientMessageId,
-        accessToken,
-      );
-      return dto;
     },
     [userId, accessToken],
   );

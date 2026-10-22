@@ -1,18 +1,12 @@
 import React from 'react';
-import {
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  View,
-} from 'react-native';
-import LinearGradient from 'react-native-linear-gradient';
-import { Avatar, Icon, Typography } from '../../components';
-import { StoryUserGroup } from '../../api';
+import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { StoryAvatar, Typography } from '../../components';
+import { isStoryGroupForUser, StoryUserGroup } from '../../api';
 import { useLocale } from '../../i18n';
 import { useTheme } from '../../theme';
 
-const RING: [string, string, string] = ['#F58529', '#DD2A7B', '#8134AF'];
-const RING_EMPTY: [string, string] = ['#C7C7CC', '#C7C7CC'];
+const OUTER = 75;
+const PLUS = 22;
 
 type Props = {
   ownUserId: number;
@@ -24,10 +18,57 @@ type Props = {
   onOpenUser: (userId: number) => void;
 };
 
+function initialsFromName(name: string) {
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return '?';
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+  return `${parts[0][0]}${parts[1][0]}`.toUpperCase();
+}
+
 function displayLabel(group: StoryUserGroup) {
-  const first = group.User.FirstName?.trim();
-  if (first) return first;
-  return group.User.Username || '?';
+  return group.User.Username || group.User.FirstName || '?';
+}
+
+function StoryBubble({
+  uri,
+  fallback,
+  label,
+  hasStory,
+  onPress,
+  onLongPress,
+  accessibilityLabel,
+}: {
+  uri?: string;
+  fallback?: string;
+  label: string;
+  hasStory: boolean;
+  onPress: () => void;
+  onLongPress?: () => void;
+  accessibilityLabel: string;
+}) {
+  return (
+    <Pressable
+      onPress={onPress}
+      onLongPress={onLongPress}
+      style={styles.item}
+      accessibilityRole="button"
+      accessibilityLabel={accessibilityLabel}>
+      <StoryAvatar
+        uri={uri}
+        size={OUTER}
+        hasStory={hasStory}
+        fallback={fallback}
+      />
+      <Typography
+        variant="caption"
+        color="textMuted"
+        numberOfLines={1}
+        align="center"
+        style={styles.label}>
+        {label}
+      </Typography>
+    </Pressable>
+  );
 }
 
 export function StoryRail({
@@ -39,90 +80,65 @@ export function StoryRail({
   onAddFromGallery,
   onOpenUser,
 }: Props) {
-  const theme = useTheme();
   const { t } = useLocale();
+  const theme = useTheme();
 
-  const ownGroup = groups.find(g => g.User.UserId === ownUserId);
+  const ownGroup = groups.find(g => isStoryGroupForUser(g, ownUserId));
   const ownHasStory = (ownGroup?.Stories.length ?? 0) > 0;
+  const ownFace =
+    ownAvatarUri || ownGroup?.User.ProfileImage || undefined;
   const friendGroups = groups.filter(
-    g => g.User.UserId !== ownUserId && g.Stories.length > 0,
+    g => !isStoryGroupForUser(g, ownUserId) && g.Stories.length > 0,
   );
 
   return (
-    <View style={styles.wrap}>
+    <View>
       <ScrollView
         horizontal
         showsHorizontalScrollIndicator={false}
         contentContainerStyle={styles.row}>
-        <Pressable
-          onPress={ownHasStory ? () => onOpenUser(ownUserId) : onAddStory}
-          onLongPress={onAddFromGallery}
-          style={styles.item}
-          accessibilityRole="button"
-          accessibilityLabel={t('stories.your_story')}>
-          <LinearGradient
-            colors={ownHasStory ? RING : RING_EMPTY}
-            start={{ x: 0, y: 1 }}
-            end={{ x: 1, y: 0 }}
-            style={styles.ring}>
-            <View
-              style={[
-                styles.ringInner,
-                { backgroundColor: theme.colors.background },
-              ]}>
-              <Avatar uri={ownAvatarUri} name={ownName || '?'} size="md" />
-            </View>
-          </LinearGradient>
+        <View style={styles.ownSlot}>
+          <StoryBubble
+            uri={ownFace}
+            fallback={initialsFromName(ownName)}
+            label={t('stories.your_story')}
+            hasStory={ownHasStory}
+            onPress={ownHasStory ? () => onOpenUser(ownUserId) : onAddStory}
+            onLongPress={onAddFromGallery}
+            accessibilityLabel={t('stories.your_story')}
+          />
           <Pressable
             onPress={onAddStory}
-            onLongPress={onAddFromGallery}
-            style={[
-              styles.addBadge,
-              {
-                backgroundColor: theme.colors.primary,
-                borderColor: theme.colors.background,
-              },
-            ]}
-            hitSlop={8}
-            accessibilityLabel={t('stories.add')}>
-            <Icon name="plus" size={12} color={theme.colors.onPrimary} />
-          </Pressable>
-          <Typography variant="caption" numberOfLines={1} style={styles.label}>
-            {t('stories.your_story')}
-          </Typography>
-        </Pressable>
-
-        {friendGroups.map(group => (
-          <Pressable
-            key={group.User.UserId}
-            onPress={() => onOpenUser(group.User.UserId)}
-            style={styles.item}
+            hitSlop={6}
             accessibilityRole="button"
-            accessibilityLabel={displayLabel(group)}>
-            <LinearGradient
-              colors={RING}
-              start={{ x: 0, y: 1 }}
-              end={{ x: 1, y: 0 }}
-              style={styles.ring}>
+            accessibilityLabel={t('stories.add')}
+            style={styles.plusHit}>
+            <View
+              style={[
+                styles.plusBadge,
+                {
+                  backgroundColor: theme.colors.plusCta,
+                  borderColor: theme.colors.background,
+                },
+              ]}>
               <View
-                style={[
-                  styles.ringInner,
-                  { backgroundColor: theme.colors.background },
-                ]}>
-                <Avatar
-                  uri={group.User.ProfileImage ?? undefined}
-                  name={displayLabel(group)}
-                  size="md"
-                />
-              </View>
-            </LinearGradient>
-            <Typography
-              variant="caption"
-              numberOfLines={1}
-              style={styles.label}>
-              {displayLabel(group)}
-            </Typography>
+                style={[styles.plusBarH, { backgroundColor: theme.colors.white }]}
+              />
+              <View
+                style={[styles.plusBarV, { backgroundColor: theme.colors.white }]}
+              />
+            </View>
           </Pressable>
+        </View>
+        {friendGroups.map(group => (
+          <StoryBubble
+            key={group.User.UserId}
+            uri={group.User.ProfileImage ?? undefined}
+            label={displayLabel(group)}
+            hasStory
+            onPress={() => onOpenUser(group.User.UserId)}
+            accessibilityLabel={displayLabel(group)}
+          />
         ))}
       </ScrollView>
     </View>
@@ -130,46 +146,48 @@ export function StoryRail({
 }
 
 const styles = StyleSheet.create({
-  wrap: {
-    marginBottom: 8,
-  },
   row: {
-    paddingVertical: 4,
-    gap: 14,
+    gap: 10,
     paddingRight: 8,
   },
-  item: {
-    width: 72,
-    alignItems: 'center',
+  ownSlot: {
+    width: OUTER,
+    position: 'relative',
   },
-  ring: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  ringInner: {
-    width: 58,
-    height: 58,
-    borderRadius: 29,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  addBadge: {
+  plusHit: {
     position: 'absolute',
-    right: 4,
-    top: 42,
-    width: 20,
-    height: 20,
-    borderRadius: 10,
+    right: 0,
+    top: OUTER - PLUS + 2,
+    width: PLUS,
+    height: PLUS,
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 2,
+  },
+  plusBadge: {
+    width: PLUS,
+    height: PLUS,
+    borderRadius: PLUS / 2,
     borderWidth: 2,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  label: {
-    marginTop: 6,
-    width: '100%',
-    textAlign: 'center',
+  plusBarH: {
+    position: 'absolute',
+    width: 10,
+    height: 2,
+    borderRadius: 1,
   },
+  plusBarV: {
+    position: 'absolute',
+    width: 2,
+    height: 10,
+    borderRadius: 1,
+  },
+  item: {
+    width: OUTER,
+    alignItems: 'center',
+    gap: 5,
+  },
+  label: { maxWidth: OUTER },
 });

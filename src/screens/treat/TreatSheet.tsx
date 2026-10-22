@@ -5,10 +5,11 @@ import {
   createTreat,
   getTreatQuote,
   StorePayment,
+  Treat,
   TreatQuote,
   UserProfileInterest,
 } from '../../api';
-import { Button, Icon, SheetModal, Typography } from '../../components';
+import { FigmaButton, FigmaIcon, SheetModal, Typography } from '../../components';
 import { useLocale, userFacingError } from '../../i18n';
 import {
   buyProduct,
@@ -25,7 +26,7 @@ type Props = {
   receiverName: string;
   favorites: UserProfileInterest[];
   onClose: () => void;
-  onSent: () => void;
+  onSent: (treat: Treat) => void;
 };
 
 /** "Favori Seç" — pick one of the receiver's favorites and treat them. */
@@ -91,7 +92,7 @@ export function TreatSheet({
         pending.current = paid;
       }
 
-      await createTreat({
+      const next = await createTreat({
         receiverUserId,
         userInterestId: selectedId,
         message,
@@ -102,7 +103,7 @@ export function TreatSheet({
         await completePurchase(paid.purchase, true);
         pending.current = null;
       }
-      onSent();
+      onSent(next);
     } catch (error) {
       if (error instanceof IapCancelledError) return;
       Alert.alert(
@@ -162,8 +163,8 @@ export function TreatSheet({
                     borderRadius: theme.radius.md,
                     padding: theme.space.md,
                     gap: theme.space.md,
-                    borderColor: selected ? theme.colors.primary : theme.colors.border,
-                    backgroundColor: selected ? theme.colors.primarySoft : theme.colors.surfaceAlt,
+                    borderColor: selected ? theme.colors.plusCta : theme.colors.border,
+                    backgroundColor: selected ? theme.colors.plusSoft : theme.colors.surfaceAlt,
                   },
                 ]}>
                 <Typography variant="title">{emojiFor(fav.InterestTypeCode)}</Typography>
@@ -178,10 +179,10 @@ export function TreatSheet({
                 <View
                   style={[
                     styles.radio,
-                    { borderColor: selected ? theme.colors.primary : theme.colors.borderStrong },
+                    { borderColor: selected ? theme.colors.plusCta : theme.colors.borderStrong },
                   ]}>
                   {selected ? (
-                    <View style={[styles.radioDot, { backgroundColor: theme.colors.primary }]} />
+                    <View style={[styles.radioDot, { backgroundColor: theme.colors.plusCta }]} />
                   ) : null}
                 </View>
               </Pressable>
@@ -221,16 +222,17 @@ export function TreatSheet({
 
       {quote?.requiresPayment ? (
         <View style={styles.note}>
-          <Icon name="crown" size={theme.iconSize.xs} color={theme.colors.premium} filled />
+          <FigmaIcon name="crown" size={theme.iconSize.xs} color={theme.colors.premium} />
           <Typography variant="caption" color="textMuted" style={styles.noteText}>
             {t('treat.premium_free_hint')}
           </Typography>
         </View>
       ) : null}
 
-      <Button
+      <FigmaButton
         label={cta}
-        leftIcon="gift"
+        size="md"
+        fullWidth
         disabled={!selectedId || favorites.length === 0}
         loading={sending}
         onPress={() => {

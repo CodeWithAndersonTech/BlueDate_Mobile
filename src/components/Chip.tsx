@@ -34,14 +34,14 @@ export function Chip({
         ? theme.colors.success
         : theme.colors.danger
       : selected
-        ? theme.colors.primary
+        ? theme.colors.plusCta
         : theme.colors.surfaceAlt;
 
   const contentColor =
     tone === 'status'
       ? theme.colors.white
       : selected
-        ? theme.colors.onPrimary
+        ? theme.colors.white
         : theme.colors.textSecondary;
 
   return (

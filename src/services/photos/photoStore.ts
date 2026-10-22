@@ -103,9 +103,36 @@ export async function loadProfilePhotos(
   );
 
   return {
-    avatarUri: remoteAvatar ?? local.avatarUri,
+    avatarUri: preferDisplayAvatar(remoteAvatar, local.avatarUri),
     gallery,
   };
+}
+
+const memoryAvatars = new Map<number, string>();
+
+/** Prefer a reachable http(s) face over leftover file:// / empty values. */
+export function preferDisplayAvatar(
+  ...candidates: Array<string | null | undefined>
+): string | undefined {
+  const list = candidates
+    .map(value => (typeof value === 'string' ? value.trim() : ''))
+    .filter(Boolean);
+  return (
+    list.find(uri => /^https?:\/\//i.test(uri)) ??
+    list.find(uri => !uri.startsWith('file://')) ??
+    list[0]
+  );
+}
+
+export function peekCachedAvatar(userId: number | null | undefined): string | undefined {
+  if (!userId) return undefined;
+  return memoryAvatars.get(userId);
+}
+
+export function rememberAvatar(userId: number, uri?: string | null) {
+  const next = preferDisplayAvatar(uri);
+  if (!userId || !next) return;
+  memoryAvatars.set(userId, next);
 }
 
 /**

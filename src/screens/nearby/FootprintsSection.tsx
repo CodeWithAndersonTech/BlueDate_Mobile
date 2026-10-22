@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 import { Image, Pressable, ScrollView, StyleSheet, View } from 'react-native';
-import { FootprintGroup, formatRelativeTime } from '../../api';
-import { Icon, SheetModal, Typography } from '../../components';
+import LinearGradient from 'react-native-linear-gradient';
+import { FootprintGroup } from '../../api';
+import { FigmaIcon, SheetModal, Typography } from '../../components';
 import { useLocale } from '../../i18n';
 import { useTheme } from '../../theme';
 
@@ -12,53 +13,81 @@ type Props = {
   status: FootprintsStatus;
   windowHours: number;
   onOpen: (index: number) => void;
+  onSeeAll?: () => void;
 };
 
-const BUBBLE = 68;
+const OUTER = 75;
+const PHOTO = 66;
 
 type BubbleProps = { group: FootprintGroup; onPress: () => void };
 
-const FootprintBubble = React.memo(function FootprintBubble({ group, onPress }: BubbleProps) {
+const FootprintBubble = React.memo(function FootprintBubble({
+  group,
+  onPress,
+}: BubbleProps) {
   const theme = useTheme();
   const cover = group.User.ProfileImage || group.Stories[0]?.MediaUrl;
-  const firstName = group.User.FirstName || group.User.Username;
+  const label = group.User.Username || group.User.FirstName;
   return (
-    <Pressable onPress={onPress} style={styles.bubble} accessibilityRole="button" accessibilityLabel={firstName}>
-      <View style={[styles.ring, { borderColor: theme.colors.premium }]}>
-        <View style={[styles.photo, { backgroundColor: theme.colors.surfaceAlt }]}>
+    <Pressable
+      onPress={onPress}
+      style={styles.bubble}
+      accessibilityRole="button"
+      accessibilityLabel={label}>
+      <LinearGradient
+        colors={theme.gradients.storyRing}
+        start={{ x: 0, y: 1 }}
+        end={{ x: 1, y: 0 }}
+        style={styles.ring}>
+        <View
+          style={[styles.photo, { backgroundColor: theme.colors.surfaceAlt }]}>
           {cover ? (
-            <Image source={{ uri: cover }} style={styles.fill} fadeDuration={0} resizeMode="cover" />
+            <Image
+              source={{ uri: cover }}
+              style={styles.fill}
+              fadeDuration={0}
+              resizeMode="cover"
+            />
           ) : (
-            <Icon name="footprints" size={theme.iconSize.lg} color={theme.colors.textMuted} />
+            <View style={styles.fallback}>
+              <FigmaIcon name="footprints" size={theme.iconSize.md} />
+            </View>
           )}
         </View>
-      </View>
-      <Typography variant="caption" numberOfLines={1} style={styles.bubbleName}>
-        {firstName}
-      </Typography>
-      <Typography variant="overline" color="textMuted" numberOfLines={1}>
-        {formatRelativeTime(group.LastSharedAt)}
+      </LinearGradient>
+      <Typography variant="caption" numberOfLines={1} align="center" style={styles.bubbleName}>
+        {label}
       </Typography>
     </Pressable>
   );
 });
 
 /** "Ayak İzi": stories shared here in the last hours by people who have left. */
-export function FootprintsSection({ items, status, windowHours, onOpen }: Props) {
+export function FootprintsSection({
+  items,
+  status,
+  windowHours,
+  onOpen,
+}: Props) {
   const theme = useTheme();
   const { t } = useLocale();
   const [allOpen, setAllOpen] = useState(false);
 
   return (
-    <View style={{ gap: theme.space.sm }}>
+    <View>
       <View style={styles.headerRow}>
-        <Icon name="footprints" size={theme.iconSize.sm} color={theme.colors.premium} />
-        <Typography variant="title" style={styles.flex}>
-          {t('nearby.footprints_title')}
-        </Typography>
+        <View style={styles.headerLeft}>
+          <FigmaIcon name="footprints" size={20} />
+          <Typography variant="callout" weight="600">
+            {t('nearby.footprints_title')}
+          </Typography>
+        </View>
         {items.length > 0 ? (
-          <Pressable onPress={() => setAllOpen(true)} hitSlop={8} accessibilityRole="button">
-            <Typography variant="caption" color="primary">
+          <Pressable
+            onPress={() => setAllOpen(true)}
+            hitSlop={8}
+            accessibilityRole="button">
+            <Typography variant="caption" color="premium" weight="600">
               {t('nearby.see_all')}
             </Typography>
           </Pressable>
@@ -69,9 +98,13 @@ export function FootprintsSection({ items, status, windowHours, onOpen }: Props)
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
-          contentContainerStyle={{ gap: theme.space.md }}>
+          contentContainerStyle={styles.rail}>
           {items.map((group, index) => (
-            <FootprintBubble key={group.User.UserId} group={group} onPress={() => onOpen(index)} />
+            <FootprintBubble
+              key={group.User.UserId}
+              group={group}
+              onPress={() => onOpen(index)}
+            />
           ))}
         </ScrollView>
       ) : (
@@ -80,11 +113,17 @@ export function FootprintsSection({ items, status, windowHours, onOpen }: Props)
             ? t('nearby.footprints_no_location')
             : status === 'loading'
               ? t('nearby.footprints_loading')
-              : t('nearby.footprints_empty').replace('{hours}', String(windowHours))}
+              : t('nearby.footprints_empty').replace(
+                  '{hours}',
+                  String(windowHours),
+                )}
         </Typography>
       )}
 
-      <SheetModal visible={allOpen} title={t('nearby.footprints_title')} onClose={() => setAllOpen(false)}>
+      <SheetModal
+        visible={allOpen}
+        title={t('nearby.footprints_title')}
+        onClose={() => setAllOpen(false)}>
         <ScrollView style={styles.allList} contentContainerStyle={styles.allGrid}>
           {items.map((group, index) => (
             <FootprintBubble
@@ -103,25 +142,37 @@ export function FootprintsSection({ items, status, windowHours, onOpen }: Props)
 }
 
 const styles = StyleSheet.create({
-  flex: { flex: 1 },
-  headerRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  bubble: { width: BUBBLE + 8, alignItems: 'center', gap: 2 },
-  ring: {
-    width: BUBBLE + 6,
-    height: BUBBLE + 6,
-    borderRadius: (BUBBLE + 6) / 2,
-    borderWidth: 2.5,
-    padding: 2,
+  headerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 10,
   },
-  photo: {
+  headerLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
     flex: 1,
-    borderRadius: BUBBLE / 2,
-    overflow: 'hidden',
+  },
+  rail: { gap: 10 },
+  bubble: { width: OUTER, alignItems: 'center', gap: 5 },
+  ring: {
+    width: OUTER,
+    height: OUTER,
+    borderRadius: OUTER / 2,
+    padding: (OUTER - PHOTO) / 2,
     alignItems: 'center',
     justifyContent: 'center',
   },
+  photo: {
+    width: PHOTO,
+    height: PHOTO,
+    borderRadius: PHOTO / 2,
+    overflow: 'hidden',
+  },
   fill: { width: '100%', height: '100%' },
-  bubbleName: { maxWidth: BUBBLE + 8 },
+  fallback: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+  bubbleName: { maxWidth: OUTER },
   allList: { maxHeight: 420 },
   allGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 14 },
 });

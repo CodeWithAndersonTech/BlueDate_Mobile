@@ -29,11 +29,34 @@ export type FriendshipListResponse = ApiEnvelope & {
   items?: FriendshipListItem[];
 };
 
+export function normalizeSocialUser(raw: Partial<SocialUser> & {
+  userId?: number;
+  firstName?: string;
+  lastName?: string;
+  username?: string;
+  profileImage?: string | null;
+  bio?: string | null;
+  isVerified?: boolean;
+} | null | undefined): SocialUser {
+  return {
+    UserId: Number(raw?.UserId ?? raw?.userId ?? 0),
+    FirstName: raw?.FirstName ?? raw?.firstName ?? '',
+    LastName: raw?.LastName ?? raw?.lastName ?? '',
+    Username: raw?.Username ?? raw?.username ?? '',
+    ProfileImage: raw?.ProfileImage ?? raw?.profileImage ?? null,
+    Bio: raw?.Bio ?? raw?.bio ?? null,
+    IsVerified: raw?.IsVerified ?? raw?.isVerified ?? false,
+  };
+}
+
 /** Normalize list payload whether API emits `Items` or `items`. */
 export function friendshipItems(
   res: { Items?: FriendshipListItem[]; items?: FriendshipListItem[] } | null | undefined,
 ): FriendshipListItem[] {
-  return res?.Items ?? res?.items ?? [];
+  return (res?.Items ?? res?.items ?? []).map(item => ({
+    ...item,
+    User: normalizeSocialUser(item.User ?? (item as { user?: SocialUser }).user),
+  }));
 }
 
 /** Turn relative `/uploads/...` paths into absolute URLs for Avatar. */

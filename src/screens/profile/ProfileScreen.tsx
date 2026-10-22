@@ -9,6 +9,7 @@ import {
   StatusBar,
   StyleSheet,
   Text,
+  useWindowDimensions,
   View,
 } from 'react-native';
 import Animated, {
@@ -17,21 +18,25 @@ import Animated, {
   useSharedValue,
   withTiming,
 } from 'react-native-reanimated';
-import {
-  SafeAreaView,
-} from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import {
-  friendshipItems,
-  getFriends,
   getInterestTypes,
   getUserProfile,
+  parseInterestTypes,
   InterestTypeItem,
   resolveMediaUrl,
   updateUserStatus,
   UserProfileResponse,
 } from '../../api';
-import { Icon, StatusEditModal, TabScreenScrollView } from '../../components';
+import {
+  EmptyState,
+  FigmaButton,
+  FigmaIcon,
+  StatusEditModal,
+  TabScreenScrollView,
+  Typography,
+  useScreenTopPad,
+} from '../../components';
 import { useLocale, userFacingError } from '../../i18n';
 import { useAuth } from '../../navigation/AuthContext';
 import { useTabBarClearance } from '../../navigation/tabBarLayout';
@@ -44,19 +49,24 @@ import {
   loadProfilePhotos,
   pickAndSetAvatar,
   ProfilePhoto,
+  rememberAvatar,
 } from '../../services/photos/photoStore';
+import { prefetchMediaUris } from '../../services/photos/prefetchMedia';
 import { useTheme } from '../../theme';
+import { afterUiSettled } from '../../utils/afterUiSettled';
 import { breadcrumb } from '../../utils/crashLog';
 import { zodiacSymbolFromBirthDate } from '../../utils/zodiac';
-import { PhotoViewerModal } from './PhotoViewerModal';
-import { ProfilePhotoGrid } from './ProfilePhotoGrid';
+import { useHideTabBar } from '../../navigation/useHideTabBar';
+const LazyPhotoViewer = React.lazy(async () => {
+  const mod = await import('./PhotoViewerModal');
+  return { default: mod.PhotoViewerModal };
+});
 import { ProfileSkeleton } from './ProfileSkeleton';
 
 type Props = NativeStackScreenProps<ProfileStackParamList, 'ProfileMain'>;
 
-const AVATAR_SIZE = 86;
-const TILE_WIDTH = '48%';
-const TILE_HEIGHT = 100;
+const COVER_RATIO = 478 / 393;
+const AVATAR_RATIO = 82 / 393;
 
 const INTEREST_EMOJI: { match: RegExp; emoji: string }[] = [
   { match: /food|yemek|yeme/i, emoji: '🍽' },
@@ -91,7 +101,15 @@ function interestEmoji(type: InterestTypeItem): string {
 export function ProfileScreen({ navigation }: Props) {
   const theme = useTheme();
   const { t } = useLocale();
+  const { width: windowWidth, height: windowHeight } = useWindowDimensions();
+  const topPad = useScreenTopPad();
   const tabClearance = useTabBarClearance(24);
+  // Width-scaled Figma cover (~56% of a short 852pt frame) eats a Pro Max
+  // and leaves Hakkımda under the tab bar with nothing to scroll.
+  const coverH = Math.round(
+    Math.min(windowWidth * COVER_RATIO, windowHeight * 0.3, 280),
+  );
+  const avatarSize = Math.round(windowWidth * AVATAR_RATIO);
   const { userId, accessToken } = useAuth();
 
   const [profile, setProfile] = useState<UserProfileResponse | null>(null);
@@ -101,11 +119,14 @@ export function ProfileScreen({ navigation }: Props) {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [friendCount, setFriendCount] = useState(0);
   const [verifyTipOpen, setVerifyTipOpen] = useState(false);
   const [statusModalOpen, setStatusModalOpen] = useState(false);
   const [statusSaving, setStatusSaving] = useState(false);
   const [avatarViewerOpen, setAvatarViewerOpen] = useState(false);
+  const [viewerStartIndex, setViewerStartIndex] = useState(0);
+  const [moreOpen, setMoreOpen] = useState(false);
+  const [coverIndex, setCoverIndex] = useState(0);
+  useHideTabBar(avatarViewerOpen || statusModalOpen);
   const statusText = (() => {
     const text = (profile?.StatusText ?? '').trim();
     if (!text) return '';
@@ -117,6 +138,7 @@ export function ProfileScreen({ navigation }: Props) {
   const contentOpacity = useSharedValue(1);
   const profileRef = useRef<UserProfileResponse | null>(null);
   profileRef.current = profile;
+  const lastLoadAt = useRef(0);
 
   const closeVerifyTip = () => setVerifyTipOpen(false);
 
@@ -136,52 +158,64 @@ export function ProfileScreen({ navigation }: Props) {
       setError(null);
 
       try {
-        const [
-          profileResponse,
-          interestTypesResponse,
-          photoBundle,
-          friendsRes,
-        ] = await Promise.all([
-          getUserProfile(userId, accessToken),
-          getInterestTypes(accessToken).catch(() => null),
-          loadProfilePhotos(userId, accessToken).catch(() => ({
-            gallery: [] as ProfilePhoto[],
-            avatarUri: undefined as string | undefined,
-          })),
-          getFriends(userId, accessToken).catch(() => ({ Items: [] })),
-        ]);
+        const profileResponse = await getUserProfile(userId, accessToken);
+        if (!Number(profileResponse?.Id)) {
+          throw new Error('profile-empty');
+        }
         setProfile(profileResponse);
-        setInterestTypes(
-          [
-            ...(interestTypesResponse?.GetAllInterestTypeQueryCommonObject ??
-              []),
-          ].sort((a, b) => (a.SortOrder ?? 0) - (b.SortOrder ?? 0)),
-        );
-        setPhotos(photoBundle.gallery);
-        setFriendCount(friendshipItems(friendsRes).length);
-        const profileAvatar = await resolveMediaUrl(profileResponse.ProfileImage);
-        setAvatarUri(photoBundle.avatarUri ?? profileAvatar);
-        // Soft settle after skeleton — only when this was a cold load.
-        if (!profileRef.current) {
-          contentOpacity.value = 0;
-          contentOpacity.value = withTiming(1, {
-            duration: 220,
-            easing: Easing.out(Easing.quad),
-          });
+        setError(null);
+        lastLoadAt.current = Date.now();
+
+        try {
+          const [interestTypesResponse, photoBundle] = await Promise.all([
+            getInterestTypes(accessToken).catch(() => null),
+            loadProfilePhotos(userId, accessToken).catch(() => ({
+              gallery: [] as ProfilePhoto[],
+              avatarUri: undefined as string | undefined,
+            })),
+          ]);
+          const profileAvatar = await resolveMediaUrl(
+            profileResponse.ProfileImage,
+          ).catch(() => undefined);
+          const nextAvatar = photoBundle.avatarUri ?? profileAvatar;
+          const gallery = photoBundle.gallery ?? [];
+          setInterestTypes(parseInterestTypes(interestTypesResponse));
+          setPhotos(gallery);
+          setAvatarUri(nextAvatar);
+          if (userId && nextAvatar) {
+            rememberAvatar(userId, nextAvatar);
+          }
+          void prefetchMediaUris([nextAvatar, ...gallery.map(p => p.uri)]).catch(
+            () => undefined,
+          );
+        } catch (extraErr) {
+          if (__DEV__) {
+            console.warn('[Profile] extras failed', extraErr);
+          }
         }
       } catch (err) {
-        setError(err instanceof Error ? err.message : t('profile.load_failed'));
+        if (__DEV__) {
+          console.warn('[Profile] load failed', err);
+        }
+        if (!profileRef.current) {
+          setError(userFacingError(err, t, 'profile.load_failed'));
+        }
       } finally {
         setLoading(false);
         setRefreshing(false);
       }
     },
-    [userId, accessToken, t, contentOpacity],
+    [userId, accessToken, t],
   );
 
   useFocusEffect(
     useCallback(() => {
-      loadProfile();
+      const recent =
+        lastLoadAt.current > 0 &&
+        Date.now() - lastLoadAt.current < 20_000 &&
+        profileRef.current != null;
+      if (recent) return;
+      void loadProfile();
     }, [loadProfile]),
   );
 
@@ -205,9 +239,9 @@ export function ProfileScreen({ navigation }: Props) {
     }
     return line;
   })();
-  const bio = profile?.Bio?.trim() ?? '';
+  const bio = (typeof profile?.Bio === 'string' ? profile.Bio : '').trim();
   const hasBio = bio.length > 0;
-  const interests = profile?.Interests ?? [];
+  const interests = Array.isArray(profile?.Interests) ? profile.Interests : [];
   const hasInterests = interests.length > 0;
   const interestsComplete =
     interestTypes.length > 0 &&
@@ -220,8 +254,10 @@ export function ProfileScreen({ navigation }: Props) {
     );
   const hasPhoto =
     photos.length > 0 ||
-    Boolean(avatarUri?.trim()) ||
-    Boolean(profile?.ProfileImage?.trim());
+    Boolean(typeof avatarUri === 'string' && avatarUri.trim()) ||
+    Boolean(
+      typeof profile?.ProfileImage === 'string' && profile.ProfileImage.trim(),
+    );
   const isVerified = interestsComplete && hasPhoto;
 
   const saveStatus = async (next: string) => {
@@ -288,27 +324,107 @@ export function ProfileScreen({ navigation }: Props) {
     }
   };
 
-  const avatarPreviewPhotos = useMemo<ProfilePhoto[]>(() => {
-    if (!avatarUri) {
-      return [];
+  const coverPhotos = useMemo<ProfilePhoto[]>(() => {
+    const seen = new Set<string>();
+    const rows: ProfilePhoto[] = [];
+    const push = (photo: ProfilePhoto) => {
+      if (!photo.uri || seen.has(photo.uri)) return;
+      seen.add(photo.uri);
+      rows.push(photo);
+    };
+    photos.forEach(push);
+    if (avatarUri) {
+      push({ id: 'avatar', uri: avatarUri, sortOrder: -1 });
     }
-    return [{ id: 'avatar', uri: avatarUri, sortOrder: 0 }];
-  }, [avatarUri]);
+    return rows;
+  }, [photos, avatarUri]);
+
+  const coverPhoto = coverPhotos[Math.min(coverIndex, Math.max(coverPhotos.length - 1, 0))];
+
+  const viewerPhotos = useMemo<ProfilePhoto[]>(() => {
+    const seen = new Set<string>();
+    const rows: ProfilePhoto[] = [];
+    const push = (photo: ProfilePhoto) => {
+      if (!photo.uri || seen.has(photo.uri)) return;
+      seen.add(photo.uri);
+      rows.push(photo);
+    };
+    if (avatarUri) {
+      push({ id: 'avatar', uri: avatarUri, sortOrder: -1 });
+    }
+    photos.forEach(push);
+    return rows;
+  }, [photos, avatarUri]);
+
+  const openPhotoViewer = useCallback(
+    (startUri?: string) => {
+      const list = viewerPhotos;
+      if (list.length === 0) {
+        return;
+      }
+      let start = 0;
+      if (startUri) {
+        const idx = list.findIndex(item => item.uri === startUri);
+        if (idx >= 0) {
+          start = idx;
+        }
+      }
+      void Image.prefetch(list[start]?.uri ?? startUri ?? '').catch(() => undefined);
+      setMoreOpen(false);
+      setViewerStartIndex(start);
+      afterUiSettled(() => setAvatarViewerOpen(true));
+    },
+    [viewerPhotos],
+  );
 
   const onAvatarPress = () => {
     if (avatarUri) {
-      setAvatarViewerOpen(true);
+      openPhotoViewer(avatarUri);
       return;
     }
     void onChangeAvatar();
   };
 
-  const shell = (children: React.ReactNode) => (
-    <SafeAreaView
-      edges={['top']}
+  const openViewer = () => {
+    openPhotoViewer(coverPhoto?.uri);
+  };
+
+  const goPreview = () => {
+    setMoreOpen(false);
+    if (!userId) return;
+    afterUiSettled(() => {
+      navigation.navigate('UserProfile', { userId: String(userId) });
+    });
+  };
+
+  const goSettings = () => {
+    setMoreOpen(false);
+    afterUiSettled(() => navigation.navigate('Settings'));
+  };
+
+  const goEdit = (params?: {
+    focus?: 'bio' | 'interests';
+    interestTypeId?: number;
+  }) => {
+    setMoreOpen(false);
+    afterUiSettled(() => {
+      if (params) {
+        navigation.navigate('EditProfile', params);
+        return;
+      }
+      navigation.navigate('EditProfile' as never);
+    });
+  };
+
+  const shell = (children: React.ReactNode, bleed = false) => (
+    <View
       style={[
         styles.root,
-        { backgroundColor: theme.colors.background, overflow: 'visible' },
+        {
+          backgroundColor: theme.colors.background,
+          overflow: 'visible',
+          paddingTop: bleed ? 0 : topPad,
+        },
       ]}>
       <StatusBar
         barStyle={theme.isDark ? 'light-content' : 'dark-content'}
@@ -328,13 +444,53 @@ export function ProfileScreen({ navigation }: Props) {
           void saveStatus('');
         }}
       />
-      <PhotoViewerModal
-        photos={avatarViewerOpen ? avatarPreviewPhotos : []}
-        index={avatarViewerOpen ? 0 : -1}
-        editable={false}
-        onClose={() => setAvatarViewerOpen(false)}
-      />
-    </SafeAreaView>
+      {avatarViewerOpen ? (
+        <React.Suspense fallback={null}>
+          <LazyPhotoViewer
+            photos={viewerPhotos}
+            index={Math.min(
+              viewerStartIndex,
+              Math.max(viewerPhotos.length - 1, 0),
+            )}
+            editable={false}
+            onClose={() => setAvatarViewerOpen(false)}
+            onIndexChange={setViewerStartIndex}
+          />
+        </React.Suspense>
+      ) : null}
+      {moreOpen ? (
+        <View pointerEvents="box-none" style={styles.moreHost}>
+          <Pressable
+            style={StyleSheet.absoluteFill}
+            onPress={() => setMoreOpen(false)}
+            accessibilityRole="button"
+            accessibilityLabel={t('common.close')}
+          />
+          <View
+            style={[
+              styles.moreMenu,
+              {
+                top: topPad + 44,
+                backgroundColor: theme.colors.card,
+                borderColor: theme.colors.border,
+              },
+            ]}>
+            <Pressable
+              onPress={goPreview}
+              style={styles.moreRow}
+              accessibilityRole="button">
+              <Typography variant="callout">{t('profile.preview')}</Typography>
+            </Pressable>
+            <Pressable
+              onPress={goSettings}
+              style={styles.moreRow}
+              accessibilityRole="button">
+              <Typography variant="callout">{t('settings.title')}</Typography>
+            </Pressable>
+          </View>
+        </View>
+      ) : null}
+    </View>
   );
 
   const showSkeleton = loading && !profile;
@@ -348,22 +504,23 @@ export function ProfileScreen({ navigation }: Props) {
         scrollEnabled={false}>
         <ProfileSkeleton />
       </ScrollView>,
+      true,
     );
   }
 
   if (error && !profile) {
     return shell(
       <View style={[styles.center, { paddingBottom: tabClearance }]}>
-        <Text style={[styles.errorText, { color: theme.colors.danger }]}>
-          {error}
-        </Text>
-        <Pressable
-          onPress={() => loadProfile()}
-          style={[styles.retryBtn, { backgroundColor: theme.colors.primary }]}>
-          <Text style={[styles.retryLabel, { color: theme.colors.onPrimary }]}>
-            {t('profile.retry')}
-          </Text>
-        </Pressable>
+        <EmptyState
+          fill
+          figmaIcon="rotateRight"
+          title={t('profile.load_failed')}
+          description={error}
+          actionLabel={t('profile.retry')}
+          onAction={() => {
+            void loadProfile();
+          }}
+        />
       </View>,
     );
   }
@@ -372,573 +529,286 @@ export function ProfileScreen({ navigation }: Props) {
     return shell(<View />);
   }
 
+  const interestCards =
+    interestTypes.length > 0
+      ? interestTypes.map(type => {
+          const existing = interests.find(
+            item =>
+              Number(item.InterestTypeId) === Number(type.Id) ||
+              item.InterestTypeName === type.Name,
+          );
+          const value = existing?.Value?.trim() ?? '';
+          return {
+            key: String(type.Id),
+            label: type.Name,
+            value,
+            emoji: interestEmoji(type),
+            typeId: type.Id,
+          };
+        })
+      : interests.map(item => ({
+          key: String(item.Id),
+          label: item.InterestTypeName || t('profile.interests'),
+          value: item.Value?.trim() ?? '',
+          emoji: '✨',
+          typeId:
+            item.InterestTypeId != null ? Number(item.InterestTypeId) : undefined,
+        }));
+
   return shell(
     <Animated.View style={[styles.flex, contentFadeStyle]}>
       <TabScreenScrollView
-        // One interest-tile row of breathing room under the last tile.
-        bottomSpacing={TILE_HEIGHT}
+        bottomSpacing={32}
+        alwaysBounceVertical
         onScrollBeginDrag={closeVerifyTip}
         scrollEventThrottle={16}
         keyboardShouldPersistTaps="handled"
+        contentContainerStyle={styles.scrollContent}
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
             onRefresh={() => loadProfile(true)}
-            tintColor={theme.colors.primary}
+            tintColor={theme.colors.plusCta}
           />
         }>
-        <View style={styles.header}>
-          {verifyTipOpen ? (
+        <View style={[styles.coverWrap, { height: coverH }]}>
+          {coverPhoto ? (
             <Pressable
-              style={styles.verifyTipDismiss}
-              onPress={closeVerifyTip}
-              accessibilityRole="button"
-              accessibilityLabel={t('common.close')}
-            />
-          ) : null}
-          <View style={styles.headerActions}>
-            {userId ? (
-              <Pressable
-                onPress={() => {
-                  closeVerifyTip();
-                  navigation.navigate('UserProfile', {
-                    userId: String(userId),
-                  });
-                }}
-                hitSlop={8}
-                accessibilityRole="button"
-                accessibilityLabel={t('profile.preview')}
-                accessibilityHint={t('profile.preview_hint')}
-                style={[
-                  styles.headerActionBtn,
-                  { backgroundColor: theme.colors.surfaceAlt },
-                ]}>
-                <Icon name="eye" size={18} color={theme.colors.text} />
-              </Pressable>
-            ) : null}
-            <Pressable
-              onPress={() => {
-                closeVerifyTip();
-                navigation.navigate('EditProfile' as never);
-              }}
-              hitSlop={8}
-              accessibilityRole="button"
-              accessibilityLabel={t('profile.edit')}
-              style={[
-                styles.headerActionBtn,
-                { backgroundColor: theme.colors.surfaceAlt },
-              ]}>
-              <Text
-                style={[styles.headerActionGlyph, { color: theme.colors.text }]}>
-                ✎
-              </Text>
-            </Pressable>
-            <Pressable
-              onPress={() => {
-                closeVerifyTip();
-                navigation.navigate('Settings');
-              }}
-              hitSlop={8}
-              accessibilityRole="button"
-              accessibilityLabel="Settings"
-              style={[
-                styles.headerActionBtn,
-                { backgroundColor: theme.colors.surfaceAlt },
-              ]}>
-              <Text
-                style={[styles.headerActionGlyph, { color: theme.colors.text }]}>
-                ⚙
-              </Text>
-            </Pressable>
-          </View>
-
-          <View style={styles.headerTop}>
-            <View style={styles.avatarRing}>
-              <Pressable
-                onPress={onAvatarPress}
-                accessibilityRole="button"
-                accessibilityLabel={
-                  avatarUri
-                    ? t('profile.view_avatar')
-                    : t('profile.change_avatar')
-                }>
-                {avatarUri ? (
-                  <Image
-                    source={{ uri: avatarUri }}
-                    style={[
-                      styles.avatar,
-                      { borderColor: theme.colors.border },
-                    ]}
-                  />
-                ) : (
-                  <View
-                    style={[
-                      styles.avatar,
-                      styles.avatarFallback,
-                      {
-                        backgroundColor: theme.colors.primarySoft,
-                        borderColor: theme.colors.border,
-                      },
-                    ]}>
-                    <Text
-                      style={[
-                        styles.avatarInitials,
-                        { color: theme.colors.primary },
-                      ]}>
-                      {initialsFromName(fullName)}
-                    </Text>
-                  </View>
-                )}
-              </Pressable>
-              <Pressable
-                onPress={() => {
-                  closeVerifyTip();
-                  setStatusModalOpen(true);
-                }}
-                hitSlop={14}
-                accessibilityRole="button"
-                accessibilityLabel={t('profile.status_title')}
-                style={[
-                  styles.statusBubble,
-                  {
-                    backgroundColor: theme.colors.card,
-                    borderColor: theme.colors.border,
-                  },
-                  theme.shadows.sm,
-                ]}>
-                <Text
-                  style={[styles.statusBubbleText, { color: theme.colors.text }]}
-                  numberOfLines={1}>
-                  {statusText || '+'}
-                </Text>
-              </Pressable>
-              <Pressable
-                onPress={onChangeAvatar}
-                hitSlop={6}
-                accessibilityRole="button"
-                accessibilityLabel={t('profile.change_avatar')}
-                style={[
-                  styles.avatarCamBadge,
-                  { backgroundColor: theme.colors.primary },
-                ]}>
-                <Text style={{ color: theme.colors.onPrimary, fontSize: 11 }}>
-                  ✎
-                </Text>
-              </Pressable>
-              <View
-                style={[
-                  styles.onlineDot,
-                  {
-                    backgroundColor: theme.colors.online,
-                    borderColor: theme.colors.background,
-                  },
-                ]}
+              onPress={openViewer}
+              delayPressIn={160}
+              style={StyleSheet.absoluteFill}
+              accessibilityRole="imagebutton"
+              accessibilityLabel={t('profile.view_avatar')}>
+              <Image
+                source={{ uri: coverPhoto.uri }}
+                style={styles.cover}
+                fadeDuration={0}
+                resizeMode="cover"
               />
-            </View>
-
-            <View style={styles.statsRow}>
-              <View style={styles.statItem}>
-                <Text style={[styles.statValue, { color: theme.colors.text }]}>
-                  {photos.length}
-                </Text>
-                <Text
-                  style={[styles.statLabel, { color: theme.colors.textMuted }]}>
-                  {t('profile.stat_photos')}
-                </Text>
-              </View>
-              <View style={styles.statItem}>
-                <Text style={[styles.statValue, { color: theme.colors.text }]}>
-                  {friendCount}
-                </Text>
-                <Text
-                  style={[styles.statLabel, { color: theme.colors.textMuted }]}>
-                  {t('profile.stat_friends')}
-                </Text>
-              </View>
-            </View>
+            </Pressable>
+          ) : (
+            <View
+              style={[
+                styles.cover,
+                { backgroundColor: theme.colors.plusSoft },
+              ]}
+            />
+          )}
+          <View style={[styles.coverShade, { height: avatarSize }]} />
+          <View style={[styles.coverBar, { paddingTop: topPad }]}>
+            <View style={styles.coverBarSide} />
+            {coverPhotos.length > 1 ? (
+              <View
+                style={[styles.pager, { backgroundColor: theme.colors.white }]}
+              />
+            ) : (
+              <View style={styles.coverBarSide} />
+            )}
+            <Pressable
+              onPress={() => setMoreOpen(open => !open)}
+              hitSlop={10}
+              accessibilityRole="button"
+              accessibilityLabel={t('settings.title')}
+              style={styles.coverBarSide}>
+              <FigmaIcon
+                name="moreDots"
+                size={24}
+                color={coverPhoto ? theme.colors.white : theme.colors.text}
+              />
+            </Pressable>
           </View>
-
-          <View style={styles.nameBlock}>
-            <View style={styles.nameAnchor}>
-              <Text
-                style={[styles.name, { color: theme.colors.text }]}
-                numberOfLines={1}>
-                {displayName}
-              </Text>
-              {isVerified ? (
-                <View
-                  style={[
-                    styles.verifiedDot,
-                    { backgroundColor: theme.colors.primary },
-                  ]}>
-                  <Text
-                    style={[
-                      styles.verifiedDotGlyph,
-                      { color: theme.colors.onPrimary },
-                    ]}>
-                    ✓
-                  </Text>
+          {coverPhotos.length > 1 ? (
+            <>
+              <Pressable
+                onPress={() =>
+                  setCoverIndex(
+                    i => (i - 1 + coverPhotos.length) % coverPhotos.length,
+                  )
+                }
+                hitSlop={12}
+                style={[styles.coverArrow, styles.coverArrowLeft]}
+                accessibilityRole="button"
+                accessibilityLabel={t('common.back')}>
+                <View style={styles.coverArrowIcon}>
+                  <FigmaIcon
+                    name="arrowRight"
+                    size={15}
+                    color={theme.colors.white}
+                  />
                 </View>
-              ) : null}
-            </View>
-            <View style={styles.usernameRow}>
-              <Text
-                style={[styles.username, { color: theme.colors.textMuted }]}
-                numberOfLines={1}>
-                @{profile.Username}
-              </Text>
-              {!isVerified ? (
-                <View style={styles.notVerifiedWrap}>
-                  <Pressable
-                    onPress={() => setVerifyTipOpen(open => !open)}
-                    hitSlop={10}
-                    accessibilityRole="button"
-                    accessibilityLabel={t('profile.not_verified')}
-                    accessibilityState={{ expanded: verifyTipOpen }}
-                    style={styles.notVerifiedChip}>
-                    <Text
-                      style={[
-                        styles.notVerifiedIcon,
-                        { color: theme.colors.danger },
-                      ]}>
-                      ⓘ
-                    </Text>
-                    <Text
-                      style={[
-                        styles.notVerifiedLabel,
-                        { color: theme.colors.danger },
-                      ]}>
-                      {t('profile.not_verified')}
-                    </Text>
-                  </Pressable>
-
-                  {verifyTipOpen ? (
-                    <View
-                      style={[
-                        styles.verifyTip,
-                        {
-                          backgroundColor: theme.colors.card,
-                          borderColor: theme.colors.danger,
-                        },
-                        theme.shadows.sm,
-                      ]}>
-                      <View
-                        style={[
-                          styles.verifyTipCaret,
-                          {
-                            backgroundColor: theme.colors.card,
-                            borderColor: theme.colors.danger,
-                          },
-                        ]}
-                      />
-                      <Text
-                        style={[
-                          styles.verifyTipText,
-                          { color: theme.colors.text },
-                        ]}>
-                        {t('profile.verify_requires_interests')}
-                      </Text>
-                      <Pressable
-                        onPress={() => {
-                          closeVerifyTip();
-                          navigation.navigate('EditProfile' as never);
-                        }}
-                        hitSlop={8}
-                        style={styles.verifyTipAction}>
-                        <Text
-                          style={[
-                            styles.verifyTipActionLabel,
-                            { color: theme.colors.danger },
-                          ]}>
-                          {t('profile.edit')}
-                        </Text>
-                      </Pressable>
-                    </View>
-                  ) : null}
-                </View>
-              ) : null}
-            </View>
-          </View>
+              </Pressable>
+              <Pressable
+                onPress={() =>
+                  setCoverIndex(i => (i + 1) % coverPhotos.length)
+                }
+                hitSlop={12}
+                style={[styles.coverArrow, styles.coverArrowRight]}
+                accessibilityRole="button"
+                accessibilityLabel={t('profile.photos')}>
+                <FigmaIcon
+                  name="arrowRight"
+                  size={15}
+                  color={theme.colors.white}
+                />
+              </Pressable>
+            </>
+          ) : null}
         </View>
 
-        <View
-          style={styles.body}
-          onStartShouldSetResponder={() => {
-            if (verifyTipOpen) {
-              closeVerifyTip();
+        <View style={[styles.identity, { marginTop: -avatarSize / 2 }]}>
+          <Pressable
+            onPress={onAvatarPress}
+            onLongPress={() => setStatusModalOpen(true)}
+            accessibilityRole="button"
+            accessibilityLabel={
+              avatarUri ? t('profile.view_avatar') : t('profile.change_avatar')
             }
-            return false;
-          }}>
-          <Text
-            style={[styles.bioFieldLabel, { color: theme.colors.textMuted }]}>
-            {t('profile.bio')}
-          </Text>
-          {hasBio ? (
+            style={[
+              styles.avatarRing,
+              {
+                width: avatarSize,
+                height: avatarSize,
+                borderRadius: avatarSize / 2,
+                borderColor: theme.colors.background,
+                backgroundColor: theme.colors.surfaceAlt,
+              },
+            ]}>
+            {avatarUri ? (
+              <Image
+                source={{ uri: avatarUri }}
+                fadeDuration={0}
+                style={{
+                  width: avatarSize,
+                  height: avatarSize,
+                  borderRadius: avatarSize / 2,
+                }}
+              />
+            ) : (
+              <Typography variant="h2" tint={theme.colors.plusCta}>
+                {initialsFromName(fullName)}
+              </Typography>
+            )}
+          </Pressable>
+          <Typography variant="h2" align="center" numberOfLines={1}>
+            {displayName}
+          </Typography>
+          {statusText ? (
             <Pressable
-              onPress={() =>
-                navigation.navigate('EditProfile', { focus: 'bio' })
-              }
+              onPress={() => setStatusModalOpen(true)}
+              hitSlop={8}
+              accessibilityRole="button"
+              accessibilityLabel={t('profile.status_title')}>
+              <Typography variant="callout" color="textMuted" align="center">
+                {statusText}
+              </Typography>
+            </Pressable>
+          ) : null}
+          {!isVerified ? (
+            <Pressable
+              onPress={() => setVerifyTipOpen(open => !open)}
+              hitSlop={8}
+              accessibilityRole="button"
+              accessibilityLabel={t('profile.not_verified')}>
+              <Typography variant="caption" tint={theme.colors.danger} align="center">
+                {t('profile.not_verified')}
+              </Typography>
+            </Pressable>
+          ) : null}
+          {verifyTipOpen ? (
+            <View
               style={[
-                styles.bioField,
+                styles.verifyTip,
                 {
                   backgroundColor: theme.colors.card,
                   borderColor: theme.colors.border,
                 },
               ]}>
-              <Text style={[styles.bio, { color: theme.colors.text }]}>
-                {bio}
-              </Text>
-            </Pressable>
-          ) : (
-            <Pressable
-              onPress={() =>
-                navigation.navigate('EditProfile', { focus: 'bio' })
-              }
-              style={[
-                styles.bioField,
-                styles.bioFieldEmpty,
-                {
-                  backgroundColor: theme.colors.surfaceAlt,
-                  borderColor: theme.colors.borderStrong,
-                },
-              ]}>
-              <Text
-                style={[styles.bioPlaceholder, { color: theme.colors.textMuted }]}>
-                {t('profile.add_bio_desc')}
-              </Text>
-            </Pressable>
-          )}
+              <Typography variant="caption">{t('profile.verify_requires_interests')}</Typography>
+              <Pressable
+                onPress={() => {
+                  closeVerifyTip();
+                  goEdit();
+                }}>
+                <Typography variant="caption" weight="600" tint={theme.colors.plusCta}>
+                  {t('profile.edit')}
+                </Typography>
+              </Pressable>
+            </View>
+          ) : null}
         </View>
 
-        {userId ? (
-          <ProfilePhotoGrid
-            userId={userId}
-            token={accessToken}
-            photos={photos}
-            editable
-            onPhotosChange={setPhotos}
-          />
-        ) : null}
-
         <View style={styles.body}>
-          <View style={styles.section}>
-            <View style={styles.sectionHead}>
-              <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>
-                {t('profile.interests')}
-              </Text>
-            </View>
-
-            {interestTypes.length > 0 ? (
-              <View style={styles.tileGrid}>
-                {interestTypes.map(type => {
-                  const existing = interests.find(
-                    item =>
-                      Number(item.InterestTypeId) === Number(type.Id) ||
-                      item.InterestTypeName === type.Name,
-                  );
-                  const value = existing?.Value?.trim() ?? '';
-                  const selected = value.length > 0;
-                  return (
-                    <Pressable
-                      key={type.Id}
-                      onPress={() =>
-                        navigation.navigate('EditProfile', {
-                          focus: 'interests',
-                          interestTypeId: type.Id,
-                        })
-                      }
-                      accessibilityRole="button"
-                      accessibilityLabel={`${type.Name}: ${
-                        selected ? value : t('edit.add_interest')
-                      }`}
-                      style={styles.tileWrap}>
-                      <View
-                        style={[
-                          styles.tile,
-                          {
-                            backgroundColor: selected
-                              ? theme.colors.primarySoft
-                              : theme.colors.card,
-                            borderColor: selected
-                              ? theme.colors.primary
-                              : theme.colors.border,
-                          },
-                          theme.shadows.sm,
-                        ]}>
-                        <View style={styles.tileTop}>
-                          <View
-                            style={[
-                              styles.emojiBadge,
-                              {
-                                backgroundColor: selected
-                                  ? theme.colors.primary
-                                  : theme.colors.surfaceAlt,
-                              },
-                            ]}>
-                            <Text style={styles.emojiText}>
-                              {interestEmoji(type)}
-                            </Text>
-                          </View>
-                          {selected ? (
-                            <View
-                              style={[
-                                styles.checkDot,
-                                { backgroundColor: theme.colors.primary },
-                              ]}>
-                              <Text
-                                style={[
-                                  styles.checkGlyph,
-                                  { color: theme.colors.onPrimary },
-                                ]}>
-                                ✓
-                              </Text>
-                            </View>
-                          ) : (
-                            <Text
-                              style={[
-                                styles.plusGlyph,
-                                { color: theme.colors.textMuted },
-                              ]}>
-                              +
-                            </Text>
-                          )}
-                        </View>
-                        <Text
-                          style={[
-                            styles.tileTitle,
-                            { color: theme.colors.textMuted },
-                          ]}
-                          numberOfLines={1}
-                          ellipsizeMode="tail">
-                          {type.Name}
-                        </Text>
-                        <Text
-                          style={[
-                            styles.tileValue,
-                            {
-                              color: selected
-                                ? theme.colors.text
-                                : theme.colors.textMuted,
-                            },
-                          ]}
-                          numberOfLines={1}
-                          ellipsizeMode="tail">
-                          {selected ? value : t('edit.add_interest')}
-                        </Text>
-                      </View>
-                    </Pressable>
-                  );
-                })}
-              </View>
-            ) : hasInterests ? (
-              <View style={styles.tileGrid}>
-                {interests.map(item => (
-                  <Pressable
-                    key={item.Id}
-                    onPress={() =>
-                      navigation.navigate('EditProfile', {
-                        focus: 'interests',
-                        interestTypeId:
-                          item.InterestTypeId != null
-                            ? Number(item.InterestTypeId)
-                            : undefined,
-                      })
-                    }
-                    style={styles.tileWrap}>
-                    <View
-                      style={[
-                        styles.tile,
-                        {
-                          backgroundColor: theme.colors.primarySoft,
-                          borderColor: theme.colors.primary,
-                        },
-                        theme.shadows.sm,
-                      ]}>
-                      <View style={styles.tileTop}>
-                        <View
-                          style={[
-                            styles.emojiBadge,
-                            { backgroundColor: theme.colors.primary },
-                          ]}>
-                          <Text style={styles.emojiText}>✨</Text>
-                        </View>
-                        <View
-                          style={[
-                            styles.checkDot,
-                            { backgroundColor: theme.colors.primary },
-                          ]}>
-                          <Text
-                            style={[
-                              styles.checkGlyph,
-                              { color: theme.colors.onPrimary },
-                            ]}>
-                            ✓
-                          </Text>
-                        </View>
-                      </View>
-                      <Text
-                        style={[
-                          styles.tileTitle,
-                          { color: theme.colors.textMuted },
-                        ]}
-                        numberOfLines={1}>
-                        {item.InterestTypeName || t('profile.interests')}
-                      </Text>
-                      <Text
-                        style={[
-                          styles.tileValue,
-                          { color: theme.colors.text },
-                        ]}
-                        numberOfLines={1}>
-                        {item.Value}
-                      </Text>
-                    </View>
-                  </Pressable>
-                ))}
-              </View>
-            ) : (
+          <View style={styles.favGrid}>
+            {interestCards.map(card => (
               <Pressable
+                key={card.key}
                 onPress={() =>
-                  navigation.navigate('EditProfile', { focus: 'interests' })
+                  goEdit({
+                    focus: 'interests',
+                    interestTypeId: card.typeId,
+                  })
                 }
                 style={[
-                  styles.promptCard,
-                  {
-                    backgroundColor: theme.colors.surfaceAlt,
-                    borderColor: theme.colors.borderStrong,
-                    marginTop: 0,
-                  },
-                ]}>
-                <View style={styles.promptText}>
-                  <Text
-                    style={[styles.promptTitle, { color: theme.colors.text }]}>
-                    {t('profile.add_interests')}
-                  </Text>
-                  <Text
-                    style={[
-                      styles.promptDesc,
-                      { color: theme.colors.textMuted },
-                    ]}>
-                    {t('profile.interests_empty')}
-                  </Text>
+                  styles.favCard,
+                  { backgroundColor: theme.colors.surfaceAlt },
+                ]}
+                accessibilityRole="button"
+                accessibilityLabel={`${card.label}: ${
+                  card.value || t('edit.add_interest')
+                }`}>
+                <View
+                  style={[
+                    styles.favIcon,
+                    { backgroundColor: theme.colors.plusSoft },
+                  ]}>
+                  <Text style={styles.favEmoji}>{card.emoji}</Text>
                 </View>
-                <Text
-                  style={{ color: theme.colors.textMuted, fontSize: 18 }}>
-                  ›
-                </Text>
+                <View style={styles.favCopy}>
+                  <Typography variant="caption" color="textMuted" numberOfLines={1}>
+                    {card.label}
+                  </Typography>
+                  <Typography variant="callout" weight="600" numberOfLines={1}>
+                    {card.value || t('edit.add_interest')}
+                  </Typography>
+                </View>
               </Pressable>
-            )}
+            ))}
+          </View>
+
+          <FigmaButton
+            label={t('profile.edit_cta')}
+            size="cta"
+            fullWidth
+            onPress={() => goEdit()}
+          />
+
+          <View style={styles.about}>
+            <Typography variant="title">{t('edit.about')}</Typography>
+            <Pressable
+              onPress={() => goEdit({ focus: 'bio' })}
+              accessibilityRole="button"
+              accessibilityLabel={t('edit.about')}>
+              <Typography
+                variant="callout"
+                color={hasBio ? 'text' : 'textMuted'}
+                style={styles.aboutBody}>
+                {hasBio ? bio : t('profile.add_bio_desc')}
+              </Typography>
+            </Pressable>
           </View>
         </View>
       </TabScreenScrollView>
     </Animated.View>,
+    true,
   );
 }
+
 
 const styles = StyleSheet.create({
   root: { flex: 1 },
   flex: { flex: 1 },
   skeletonContent: { flexGrow: 1 },
+  scrollContent: { flexGrow: 1, paddingBottom: 24 },
   center: {
     flex: 1,
     alignItems: 'center',
@@ -946,280 +816,125 @@ const styles = StyleSheet.create({
     paddingHorizontal: 32,
     gap: 14,
   },
-  muted: { fontSize: 14, textAlign: 'center' },
   errorText: { fontSize: 15, textAlign: 'center', lineHeight: 22 },
-  retryBtn: {
-    height: 44,
-    paddingHorizontal: 20,
-    borderRadius: 999,
-    alignItems: 'center',
-    justifyContent: 'center',
+  coverWrap: {
+    width: '100%',
+    overflow: 'hidden',
+    backgroundColor: '#1c1c1e',
   },
-  retryLabel: { fontSize: 15, fontWeight: '700' },
-  header: {
-    position: 'relative',
-    paddingHorizontal: 16,
-    paddingTop: 40,
-    paddingBottom: 12,
-    gap: 12,
-    overflow: 'visible',
-    zIndex: 2,
-  },
-  headerTop: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-  },
-  avatarRing: {
-    width: AVATAR_SIZE,
-    height: AVATAR_SIZE,
-    position: 'relative',
-    overflow: 'visible',
-    zIndex: 5,
-  },
-  avatar: {
-    width: AVATAR_SIZE,
-    height: AVATAR_SIZE,
-    borderRadius: AVATAR_SIZE / 2,
-    borderWidth: 1.5,
-  },
-  avatarFallback: { alignItems: 'center', justifyContent: 'center' },
-  avatarInitials: { fontSize: 26, fontWeight: '700' },
-  statusBubble: {
+  cover: { width: '100%', height: '100%' },
+  coverShade: {
     position: 'absolute',
-    top: -10,
-    left: -8,
-    maxWidth: AVATAR_SIZE + 36,
-    minWidth: 32,
-    minHeight: 30,
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 15,
-    borderWidth: StyleSheet.hairlineWidth,
-    zIndex: 20,
-    elevation: 20,
-    alignItems: 'center',
-    justifyContent: 'center',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0,0,0,0.18)',
   },
-  statusBubbleText: {
-    fontSize: 12,
-    fontWeight: '700',
-  },
-  avatarCamBadge: {
-    position: 'absolute',
-    right: -2,
-    bottom: 18,
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  onlineDot: {
-    position: 'absolute',
-    right: 2,
-    bottom: 4,
-    width: 14,
-    height: 14,
-    borderRadius: 7,
-    borderWidth: 2.5,
-  },
-  statsRow: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-around',
-  },
-  headerActions: {
-    position: 'absolute',
-    top: 2,
-    right: 12,
-    zIndex: 2,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  headerActionBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  headerActionGlyph: { fontSize: 16, fontWeight: '600' },
-  nameBlock: {
-    gap: 2,
-    paddingRight: 8,
-    overflow: 'visible',
-    zIndex: 3,
-  },
-  nameAnchor: {
-    position: 'relative',
-    alignSelf: 'flex-start',
-    maxWidth: '92%',
-  },
-  name: {
-    fontSize: 18,
-    fontWeight: '700',
-    letterSpacing: -0.2,
-  },
-  verifiedDot: {
-    position: 'absolute',
-    left: '100%',
-    marginLeft: 6,
-    top: 1,
-    width: 18,
-    height: 18,
-    borderRadius: 9,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  verifiedDotGlyph: { fontSize: 10, fontWeight: '700' },
-  usernameRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flexWrap: 'wrap',
-    gap: 8,
-    marginTop: 2,
-    zIndex: 4,
-    overflow: 'visible',
-  },
-  username: { fontSize: 14 },
-  notVerifiedWrap: {
-    position: 'relative',
-    zIndex: 5,
-  },
-  notVerifiedChip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 3,
-  },
-  notVerifiedIcon: { fontSize: 12, fontWeight: '600' },
-  notVerifiedLabel: { fontSize: 11, fontWeight: '600' },
-  verifyTipDismiss: {
+  coverBar: {
     position: 'absolute',
     top: 0,
     left: 0,
     right: 0,
-    bottom: 0,
-    zIndex: 1,
+    paddingHorizontal: 16,
+    minHeight: 30,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
   },
-  verifyTipCaret: {
+  coverBarSide: {
+    width: 36,
+    height: 36,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  pager: {
+    width: 48,
+    height: 6,
+    borderRadius: 3,
+    opacity: 0.85,
+  },
+  coverArrow: {
     position: 'absolute',
-    top: -5,
-    left: 16,
-    width: 10,
-    height: 10,
-    borderLeftWidth: 1,
-    borderTopWidth: 1,
-    transform: [{ rotate: '45deg' }],
+    top: '45%',
+    width: 30,
+    height: 30,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  coverArrowLeft: { left: 10 },
+  coverArrowRight: { right: 10 },
+  coverArrowIcon: { transform: [{ rotate: '180deg' }] },
+  identity: {
+    alignItems: 'center',
+    paddingHorizontal: 24,
+    gap: 6,
     zIndex: 2,
   },
-  verifyTip: {
-    position: 'absolute',
-    top: '100%',
-    left: 0,
-    marginTop: 8,
-    width: 220,
-    borderRadius: 12,
-    borderWidth: 1,
-    paddingHorizontal: 12,
-    paddingTop: 12,
-    paddingBottom: 10,
-    gap: 8,
-    zIndex: 6,
-    elevation: 12,
-  },
-  verifyTipText: { fontSize: 12, lineHeight: 17 },
-  verifyTipAction: { alignSelf: 'flex-start' },
-  verifyTipActionLabel: { fontSize: 12, fontWeight: '700' },
-  body: { paddingHorizontal: 16, paddingTop: 4 },
-  bioFieldLabel: {
-    fontSize: 11,
-    fontWeight: '700',
-    letterSpacing: 1.1,
-    textTransform: 'uppercase',
-    marginBottom: 8,
-  },
-  bioField: {
-    minHeight: 88,
-    borderRadius: 14,
-    borderWidth: 1,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-  },
-  bioFieldEmpty: {
-    borderStyle: 'dashed',
+  avatarRing: {
+    overflow: 'hidden',
+    alignItems: 'center',
     justifyContent: 'center',
+    borderWidth: 4,
   },
-  bio: { fontSize: 15, lineHeight: 22 },
-  bioPlaceholder: { fontSize: 14, lineHeight: 20 },
-  promptCard: {
+  verifyTip: {
     marginTop: 4,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    paddingVertical: 14,
-    paddingHorizontal: 14,
-    borderRadius: 18,
-    borderWidth: 1,
-    borderStyle: 'dashed',
+    width: 240,
+    borderRadius: 12,
+    borderWidth: StyleSheet.hairlineWidth,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    gap: 6,
   },
-  promptText: { flex: 1, gap: 2 },
-  promptTitle: { fontSize: 15, fontWeight: '600' },
-  promptDesc: { fontSize: 12, lineHeight: 16 },
-  statItem: { alignItems: 'center', gap: 2, flex: 1 },
-  statValue: { fontSize: 18, fontWeight: '700' },
-  statLabel: { fontSize: 11 },
-  section: { marginTop: 22, gap: 12 },
-  sectionHead: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: 12,
+  body: {
+    paddingHorizontal: 10,
+    paddingTop: 16,
+    gap: 20,
   },
-  sectionTitle: { fontSize: 18, fontWeight: '700', flexShrink: 1 },
-  tileGrid: {
+  favGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    justifyContent: 'space-between',
-    rowGap: 10,
+    gap: 5,
   },
-  tileWrap: { width: TILE_WIDTH, height: TILE_HEIGHT },
-  tile: {
-    flex: 1,
-    height: TILE_HEIGHT,
-    borderRadius: 16,
-    borderWidth: 1,
-    paddingHorizontal: 10,
-    paddingVertical: 10,
-    overflow: 'hidden',
-  },
-  tileTop: {
+  favCard: {
+    width: '48.5%',
+    flexGrow: 1,
+    minHeight: 52,
+    borderRadius: 12,
+    paddingHorizontal: 11,
+    paddingVertical: 11,
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 6,
+    gap: 8,
   },
-  emojiBadge: {
-    width: 28,
-    height: 28,
-    borderRadius: 10,
+  favIcon: {
+    width: 30,
+    height: 30,
+    borderRadius: 8,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  emojiText: { fontSize: 14 },
-  checkDot: {
-    width: 18,
-    height: 18,
-    borderRadius: 9,
-    alignItems: 'center',
-    justifyContent: 'center',
+  favEmoji: { fontSize: 16 },
+  favCopy: { flex: 1, minWidth: 0, gap: 0 },
+  about: { gap: 10, paddingHorizontal: 0, minHeight: 94 },
+  aboutBody: { lineHeight: 22 },
+  moreHost: {
+    ...StyleSheet.absoluteFill,
+    zIndex: 30,
   },
-  checkGlyph: { fontSize: 11, fontWeight: '700' },
-  plusGlyph: { fontSize: 18, fontWeight: '500' },
-  tileTitle: { fontSize: 11, lineHeight: 14, marginBottom: 2 },
-  tileValue: { fontSize: 13, lineHeight: 16, fontWeight: '600' },
+  moreMenu: {
+    position: 'absolute',
+    right: 12,
+    minWidth: 180,
+    borderRadius: 14,
+    borderWidth: StyleSheet.hairlineWidth,
+    paddingVertical: 6,
+    overflow: 'hidden',
+  },
+  moreRow: {
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+  },
 });
+
 
 export default ProfileScreen;

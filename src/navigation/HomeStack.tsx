@@ -22,7 +22,11 @@ const nestedOptions = {
 
 export function HomeStack() {
   return (
-    <Stack.Navigator screenOptions={{ headerShown: false }}>
+    <Stack.Navigator
+      screenOptions={{
+        headerShown: false,
+        safeAreaInsets: { top: 0, bottom: 0 },
+      }}>
       <Stack.Screen name="HomeFeed" component={HomeScreen} />
       <Stack.Screen
         name="Settings"

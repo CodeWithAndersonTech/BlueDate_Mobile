@@ -152,7 +152,7 @@ export function RangeSlider({
 
   const thumbStyle: ViewStyle = {
     backgroundColor: theme.colors.card,
-    borderColor: theme.colors.primary,
+    borderColor: theme.colors.plusCta,
   };
 
   return (
@@ -171,7 +171,7 @@ export function RangeSlider({
               {
                 left: lowX + THUMB / 2,
                 width: Math.max(highX - lowX, 0),
-                backgroundColor: theme.colors.primary,
+                backgroundColor: theme.colors.plusCta,
               },
             ]}
           />

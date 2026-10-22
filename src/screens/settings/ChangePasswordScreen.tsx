@@ -3,8 +3,8 @@ import React, { useMemo, useRef, useState } from 'react';
 import { Alert, ScrollView, StyleSheet, TextInput, View } from 'react-native';
 import { changePassword } from '../../api/auth';
 import {
-  Button,
   ConfirmPasswordInput,
+  FigmaButton,
   Header,
   PasswordInput,
   Screen,
@@ -143,13 +143,15 @@ export function ChangePasswordScreen({ navigation }: Props) {
           }
         />
 
-        <Button
+        <FigmaButton
           label={loading ? t('auth.password_saving') : t('auth.change_password')}
-          leftIcon="check"
+          size="md"
+          fullWidth
+          loading={loading}
+          disabled={loading || !userId}
           onPress={() => {
             void onSubmit();
           }}
-          disabled={loading || !userId}
           style={styles.submit}
         />
       </ScrollView>

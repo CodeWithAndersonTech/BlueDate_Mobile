@@ -1,7 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import {
   KeyboardAvoidingView,
-  Modal,
   Platform,
   Pressable,
   StyleSheet,
@@ -9,7 +8,8 @@ import {
   View,
 } from 'react-native';
 import { useTheme } from '../theme';
-import { Button } from './Button';
+import { FigmaButton } from './FigmaUi';
+import { SafeOverlay } from './SafeOverlay';
 import { Typography } from './Typography';
 
 type Props = {
@@ -41,11 +41,7 @@ export function BioEditModal({
   const canSave = trimmed.length > 0 && trimmed.length <= 500 && !saving;
 
   return (
-    <Modal
-      visible={visible}
-      transparent
-      animationType="fade"
-      onRequestClose={onClose}>
+    <SafeOverlay visible={visible} onRequestClose={onClose}>
       <KeyboardAvoidingView
         style={styles.flex}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
@@ -91,18 +87,20 @@ export function BioEditModal({
 
             <View style={styles.actions}>
               <View style={styles.actionSlot}>
-                <Button
+                <FigmaButton
                   label="İptal"
-                  variant="secondary"
+                  tone="ghost"
                   size="md"
+                  fullWidth
                   disabled={saving}
                   onPress={onClose}
                 />
               </View>
               <View style={styles.actionSlot}>
-                <Button
+                <FigmaButton
                   label={saving ? 'Kaydet...' : isEdit ? 'Güncelle' : 'Kaydet'}
                   size="md"
+                  fullWidth
                   loading={saving}
                   disabled={!canSave}
                   onPress={() => onSave(trimmed)}
@@ -112,7 +110,7 @@ export function BioEditModal({
           </Pressable>
         </Pressable>
       </KeyboardAvoidingView>
-    </Modal>
+    </SafeOverlay>
   );
 }
 

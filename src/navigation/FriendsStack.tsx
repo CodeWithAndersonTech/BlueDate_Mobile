@@ -15,7 +15,11 @@ const nestedOptions = {
 
 export function FriendsStack() {
   return (
-    <Stack.Navigator screenOptions={{ headerShown: false }}>
+    <Stack.Navigator
+      screenOptions={{
+        headerShown: false,
+        safeAreaInsets: { top: 0, bottom: 0 },
+      }}>
       <Stack.Screen name="FriendsMain" component={FriendsScreen} />
       <Stack.Screen
         name="SearchUsers"

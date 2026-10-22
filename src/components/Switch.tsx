@@ -16,7 +16,7 @@ export function Switch({ value, onValueChange, disabled }: SwitchProps) {
       value={value}
       onValueChange={onValueChange}
       disabled={disabled}
-      trackColor={{ false: theme.colors.surfaceAlt, true: theme.colors.primary }}
+      trackColor={{ false: theme.colors.surfaceAlt, true: theme.colors.plusCta }}
       thumbColor={
         Platform.OS === 'android'
           ? value

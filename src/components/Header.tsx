@@ -1,8 +1,8 @@
 import React from 'react';
-import { StyleProp, StyleSheet, View, ViewStyle } from 'react-native';
+import { Pressable, StyleProp, StyleSheet, View, ViewStyle } from 'react-native';
 import { useTheme } from '../theme';
-import { IconButton } from './IconButton';
-import { IconName } from './Icon';
+import { FigmaIcon } from './FigmaIcon';
+import { Icon, IconName } from './Icon';
 import { Typography } from './Typography';
 
 export interface HeaderAction {
@@ -39,30 +39,25 @@ export function Header({
 
   if (large) {
     return (
-      <View
-        style={[
-          styles.largeContainer,
-          { paddingHorizontal: theme.components.header.largePaddingH },
-          style,
-        ]}>
+      <View style={[styles.largeContainer, style]}>
         <View style={styles.largeText}>
           {subtitle && (
-            <Typography variant="overline" color="primary">
+            <Typography variant="overline" color="textMuted">
               {subtitle}
             </Typography>
           )}
           <Typography variant="h1">{title}</Typography>
         </View>
-        <View style={[styles.actions, { gap: theme.components.header.actionGap }]}>
+        <View style={styles.actions}>
           {actions.map((a, i) => (
-            <IconButton
+            <Pressable
               key={`${a.icon}-${i}`}
-              name={a.icon}
               onPress={a.onPress}
-              accessibilityLabel={a.accessibilityLabel}
-              color={a.color}
-              filled={a.filled}
-            />
+              hitSlop={8}
+              accessibilityRole="button"
+              accessibilityLabel={a.accessibilityLabel}>
+              <Icon name={a.icon} size={24} color={a.color ?? theme.colors.text} />
+            </Pressable>
           ))}
         </View>
       </View>
@@ -70,24 +65,20 @@ export function Header({
   }
 
   return (
-    <View
-      style={[
-        styles.container,
-        {
-          paddingHorizontal: theme.components.header.paddingH,
-          minHeight: theme.components.header.height,
-          gap: theme.components.header.actionGap,
-        },
-        style,
-      ]}>
+    <View style={[styles.container, style]}>
       <View style={styles.side}>
-        {onBack && (
-          <IconButton
-            name="arrow-left"
-            variant="surface"
+        {onBack ? (
+          <Pressable
             onPress={onBack}
-            accessibilityLabel={backAccessibilityLabel}
-          />
+            hitSlop={8}
+            accessibilityRole="button"
+            accessibilityLabel={backAccessibilityLabel}>
+            <View style={styles.backIcon}>
+              <FigmaIcon name="arrowRight" size={15} color={theme.colors.text} />
+            </View>
+          </Pressable>
+        ) : (
+          <View style={styles.sideSlot} />
         )}
       </View>
       <View style={styles.center}>
@@ -103,15 +94,16 @@ export function Header({
         )}
       </View>
       <View style={[styles.side, styles.right]}>
+        {actions.length === 0 ? <View style={styles.sideSlot} /> : null}
         {actions.map((a, i) => (
-          <IconButton
+          <Pressable
             key={`${a.icon}-${i}`}
-            name={a.icon}
             onPress={a.onPress}
-            accessibilityLabel={a.accessibilityLabel}
-            color={a.color}
-            filled={a.filled}
-          />
+            hitSlop={8}
+            accessibilityRole="button"
+            accessibilityLabel={a.accessibilityLabel}>
+            <Icon name={a.icon} size={24} color={a.color ?? theme.colors.text} />
+          </Pressable>
         ))}
       </View>
     </View>
@@ -122,19 +114,34 @@ const styles = StyleSheet.create({
   container: {
     flexDirection: 'row',
     alignItems: 'center',
+    paddingHorizontal: 10,
+    minHeight: 44,
   },
-  side: { minWidth: 44, justifyContent: 'center', flexDirection: 'row' },
+  side: {
+    minWidth: 24,
+    justifyContent: 'center',
+    flexDirection: 'row',
+  },
+  sideSlot: { width: 24, height: 24 },
   right: { justifyContent: 'flex-end' },
-  center: { flex: 1 },
+  center: { flex: 1, paddingHorizontal: 8 },
+  backIcon: {
+    transform: [{ rotate: '180deg' }],
+    width: 24,
+    height: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   largeContainer: {
     flexDirection: 'row',
     alignItems: 'flex-end',
     justifyContent: 'space-between',
+    paddingHorizontal: 10,
     paddingTop: 8,
     paddingBottom: 12,
   },
   largeText: { flex: 1, gap: 2 },
-  actions: { flexDirection: 'row' },
+  actions: { flexDirection: 'row', gap: 8 },
 });
 
 export default Header;

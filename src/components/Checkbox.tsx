@@ -1,6 +1,5 @@
 import React from 'react';
 import { Pressable, StyleProp, StyleSheet, View, ViewStyle } from 'react-native';
-import LinearGradient from 'react-native-linear-gradient';
 import { useTheme } from '../theme';
 import { Icon } from './Icon';
 
@@ -30,16 +29,18 @@ export function Checkbox({
       onPress={() => onChange(!checked)}
       style={[{ opacity: disabled ? 0.5 : 1 }, style]}>
       {checked ? (
-        <LinearGradient
-          colors={theme.gradients.primary}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
+        <View
           style={[
             styles.box,
-            { width: size, height: size, borderRadius: 12 },
+            {
+              width: size,
+              height: size,
+              borderRadius: 12,
+              backgroundColor: theme.colors.plusCta,
+            },
           ]}>
-          <Icon name="check" size={size * 0.66} color={theme.colors.onPrimary} strokeWidth={3} />
-        </LinearGradient>
+          <Icon name="check" size={size * 0.66} color={theme.colors.white} />
+        </View>
       ) : (
         <View
           style={[

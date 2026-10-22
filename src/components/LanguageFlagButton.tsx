@@ -59,7 +59,7 @@ export function LanguageFlagButton({
           styles.trigger,
           {
             backgroundColor: theme.colors.surfaceAlt,
-            borderColor: theme.colors.primary,
+            borderColor: theme.colors.plusCta,
           },
         ]}>
         <CountryFlag code={selected.Code} size={30} />
@@ -94,13 +94,13 @@ export function LanguageFlagButton({
                   style={[
                     styles.option,
                     isSelected && {
-                      backgroundColor: theme.colors.primarySoft,
+                      backgroundColor: theme.colors.plusSoft,
                     },
                   ]}>
                   <CountryFlag code={language.Code} size={28} />
                   <Typography
                     variant="bodyStrong"
-                    tint={isSelected ? theme.colors.primary : theme.colors.text}>
+                    tint={isSelected ? theme.colors.plusCta : theme.colors.text}>
                     {language.Name}
                   </Typography>
                 </Pressable>

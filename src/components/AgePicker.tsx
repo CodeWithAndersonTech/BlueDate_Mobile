@@ -196,7 +196,7 @@ export function AgePicker({
           </Pressable>
 
           <View style={styles.selectedBlock}>
-            <Typography variant="h1" tint={theme.colors.primary} align="center">
+            <Typography variant="h1" tint={theme.colors.plusCta} align="center">
               {selected ?? '—'}
             </Typography>
             {unitLabel ? (
@@ -231,8 +231,8 @@ export function AgePicker({
             style={[
               styles.centerFrame,
               {
-                borderColor: theme.colors.primary,
-                backgroundColor: theme.colors.primarySoft,
+                borderColor: theme.colors.plusCta,
+                backgroundColor: theme.colors.plusSoft,
               },
             ]}
           />
@@ -270,7 +270,7 @@ export function AgePicker({
                   <Typography
                     variant={active ? 'title' : 'body'}
                     tint={
-                      active ? theme.colors.primary : theme.colors.textMuted
+                      active ? theme.colors.plusCta : theme.colors.textMuted
                     }
                     align="center"
                     style={active ? styles.itemActive : undefined}>

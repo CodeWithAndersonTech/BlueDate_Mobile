@@ -55,11 +55,15 @@ export type NearbyStackParamList = {
   UserProfile: { userId: string };
 };
 
+export type MessagesStackParamList = {
+  MessagesMain: undefined;
+};
+
 export type MainTabParamList = {
   Home: NavigatorScreenParams<HomeStackParamList>;
   Nearby: NavigatorScreenParams<NearbyStackParamList>;
   Friends: NavigatorScreenParams<FriendsStackParamList>;
-  Messages: undefined;
+  Messages: NavigatorScreenParams<MessagesStackParamList>;
   Profile: NavigatorScreenParams<ProfileStackParamList>;
 };
 

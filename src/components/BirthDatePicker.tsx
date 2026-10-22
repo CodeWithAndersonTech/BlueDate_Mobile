@@ -116,8 +116,8 @@ function WheelColumn({
         style={[
           styles.wheelHighlight,
           {
-            borderColor: theme.colors.primary,
-            backgroundColor: theme.colors.primarySoft,
+            borderColor: theme.colors.plusCta,
+            backgroundColor: theme.colors.plusSoft,
           },
         ]}
       />
@@ -142,7 +142,7 @@ function WheelColumn({
                   styles.wheelLabel,
                   {
                     color: active
-                      ? theme.colors.primary
+                      ? theme.colors.plusCta
                       : theme.colors.textMuted,
                     fontWeight: active ? '700' : '500',
                     fontSize: active ? 17 : 15,

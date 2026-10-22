@@ -7,7 +7,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Video from 'react-native-video';
-import { Button, Icon, Typography } from '../../components';
+import { FigmaButton, Icon, Typography } from '../../components';
 import { useLocale } from '../../i18n';
 import type { PickedStoryAsset } from '../../services/stories/pickStoryMedia';
 
@@ -78,12 +78,13 @@ export function StoryComposeOverlay({
         </View>
 
         <View style={styles.shareBar}>
-          <Button
+          <FigmaButton
             label={uploading ? t('stories.uploading') : t('stories.share')}
+            size="md"
+            fullWidth
             onPress={onSubmit}
             disabled={uploading}
             loading={uploading}
-            fullWidth
           />
         </View>
       </View>

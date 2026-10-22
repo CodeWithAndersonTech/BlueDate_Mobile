@@ -1,7 +1,6 @@
 import React from 'react';
 import {
   KeyboardAvoidingView,
-  Modal,
   Platform,
   Pressable,
   StyleSheet,
@@ -10,7 +9,8 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLocale } from '../i18n';
 import { useTheme } from '../theme';
-import { Icon } from './Icon';
+import { FigmaIcon } from './FigmaIcon';
+import { SafeOverlay } from './SafeOverlay';
 import { Typography } from './Typography';
 
 type Props = {
@@ -32,13 +32,7 @@ export function SheetModal({ visible, title, onClose, dismissable = true, childr
   };
 
   return (
-    <Modal
-      visible={visible}
-      transparent
-      animationType="slide"
-      presentationStyle="overFullScreen"
-      statusBarTranslucent
-      onRequestClose={close}>
+    <SafeOverlay visible={visible} onRequestClose={close}>
       <KeyboardAvoidingView
         style={styles.flex}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
@@ -73,7 +67,11 @@ export function SheetModal({ visible, title, onClose, dismissable = true, childr
                   hitSlop={10}
                   accessibilityRole="button"
                   accessibilityLabel={t('common.close')}>
-                  <Icon name="close" size={theme.iconSize.md} color={theme.colors.textMuted} />
+                  <FigmaIcon
+                    name="closeCircle"
+                    size={theme.iconSize.md}
+                    color={theme.colors.textMuted}
+                  />
                 </Pressable>
               </View>
             ) : null}
@@ -81,7 +79,7 @@ export function SheetModal({ visible, title, onClose, dismissable = true, childr
           </View>
         </View>
       </KeyboardAvoidingView>
-    </Modal>
+    </SafeOverlay>
   );
 }
 

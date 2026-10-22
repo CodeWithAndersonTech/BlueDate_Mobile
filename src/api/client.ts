@@ -29,6 +29,8 @@ type RequestOptions = {
   token?: string | null;
   /** Prevents recursive refresh when calling the refresh endpoint itself. */
   skipAuthRefresh?: boolean;
+  /** Keep a 200 body even when IsSuccess is false (usable Id still wins). */
+  acceptFailedEnvelope?: boolean;
 };
 
 function isTr(languageCode = getApiLanguageCode()): boolean {
@@ -125,16 +127,26 @@ export async function apiRequest<T>(
     'Accept-Language': getApiLanguageCode(),
   };
 
-  if (body !== undefined) {
+  // IIS rejects POST/PUT with no Content-Length (HTTP 411). Empty JSON
+  // keeps body-less actions like Notification/clear and read-all alive.
+  const serializedBody =
+    body !== undefined
+      ? JSON.stringify(body)
+      : method === 'POST' || method === 'PUT'
+        ? '{}'
+        : undefined;
+  if (serializedBody !== undefined) {
     headers['Content-Type'] = 'application/json';
   }
 
-  const bearer = token ?? getAccessToken();
+  // Login/register/OTP/refresh must not send a stale JWT — IIS/JWT
+  // middleware 401s before the handler reads the body.
+  const bearer = skipAuthRefresh ? token ?? null : token ?? getAccessToken();
   if (bearer) {
     headers.Authorization = `Bearer ${bearer}`;
   }
 
-  const FETCH_TIMEOUT_MS = 8000;
+  const FETCH_TIMEOUT_MS = method === 'GET' ? 12000 : 20000;
 
   let response: Response;
   try {
@@ -148,7 +160,7 @@ export async function apiRequest<T>(
       response = await fetch(url, {
         method,
         headers,
-        body: body === undefined ? undefined : JSON.stringify(body),
+        body: serializedBody,
         signal: controller.signal,
       });
     } finally {
@@ -203,7 +215,16 @@ export async function apiRequest<T>(
           : undefined;
     const hasToken = Boolean(envelope.AccessToken || envelope.accessToken);
 
-    if (isSuccess === false && !hasToken) {
+    const hasUsableId = Number(
+      (envelope as { Id?: number; id?: number }).Id ??
+        (envelope as { id?: number }).id ??
+        0,
+    ) > 0;
+    if (
+      isSuccess === false &&
+      !hasToken &&
+      !(options.acceptFailedEnvelope && hasUsableId)
+    ) {
       const extracted = extractErrorMessages(envelope);
       throw new ApiError(
         response.status,

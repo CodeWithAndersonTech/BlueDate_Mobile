@@ -101,22 +101,53 @@ export async function getUserPhotos(
   return normalizePhotosResponse(raw);
 }
 
-export async function resolveMediaUrl(pathOrUrl?: string | null): Promise<string | undefined> {
+export function resolveMediaUrlWithBase(
+  base: string,
+  pathOrUrl?: string | null,
+): string | undefined {
+  if (pathOrUrl == null) return undefined;
+  if (typeof pathOrUrl !== 'string') {
+    pathOrUrl = String(pathOrUrl);
+  }
   if (!pathOrUrl) return undefined;
   if (
-    pathOrUrl.startsWith('http://') ||
-    pathOrUrl.startsWith('https://') ||
     pathOrUrl.startsWith('file://') ||
     pathOrUrl.startsWith('content://') ||
     pathOrUrl.startsWith('ph://')
   ) {
     return pathOrUrl;
   }
-  const base = await getApiBaseUrl();
+  if (pathOrUrl.startsWith('http://') || pathOrUrl.startsWith('https://')) {
+    try {
+      const remote = new URL(pathOrUrl);
+      const uploadPath =
+        remote.pathname.startsWith('/uploads') ||
+        remote.pathname.startsWith('/wwwroot/uploads');
+      if (uploadPath) {
+        const api = new URL(base);
+        return `${api.origin}${remote.pathname}${remote.search}`;
+      }
+    } catch {
+      return pathOrUrl;
+    }
+    return pathOrUrl;
+  }
   if (pathOrUrl.startsWith('/')) {
     return `${base}${pathOrUrl}`;
   }
   return `${base}/${pathOrUrl}`;
+}
+
+export async function resolveMediaUrl(pathOrUrl?: string | null): Promise<string | undefined> {
+  if (!pathOrUrl) return undefined;
+  if (
+    pathOrUrl.startsWith('file://') ||
+    pathOrUrl.startsWith('content://') ||
+    pathOrUrl.startsWith('ph://')
+  ) {
+    return pathOrUrl;
+  }
+  return resolveMediaUrlWithBase(await getApiBaseUrl(), pathOrUrl);
 }
 
 async function uploadMultipart(

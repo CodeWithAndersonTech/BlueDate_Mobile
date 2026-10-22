@@ -24,7 +24,11 @@ const nestedOptions = {
 
 export function ProfileStack() {
   return (
-    <Stack.Navigator screenOptions={{ headerShown: false }}>
+    <Stack.Navigator
+      screenOptions={{
+        headerShown: false,
+        safeAreaInsets: { top: 0, bottom: 0 },
+      }}>
       <Stack.Screen name="ProfileMain" component={ProfileScreen} />
       <Stack.Screen
         name="EditProfile"

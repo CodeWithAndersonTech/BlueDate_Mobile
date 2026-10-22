@@ -5,39 +5,44 @@ import {
   Image,
   Pressable,
   StyleSheet,
-  Text,
+  useWindowDimensions,
   View,
 } from 'react-native';
 import LinearGradient from 'react-native-linear-gradient';
 import { useFocusEffect } from '@react-navigation/native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { images } from '../../assets';
 import {
-  Avatar,
-  Icon,
-  IconButton,
-  StatusEditModal,
+  FigmaButton,
+  FigmaIcon,
   TabScreenScrollView,
   Typography,
+  useScreenTopPad,
 } from '../../components';
 import {
   createStory,
   deleteStory,
+  getStoriesByUser,
   getStoryFeed,
   getUserProfile,
+  isStoryGroupForUser,
   resolveMediaUrl,
   resolveStoryMediaUrls,
   StoryItem,
   StoryUserGroup,
-  updateUserStatus,
 } from '../../api';
-import { useLocale, userFacingError } from '../../i18n';
+import { useLocale } from '../../i18n';
 import { usePremium } from '../../hooks/usePremium';
 import { useAuth } from '../../navigation/AuthContext';
 import { useNotifications } from '../../navigation/NotificationsContext';
 import { useHideTabBar } from '../../navigation/useHideTabBar';
 import { HomeStackParamList } from '../../navigation/types';
-import { loadProfilePhotos } from '../../services/photos/photoStore';
+import {
+  loadProfilePhotos,
+  peekCachedAvatar,
+  preferDisplayAvatar,
+  rememberAvatar,
+} from '../../services/photos/photoStore';
+import { prefetchMediaUris } from '../../services/photos/prefetchMedia';
 import {
   pickStoryMediaFromCamera,
   pickStoryMediaFromLibrary,
@@ -46,18 +51,28 @@ import {
 } from '../../services/stories/pickStoryMedia';
 import { getCurrentCoordinates } from '../../services/location/currentPosition';
 import { useTheme } from '../../theme';
-import { NotificationRow } from '../notifications/NotificationRow';
 import { useOpenNotification } from '../notifications/notificationMeta';
+import { openFriendProfile } from '../../services/profile/visitCache';
+import { HomeActivityRow } from './HomeActivityRow';
+import { HomeSkeleton } from './HomeSkeleton';
 import { StoryComposeOverlay } from './StoryComposeOverlay';
 import { StoryRail } from './StoryRail';
 import { StoryViewer } from './StoryViewer';
 
 type Props = NativeStackScreenProps<HomeStackParamList, 'HomeFeed'>;
 
+const HOME_STALE_MS = 25_000;
+const STORY_POLL_MS = 7_000;
+
 export function HomeScreen({ navigation }: Props) {
   const theme = useTheme();
   const { t } = useLocale();
-  const insets = useSafeAreaInsets();
+  const topPad = useScreenTopPad();
+  const { width: screenW } = useWindowDimensions();
+  const cardW = Math.max(320, screenW - 20);
+  const plusArt = Math.round(Math.min(132, cardW * 0.34));
+  const radarArt = Math.round(Math.min(168, cardW * 0.42));
+  const starSize = plusArt >= 120 ? 16 : 13;
   const { userId, accessToken } = useAuth();
   const {
     items: notifications,
@@ -65,16 +80,19 @@ export function HomeScreen({ navigation }: Props) {
     refresh: refreshNotifications,
   } = useNotifications();
   const openNotification = useOpenNotification();
-  const recentActivity = notifications
-    .filter(n => n.type !== 'like' && n.type !== 'match')
-    .slice(0, 5);
+  const activityFeed = notifications.filter(
+    n => n.type !== 'like' && n.type !== 'match',
+  );
+  const recentActivity = activityFeed.slice(0, 3);
+  const hasMoreActivity = activityFeed.length > 3;
   const { isPremium, refresh: refreshPremium } = usePremium();
   const [firstName, setFirstName] = useState('');
   const [fullName, setFullName] = useState('');
-  const [avatarUri, setAvatarUri] = useState<string | undefined>();
-  const [statusText, setStatusText] = useState('');
-  const [statusModalOpen, setStatusModalOpen] = useState(false);
-  const [statusSaving, setStatusSaving] = useState(false);
+  const [avatarUri, setAvatarUri] = useState<string | undefined>(() =>
+    peekCachedAvatar(userId),
+  );
+  const avatarUriRef = useRef(avatarUri);
+  avatarUriRef.current = avatarUri;
   const [storyGroups, setStoryGroups] = useState<StoryUserGroup[]>([]);
   const [composeAsset, setComposeAsset] = useState<PickedStoryAsset | null>(
     null,
@@ -83,71 +101,133 @@ export function HomeScreen({ navigation }: Props) {
   const [uploadingStory, setUploadingStory] = useState(false);
   const [viewerVisible, setViewerVisible] = useState(false);
   const [viewerStartIndex, setViewerStartIndex] = useState(0);
+  const [ready, setReady] = useState(false);
   useHideTabBar(composeVisible || viewerVisible);
   const goToTab = useCallback(
     (tab: string) => navigation.getParent()?.navigate(tab as never),
     [navigation],
   );
   const lastHomeFetchAt = useRef(0);
+  const readyRef = useRef(false);
+  const storyGroupsRef = useRef(storyGroups);
+  storyGroupsRef.current = storyGroups;
+
+  const applyStories = useCallback((next: StoryUserGroup[] | null) => {
+    if (!next) return;
+    setStoryGroups(next);
+    void prefetchMediaUris(
+      next.flatMap(g =>
+        g.Stories.filter(s => s.MediaType === 'photo')
+          .slice(0, 1)
+          .map(s => s.MediaUrl),
+      ),
+      1200,
+    );
+  }, []);
 
   const refreshStories = useCallback(async () => {
-    if (!userId) return;
+    if (!userId) return null;
     try {
       const feed = await getStoryFeed(userId, accessToken);
-      const resolved = await resolveStoryMediaUrls(feed.Items);
-      setStoryGroups(resolved);
+      return await resolveStoryMediaUrls(feed.Items);
     } catch {
-      /* keep previous stories */
+      return null;
     }
   }, [userId, accessToken]);
 
   useFocusEffect(
     useCallback(() => {
-      if (!userId) return;
+      if (!userId) {
+        readyRef.current = true;
+        setReady(true);
+        return;
+      }
       let cancelled = false;
-      void refreshNotifications();
+      const firstPaint = !readyRef.current;
       const fresh =
         lastHomeFetchAt.current > 0 &&
-        Date.now() - lastHomeFetchAt.current < 25_000;
-      if (fresh) {
-        return undefined;
+        Date.now() - lastHomeFetchAt.current < HOME_STALE_MS;
+
+      const pullStories = () => {
+        void refreshStories().then(next => {
+          if (!cancelled) applyStories(next);
+        });
+      };
+
+      if (!fresh || firstPaint) {
+        void (async () => {
+          lastHomeFetchAt.current = Date.now();
+          void refreshNotifications();
+          void refreshPremium();
+          try {
+            const [profile, photoBundle, stories] = await Promise.all([
+              getUserProfile(userId, accessToken),
+              loadProfilePhotos(userId, accessToken).catch(() => ({
+                gallery: [],
+                avatarUri: undefined as string | undefined,
+              })),
+              refreshStories(),
+            ]);
+            if (cancelled) return;
+
+            const profileAvatar = await resolveMediaUrl(
+              profile.ProfileImage,
+            ).catch(() => undefined);
+            const nextAvatar = preferDisplayAvatar(
+              photoBundle.avatarUri,
+              profileAvatar,
+              peekCachedAvatar(userId),
+              avatarUriRef.current,
+            );
+            if (nextAvatar) {
+              rememberAvatar(userId, nextAvatar);
+              setAvatarUri(nextAvatar);
+            }
+            const nextStories = stories ?? storyGroupsRef.current;
+            if (firstPaint) {
+              void prefetchMediaUris([
+                nextAvatar,
+                ...nextStories.map(g => g.User.ProfileImage),
+                ...nextStories.flatMap(g =>
+                  g.Stories.filter(s => s.MediaType === 'photo')
+                    .slice(0, 1)
+                    .map(s => s.MediaUrl),
+                ),
+              ]);
+            }
+            if (cancelled) return;
+
+            const name = `${profile.FirstName} ${profile.LastName}`.trim();
+            setFirstName(profile.FirstName?.trim() || profile.Username || '');
+            setFullName(name || profile.Username || '');
+            applyStories(stories);
+            readyRef.current = true;
+            setReady(true);
+          } catch {
+            if (!cancelled) {
+              readyRef.current = true;
+              setReady(true);
+            }
+          }
+        })();
+      } else {
+        pullStories();
       }
-      lastHomeFetchAt.current = Date.now();
-      void refreshPremium();
-      void refreshStories();
 
-      (async () => {
-        try {
-          const [profile, photoBundle] = await Promise.all([
-            getUserProfile(userId, accessToken),
-            loadProfilePhotos(userId, accessToken).catch(() => ({
-              gallery: [],
-              avatarUri: undefined as string | undefined,
-            })),
-          ]);
-          if (cancelled) return;
-
-          const name = `${profile.FirstName} ${profile.LastName}`.trim();
-          setFirstName(profile.FirstName?.trim() || profile.Username || '');
-          setFullName(name || profile.Username || '');
-
-          const profileAvatar = await resolveMediaUrl(profile.ProfileImage);
-          setAvatarUri(photoBundle.avatarUri ?? profileAvatar);
-
-          const nextStatus = (profile.StatusText ?? '').trim();
-          const expiresAt = profile.StatusExpiresAt;
-          const expired =
-            !!expiresAt && new Date(expiresAt).getTime() <= Date.now();
-          setStatusText(expired ? '' : nextStatus);
-        } catch {
-          /* keep last known greeting */
-        }
-      })();
+      const poll = setInterval(pullStories, STORY_POLL_MS);
 
       return () => {
         cancelled = true;
+        clearInterval(poll);
       };
-    }, [userId, accessToken, refreshNotifications, refreshPremium, refreshStories]),
+    }, [
+      userId,
+      accessToken,
+      refreshNotifications,
+      refreshPremium,
+      refreshStories,
+      applyStories,
+    ]),
   );
 
   const openComposeWithPick = useCallback(
@@ -169,33 +249,6 @@ export function HomeScreen({ navigation }: Props) {
     [t],
   );
 
-  const saveStatus = useCallback(
-    async (next: string) => {
-      if (!userId) return;
-      setStatusSaving(true);
-      try {
-        const res = await updateUserStatus(
-          { UserId: userId, StatusText: next },
-          accessToken,
-        );
-        const saved = (res.StatusText ?? '').trim();
-        const expiresAt = res.StatusExpiresAt;
-        const expired =
-          !!expiresAt && new Date(expiresAt).getTime() <= Date.now();
-        setStatusText(expired ? '' : saved);
-        setStatusModalOpen(false);
-      } catch (error) {
-        Alert.alert(
-          t('profile.status_title'),
-          userFacingError(error, t, 'profile.status_error'),
-        );
-      } finally {
-        setStatusSaving(false);
-      }
-    },
-    [userId, accessToken, t],
-  );
-
   const handlePickFromGallery = useCallback(async () => {
     const picked = await pickStoryMediaFromLibrary();
     openComposeWithPick(picked);
@@ -212,25 +265,55 @@ export function HomeScreen({ navigation }: Props) {
     setUploadingStory(true);
     try {
       const coords = await getCurrentCoordinates(5000);
-      await createStory(userId, composeAsset, undefined, accessToken, coords);
+      const created = await createStory(
+        userId,
+        composeAsset,
+        undefined,
+        accessToken,
+        coords,
+      );
       setComposeVisible(false);
       setComposeAsset(null);
-      await refreshStories();
+      applyStories(await refreshStories());
+      const posted = await resolveMediaUrl(created.MediaUrl);
+      if (posted) {
+        void Image.prefetch(posted).catch(() => undefined);
+      }
     } catch {
       Alert.alert(t('stories.error_title'), t('stories.upload_error'));
     } finally {
       setUploadingStory(false);
     }
-  }, [userId, composeAsset, accessToken, refreshStories, t]);
+  }, [userId, composeAsset, accessToken, refreshStories, applyStories, t]);
 
   const handleOpenUserStories = useCallback(
     (targetUserId: number) => {
-      const index = storyGroups.findIndex(g => g.User.UserId === targetUserId);
-      if (index < 0) return;
-      setViewerStartIndex(index);
-      setViewerVisible(true);
+      const visible = storyGroups.filter(g => g.Stories.length > 0);
+      const index = visible.findIndex(g =>
+        isStoryGroupForUser(g, targetUserId),
+      );
+      if (index >= 0) {
+        setViewerStartIndex(index);
+        setViewerVisible(true);
+        return;
+      }
+      if (!userId || Number(targetUserId) !== Number(userId)) {
+        return;
+      }
+      void (async () => {
+        const group = await getStoriesByUser(userId, userId);
+        if (!group?.Stories.length) {
+          return;
+        }
+        applyStories([
+          group,
+          ...storyGroups.filter(g => !isStoryGroupForUser(g, userId)),
+        ]);
+        setViewerStartIndex(0);
+        setViewerVisible(true);
+      })();
     },
-    [storyGroups],
+    [storyGroups, userId, applyStories],
   );
 
   const handleOpenStoryProfile = useCallback(
@@ -240,9 +323,13 @@ export function HomeScreen({ navigation }: Props) {
         navigation.getParent()?.navigate('Profile' as never);
         return;
       }
+      const group = storyGroups.find(g => g.User.UserId === targetUserId);
+      if (group) {
+        openFriendProfile(group.User, accessToken);
+      }
       navigation.navigate('UserProfile', { userId: String(targetUserId) });
     },
-    [navigation, userId],
+    [navigation, userId, storyGroups, accessToken],
   );
 
   const handleDeleteStory = useCallback(
@@ -257,7 +344,7 @@ export function HomeScreen({ navigation }: Props) {
             void (async () => {
               try {
                 await deleteStory(userId, story.Id, accessToken);
-                await refreshStories();
+                applyStories(await refreshStories());
                 setViewerVisible(false);
               } catch {
                 Alert.alert(t('stories.error_title'), t('stories.delete_error'));
@@ -267,79 +354,66 @@ export function HomeScreen({ navigation }: Props) {
         },
       ]);
     },
-    [userId, accessToken, refreshStories, t],
+    [userId, accessToken, refreshStories, applyStories, t],
   );
+
+  const decoFaces = storyGroups
+    .filter(g => g.User.UserId !== userId && g.User.ProfileImage)
+    .slice(0, 3)
+    .map(g => g.User.ProfileImage as string);
+
+  if (!ready) {
+    return (
+      <View style={[styles.flex, { backgroundColor: theme.colors.background }]}>
+        <HomeSkeleton />
+      </View>
+    );
+  }
 
   return (
     <View style={[styles.flex, { backgroundColor: theme.colors.background }]}>
       <TabScreenScrollView
-        bottomSpacing={28}
+        bottomSpacing={40}
         contentContainerStyle={[
           styles.content,
-          { paddingTop: insets.top + 8 },
+          { paddingTop: topPad },
         ]}>
         <View style={styles.header}>
-          <View style={styles.greeting}>
-            <View style={styles.avatarWrap}>
-              <Pressable
-                onPress={() => goToTab('Profile')}
-                accessibilityRole="button"
-                accessibilityLabel={t('home.greeting')}>
-                <Avatar
-                  uri={avatarUri}
-                  name={fullName || firstName || '?'}
-                  size="md"
-                  premium={isPremium}
-                  online
-                />
-              </Pressable>
-              <Pressable
-                onPress={() => setStatusModalOpen(true)}
-                hitSlop={10}
-                accessibilityRole="button"
-                accessibilityLabel={t('profile.status_title')}
-                style={[
-                  styles.statusBubble,
-                  {
-                    backgroundColor: theme.colors.card,
-                    borderColor: theme.colors.border,
-                  },
-                  theme.shadows.sm,
-                ]}>
-                <Text
-                  style={[
-                    styles.statusBubbleText,
-                    { color: theme.colors.text },
-                  ]}
-                  numberOfLines={1}>
-                  {statusText || '+'}
-                </Text>
-              </Pressable>
-            </View>
-            <Pressable
-              style={styles.greetingText}
-              onPress={() => goToTab('Profile')}>
-              <Typography variant="caption" color="textMuted">
-                {t('home.greeting')}
-              </Typography>
-              <Typography variant="h3">{firstName || '…'}</Typography>
-            </Pressable>
-          </View>
+          <Pressable
+            onPress={() => {
+              void handleAddStory();
+            }}
+            onLongPress={() => {
+              void handlePickFromGallery();
+            }}
+            hitSlop={8}
+            accessibilityRole="button"
+            accessibilityLabel={t('stories.add')}>
+            <FigmaIcon name="messageAdd" size={25} />
+          </Pressable>
           <View style={styles.headerActions}>
-            <IconButton
-              name="bell"
-              badge={unreadNotifications}
-              onPress={() =>
-                // Bubbles to AppStack above tabs — full-screen, no tab bar.
-                navigation.navigate('Notifications' as never)
-              }
-              accessibilityLabel={t('notifications.title')}
-            />
-            <IconButton
-              name="crown"
+            <Pressable
+              onPress={() => navigation.navigate('Notifications' as never)}
+              hitSlop={8}
+              accessibilityRole="button"
+              accessibilityLabel={t('notifications.title')}>
+              <FigmaIcon name="bell" size={25} />
+              {unreadNotifications > 0 ? (
+                <View
+                  style={[
+                    styles.notifDot,
+                    { backgroundColor: theme.colors.plusCta },
+                  ]}
+                />
+              ) : null}
+            </Pressable>
+            <Pressable
               onPress={() => navigation.navigate('Premium' as never)}
-              accessibilityLabel={t('premium.title')}
-            />
+              hitSlop={8}
+              accessibilityRole="button"
+              accessibilityLabel={t('premium.title')}>
+              <FigmaIcon name="crown" size={24} />
+            </Pressable>
           </View>
         </View>
 
@@ -363,141 +437,180 @@ export function HomeScreen({ navigation }: Props) {
           <Pressable
             onPress={() => navigation.navigate('Premium' as never)}
             style={({ pressed }) => [
-              styles.premiumCard,
-              {
-                opacity: pressed ? 0.94 : 1,
-                transform: [{ scale: pressed ? 0.985 : 1 }],
-              },
-              theme.shadows.sm,
+              styles.heroCard,
+              styles.plusCard,
+              { borderColor: theme.colors.plusCta, opacity: pressed ? 0.94 : 1 },
             ]}>
             <LinearGradient
-              colors={theme.gradients.premium}
+              colors={theme.gradients.plusCard}
               start={{ x: 0, y: 0 }}
               end={{ x: 1, y: 1 }}
               style={StyleSheet.absoluteFill}
             />
-            <View style={styles.premiumContent}>
-              <View style={styles.premiumTextCol}>
-                <View style={styles.premiumBadge}>
-                  <Icon name="crown" size={12} color={theme.colors.onPremium} filled />
-                  <Typography variant="overline" tint={theme.colors.onPremium}>
-                    {t('home.hero_badge')}
-                  </Typography>
-                </View>
-                <Typography variant="title" tint={theme.colors.onPremium} numberOfLines={2}>
-                  {t('home.hero_title').replace(/\n/g, ' ')}
-                </Typography>
-                <Typography
-                  variant="caption"
-                  tint="rgba(44,33,0,0.72)"
-                  numberOfLines={2}>
-                  {t('home.hero_subtitle')}
-                </Typography>
+            <View style={styles.cardCopy}>
+              <Typography variant="title" weight="600" numberOfLines={2}>
+                {t('home.hero_title')}
+              </Typography>
+              <Typography variant="caption" color="textMuted" numberOfLines={3}>
+                {t('home.hero_subtitle')}
+              </Typography>
+              <FigmaButton
+                label={t('home.hero_cta')}
+                size="cta"
+                trailing="arrow"
+                style={styles.cardCta}
+              />
+            </View>
+            <View
+              style={[styles.plusArt, { width: plusArt, height: plusArt }]}
+              pointerEvents="none">
+              <Image
+                source={images.crownHero}
+                style={styles.plusCrown}
+                resizeMode="contain"
+              />
+              <View style={[styles.plusStar, { top: '6%', left: '2%' }]}>
+                <FigmaIcon name="star" size={starSize} />
               </View>
-              <View style={styles.premiumCta}>
-                <Typography variant="caption" tint={theme.colors.onPremium}>
-                  {t('home.hero_cta')}
-                </Typography>
-                <Icon name="chevron-right" size={14} color={theme.colors.onPremium} />
+              <View style={[styles.plusStar, { top: '2%', right: '8%' }]}>
+                <FigmaIcon name="star" size={starSize} />
+              </View>
+              <View style={[styles.plusStar, { bottom: '10%', right: '12%' }]}>
+                <FigmaIcon name="star" size={starSize} />
               </View>
             </View>
           </Pressable>
         ) : null}
 
-        {/* Nearby — same size card, Meerk logo + copy */}
         <Pressable
           onPress={() => goToTab('Nearby')}
           style={({ pressed }) => [
-            styles.card,
+            styles.heroCard,
+            styles.nearbyCard,
             {
-              backgroundColor: theme.colors.card,
+              backgroundColor: theme.colors.surface,
               borderColor: theme.colors.border,
-              borderWidth: StyleSheet.hairlineWidth,
               opacity: pressed ? 0.94 : 1,
-              transform: [{ scale: pressed ? 0.985 : 1 }],
             },
-            theme.shadows.md,
           ]}>
-          <View style={styles.cardContent}>
-            <View
-              style={[
-                styles.logoWrap,
-                { backgroundColor: theme.colors.primarySoft },
-              ]}>
-              <Image
-                source={images.appLogo}
-                style={styles.logo}
-                resizeMode="contain"
-              />
-            </View>
-            <Typography variant="h2" style={styles.cardTitle}>
+          <View style={styles.cardCopy}>
+            <Typography variant="title" weight="600" numberOfLines={2}>
               {t('home.nearby_card_title')}
             </Typography>
-            <Typography variant="callout" color="textMuted">
+            <Typography variant="caption" color="textMuted" numberOfLines={3}>
               {t('home.nearby_card_subtitle')}
             </Typography>
-            <View
-              style={[
-                styles.nearbyCta,
-                { backgroundColor: theme.colors.primary },
-              ]}>
-              <Typography variant="bodyStrong" tint={theme.colors.onPrimary}>
-                {t('home.nearby_card_cta')}
-              </Typography>
-              <Icon
-                name="chevron-right"
-                size={16}
-                color={theme.colors.onPrimary}
-              />
+            <FigmaButton
+              label={t('home.nearby_card_cta')}
+              size="cta"
+              trailing="arrow"
+              style={styles.cardCta}
+            />
+          </View>
+          <View
+            style={[styles.radar, { width: radarArt, height: radarArt }]}
+            pointerEvents="none">
+            <View style={styles.radarCenter}>
+              <FigmaIcon name="radarRing4" size={radarArt} />
             </View>
+            <View style={styles.radarCenter}>
+              <FigmaIcon name="radarRing3" size={Math.round(radarArt * 0.78)} />
+            </View>
+            <View style={styles.radarCenter}>
+              <FigmaIcon name="radarRing2" size={Math.round(radarArt * 0.56)} />
+            </View>
+            <View style={styles.radarCenter}>
+              <FigmaIcon name="radarRing1" size={Math.round(radarArt * 0.32)} />
+            </View>
+            <View style={styles.radarCenter}>
+              <FigmaIcon name="nearbyPin" size={Math.round(radarArt * 0.18)} />
+            </View>
+            {decoFaces[0] ? (
+              <Image
+                source={{ uri: decoFaces[0] }}
+                style={[
+                  styles.radarFace,
+                  {
+                    width: Math.round(radarArt * 0.2),
+                    height: Math.round(radarArt * 0.2),
+                    borderRadius: Math.round(radarArt * 0.1),
+                    borderColor: theme.colors.white,
+                    top: '8%',
+                    right: '6%',
+                  },
+                ]}
+              />
+            ) : null}
+            {decoFaces[1] ? (
+              <Image
+                source={{ uri: decoFaces[1] }}
+                style={[
+                  styles.radarFace,
+                  {
+                    width: Math.round(radarArt * 0.2),
+                    height: Math.round(radarArt * 0.2),
+                    borderRadius: Math.round(radarArt * 0.1),
+                    borderColor: theme.colors.white,
+                    bottom: '12%',
+                    right: '10%',
+                  },
+                ]}
+              />
+            ) : null}
+            {decoFaces[2] ? (
+              <Image
+                source={{ uri: decoFaces[2] }}
+                style={[
+                  styles.radarFace,
+                  {
+                    width: Math.round(radarArt * 0.2),
+                    height: Math.round(radarArt * 0.2),
+                    borderRadius: Math.round(radarArt * 0.1),
+                    borderColor: theme.colors.white,
+                    top: '42%',
+                    left: '4%',
+                  },
+                ]}
+              />
+            ) : null}
           </View>
         </Pressable>
 
-        <View style={styles.section}>
-          <Typography variant="title">{t('home.activity_section')}</Typography>
+        <View
+          style={[
+            styles.activityCard,
+            {
+              backgroundColor: theme.colors.surface,
+              borderColor: theme.colors.border,
+            },
+          ]}>
+          <Typography variant="bodyStrong">{t('home.activity_section')}</Typography>
           {recentActivity.length === 0 ? (
-            <View
-              style={[
-                styles.emptyCard,
-                styles.activityEmptyCard,
-                {
-                  backgroundColor: theme.colors.card,
-                  borderColor: theme.colors.border,
-                },
-              ]}>
-              <View
-                style={[
-                  styles.activityEmptyIcon,
-                  { backgroundColor: theme.colors.primarySoft },
-                ]}>
-                <Icon name="bell" size={22} color={theme.colors.primary} />
-              </View>
-              <Typography variant="bodyStrong" align="center">
-                {t('home.activity_empty')}
-              </Typography>
-            </View>
+            <Typography variant="caption" color="textMuted">
+              {t('home.activity_empty')}
+            </Typography>
           ) : (
-            <View
-              style={[
-                styles.activityCard,
-                { backgroundColor: theme.colors.card },
-                theme.shadows.sm,
-              ]}>
-              {recentActivity.map((item, i) => (
-                <View key={item.id}>
-                  <NotificationRow item={item} onPress={openNotification} compact />
-                  {i < recentActivity.length - 1 && (
-                    <View
-                      style={[
-                        styles.sep,
-                        { backgroundColor: theme.colors.border },
-                      ]}
-                    />
-                  )}
-                </View>
-              ))}
-            </View>
+            recentActivity.map((item, i) => (
+              <View key={item.id}>
+                <HomeActivityRow item={item} onPress={openNotification} />
+                {i < recentActivity.length - 1 ? (
+                  <View
+                    style={[styles.sep, { backgroundColor: theme.colors.border }]}
+                  />
+                ) : null}
+              </View>
+            ))
           )}
+          {hasMoreActivity ? (
+            <Pressable
+              onPress={() => navigation.navigate('Notifications' as never)}
+              hitSlop={8}
+              accessibilityRole="button">
+              <Typography variant="callout" weight="600" tint={theme.colors.plusCta}>
+                {t('home.activity_see_all')}
+              </Typography>
+            </Pressable>
+          ) : null}
         </View>
       </TabScreenScrollView>
 
@@ -524,19 +637,6 @@ export function HomeScreen({ navigation }: Props) {
         onDelete={handleDeleteStory}
         onOpenProfile={handleOpenStoryProfile}
       />
-
-      <StatusEditModal
-        visible={statusModalOpen}
-        initialStatus={statusText}
-        saving={statusSaving}
-        onClose={() => setStatusModalOpen(false)}
-        onSave={value => {
-          void saveStatus(value);
-        }}
-        onClear={() => {
-          void saveStatus('');
-        }}
-      />
     </View>
   );
 }
@@ -544,145 +644,86 @@ export function HomeScreen({ navigation }: Props) {
 const styles = StyleSheet.create({
   flex: { flex: 1 },
   content: {
-    paddingHorizontal: 20,
-    gap: 16,
+    paddingHorizontal: 10,
+    gap: 10,
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 8,
   },
-  greeting: {
-    flex: 1,
+  headerActions: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
-    minWidth: 0,
-    marginRight: 8,
+    gap: 10,
   },
-  avatarWrap: {
-    width: 52,
-    height: 52,
-    overflow: 'visible',
-    zIndex: 5,
-  },
-  statusBubble: {
+  notifDot: {
     position: 'absolute',
-    top: -10,
-    left: -8,
-    maxWidth: 88,
-    minWidth: 28,
-    minHeight: 26,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 13,
-    borderWidth: StyleSheet.hairlineWidth,
-    zIndex: 20,
-    elevation: 20,
-    alignItems: 'center',
-    justifyContent: 'center',
+    top: 2,
+    right: 2,
+    width: 4,
+    height: 4,
+    borderRadius: 2,
   },
-  statusBubbleText: {
-    fontSize: 11,
-    fontWeight: '700',
-  },
-  greetingText: { flex: 1, gap: 2, minWidth: 0 },
-  headerActions: { flexDirection: 'row', gap: 8, flexShrink: 0 },
-  premiumCard: {
-    borderRadius: 18,
-    overflow: 'hidden',
-  },
-  premiumContent: {
+  heroCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
-    paddingHorizontal: 16,
-    paddingVertical: 14,
+    borderRadius: 15,
+    borderWidth: 1,
+    overflow: 'hidden',
+    paddingVertical: 18,
+    paddingLeft: 20,
+    paddingRight: 8,
+    gap: 8,
   },
-  premiumTextCol: {
+  plusCard: {
+    minHeight: 158,
+  },
+  nearbyCard: {
+    minHeight: 168,
+  },
+  cardCopy: {
     flex: 1,
-    gap: 4,
     minWidth: 0,
+    gap: 6,
+    zIndex: 2,
   },
-  premiumBadge: {
-    alignSelf: 'flex-start',
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 5,
-    backgroundColor: 'rgba(44,33,0,0.1)',
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 999,
-  },
-  premiumCta: {
-    flexShrink: 0,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 2,
-    backgroundColor: 'rgba(44,33,0,0.12)',
-    paddingHorizontal: 10,
-    paddingVertical: 8,
-    borderRadius: 999,
-  },
-  card: {
-    borderRadius: 24,
-    overflow: 'hidden',
-    minHeight: 200,
-  },
-  cardContent: {
-    padding: 24,
-    gap: 10,
-    minHeight: 200,
-    justifyContent: 'center',
-  },
-  cardTitle: { marginTop: 2 },
-  logoWrap: {
-    width: 56,
-    height: 56,
-    borderRadius: 18,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  logo: { width: 36, height: 36 },
-  nearbyCta: {
-    alignSelf: 'flex-start',
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
+  cardCta: {
     marginTop: 8,
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderRadius: 999,
+    maxWidth: '100%',
   },
-  section: { gap: 14, marginTop: 8 },
-  emptyCard: {
-    borderRadius: 20,
-    borderWidth: StyleSheet.hairlineWidth,
-    paddingVertical: 8,
-    paddingHorizontal: 12,
+  plusArt: {
+    position: 'relative',
+    flexShrink: 0,
   },
-  activityEmptyCard: {
+  plusCrown: {
+    width: '100%',
+    height: '100%',
+  },
+  plusStar: {
+    position: 'absolute',
+  },
+  radar: {
+    position: 'relative',
+    flexShrink: 0,
+  },
+  radarCenter: {
+    ...StyleSheet.absoluteFill,
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 10,
-    paddingVertical: 22,
-    paddingHorizontal: 16,
-    minHeight: 120,
   },
-  activityEmptyIcon: {
-    width: 48,
-    height: 48,
-    borderRadius: 16,
-    alignItems: 'center',
-    justifyContent: 'center',
+  radarFace: {
+    position: 'absolute',
+    borderWidth: 1,
   },
   activityCard: {
-    borderRadius: 20,
-    paddingVertical: 4,
-    paddingHorizontal: 4,
+    borderRadius: 15,
+    borderWidth: 1,
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    gap: 10,
   },
-  sep: { height: StyleSheet.hairlineWidth, marginLeft: 68 },
+  sep: { height: StyleSheet.hairlineWidth, marginVertical: 10 },
 });
 
 export default HomeScreen;

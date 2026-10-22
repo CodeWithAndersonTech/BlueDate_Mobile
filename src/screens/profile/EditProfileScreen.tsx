@@ -7,11 +7,14 @@ import React, {
   useState,
 } from 'react';
 import {
-  ActivityIndicator,
   Alert,
   BackHandler,
+  Dimensions,
+  Image,
   Keyboard,
   Modal,
+  NativeScrollEvent,
+  NativeSyntheticEvent,
   Pressable,
   ScrollView,
   StatusBar,
@@ -24,44 +27,72 @@ import Animated, {
   Easing,
   useAnimatedStyle,
   useSharedValue,
-  withSpring,
   withTiming,
 } from 'react-native-reanimated';
-import {
-  SafeAreaView,
-  useSafeAreaInsets,
-} from 'react-native-safe-area-context';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import {
   getInterestTypes,
   getUserProfile,
   InterestTypeItem,
+  parseInterestTypes,
   deleteUserInterest,
   saveUserInterest,
+  updateUserBasics,
   updateUserBio,
 } from '../../api';
-import { Header } from '../../components';
+import {
+  BirthDatePicker,
+  Chip,
+  FigmaButton,
+  FigmaIcon,
+  FigmaSpinner,
+  Icon,
+  SheetModal,
+  Typography,
+  useScreenTopPad,
+} from '../../components';
 import { useKeyboardHeight } from '../../hooks';
-import { useLocale } from '../../i18n';
+import { useLocale, userFacingError } from '../../i18n';
 import { useAuth } from '../../navigation/AuthContext';
 import { useStickyDockLayout } from '../../navigation/tabBarLayout';
 import { useLockTabSwipe } from '../../navigation/useLockTabSwipe';
 import { ProfileStackParamList } from '../../navigation/types';
+import {
+  assetFromPickerResponse,
+  pickPhotoFromLibrary,
+} from '../../services/photos/pickImage';
+import {
+  MAX_GALLERY_PHOTOS,
+  PhotoLimitError,
+  loadProfilePhotos,
+  pickAndAddGalleryPhoto,
+  ProfilePhoto,
+  removeGalleryPhoto,
+} from '../../services/photos/photoStore';
 import { useTheme } from '../../theme';
+import {
+  BirthParts,
+  clampDay,
+  defaultBirthParts,
+  formatBirthDateIso,
+  isValidRegisterAge,
+} from '../../utils/birthDate';
+import { GENDER_OPTIONS, isValidGender } from '../../utils/gender';
 import { EditProfileSkeleton } from './EditProfileSkeleton';
+import { PhotoViewerModal } from './PhotoViewerModal';
 
 type Props = NativeStackScreenProps<ProfileStackParamList, 'EditProfile'>;
 
-type AccountRow = {
-  key: string;
-  label: string;
-  value: string;
-};
-
-const TILE_WIDTH = '48%';
-const TILE_HEIGHT = 100;
 const SAVE_BTN_HEIGHT = 54;
-const SAVED_FEEDBACK_MS = 850;
+const PHOTO_TILE_W = 149;
+const PHOTO_TILE_H = 173;
+const PHOTO_GAP = 5;
+const PHOTO_STRIDE = PHOTO_TILE_W + PHOTO_GAP;
+const GRID_GAP = 5;
+const GRID_INSET = 16;
+const GRID_COLS = 3;
+const SAVED_FEEDBACK_MS = 2400;
 const BIO_MAX = 300;
 
 const INTEREST_EMOJI: { match: RegExp; emoji: string }[] = [
@@ -87,11 +118,32 @@ function interestEmoji(type: InterestTypeItem): string {
   return '✨';
 }
 
+function dateKey(iso?: string | null): string {
+  const match = iso?.match(/^(\d{4}-\d{2}-\d{2})/);
+  return match?.[1] ?? '';
+}
+
+function partsFromIso(iso?: string | null): BirthParts {
+  const match = iso?.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (!match) {
+    return defaultBirthParts();
+  }
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  return { year, month, day: clampDay(year, month, day) };
+}
+
+function normalizeUsername(value: string): string {
+  return value.replace(/^@/, '').replace(/\s/g, '').toLowerCase();
+}
+
 export function EditProfileScreen({ navigation, route }: Props) {
   useLockTabSwipe();
 
   const theme = useTheme();
   const insets = useSafeAreaInsets();
+  const topPad = useScreenTopPad();
   const { userId, accessToken } = useAuth();
   const { t } = useLocale();
   // Nested under Material Top Tabs — pill can still overlay; keep CTAs above it.
@@ -106,10 +158,22 @@ export function EditProfileScreen({ navigation, route }: Props) {
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
   const [username, setUsername] = useState('');
-  const [email, setEmail] = useState('');
-  const [phone, setPhone] = useState('');
+  const [initialFirstName, setInitialFirstName] = useState('');
+  const [initialLastName, setInitialLastName] = useState('');
+  const [initialUsername, setInitialUsername] = useState('');
   const [bio, setBio] = useState('');
   const [initialBio, setInitialBio] = useState('');
+  const [birthParts, setBirthParts] = useState<BirthParts>(defaultBirthParts);
+  const [initialBirthDate, setInitialBirthDate] = useState('');
+  const [gender, setGender] = useState<number | null>(null);
+  const [initialGender, setInitialGender] = useState<number | null>(null);
+  const [birthSheetOpen, setBirthSheetOpen] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [photos, setPhotos] = useState<ProfilePhoto[]>([]);
+  const [photoPage, setPhotoPage] = useState(0);
+  const [photoEditorOpen, setPhotoEditorOpen] = useState(false);
+  const [photoBusy, setPhotoBusy] = useState(false);
+  const [viewerIndex, setViewerIndex] = useState<number | null>(null);
   const [interestTypes, setInterestTypes] = useState<InterestTypeItem[]>([]);
   const [answers, setAnswers] = useState<Record<number, string>>({});
   const [initialAnswers, setInitialAnswers] = useState<Record<number, string>>(
@@ -133,6 +197,7 @@ export function EditProfileScreen({ navigation, route }: Props) {
   const interestFocusDismissedKey = useRef<string | null>(null);
 
   const savedTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const photoIdsOnEditorOpen = useRef<string[]>([]);
 
   const clearFocusTimers = useCallback(() => {
     focusTimersRef.current.forEach(clearTimeout);
@@ -145,15 +210,14 @@ export function EditProfileScreen({ navigation, route }: Props) {
     [],
   );
 
-  const filledCount = useMemo(
-    () =>
-      Object.values(answers).filter(value => value.trim().length > 0).length,
-    [answers],
-  );
-  const progress =
-    interestTypes.length > 0 ? filledCount / interestTypes.length : 0;
-
   const dirty = useMemo(() => {
+    if (firstName.trim() !== initialFirstName.trim()) return true;
+    if (lastName.trim() !== initialLastName.trim()) return true;
+    if (normalizeUsername(username) !== normalizeUsername(initialUsername)) {
+      return true;
+    }
+    if (formatBirthDateIso(birthParts) !== initialBirthDate) return true;
+    if (gender !== initialGender) return true;
     if (bio.trim() !== initialBio.trim()) return true;
     const keys = new Set([
       ...Object.keys(answers),
@@ -166,24 +230,22 @@ export function EditProfileScreen({ navigation, route }: Props) {
       }
     }
     return false;
-  }, [answers, initialAnswers, bio, initialBio]);
-
-  const accountRows = useMemo(() => {
-    const rows: AccountRow[] = [
-      { key: 'first', label: t('edit.first_name'), value: firstName || '—' },
-      { key: 'last', label: t('edit.last_name'), value: lastName || '—' },
-      {
-        key: 'username',
-        label: t('edit.username'),
-        value: username ? `@${username.replace(/^@/, '')}` : '—',
-      },
-      { key: 'email', label: t('edit.email'), value: email || '—' },
-    ];
-    if (phone.trim()) {
-      rows.push({ key: 'phone', label: t('edit.phone'), value: phone });
-    }
-    return rows;
-  }, [t, firstName, lastName, username, email, phone]);
+  }, [
+    answers,
+    initialAnswers,
+    bio,
+    initialBio,
+    firstName,
+    lastName,
+    username,
+    initialFirstName,
+    initialLastName,
+    initialUsername,
+    birthParts,
+    initialBirthDate,
+    gender,
+    initialGender,
+  ]);
 
   const goBackToProfile = useCallback(() => {
     if (navigation.canGoBack()) {
@@ -210,13 +272,78 @@ export function EditProfileScreen({ navigation, route }: Props) {
     });
   }, [clearFocusTimers, focusTarget, focusInterestTypeId]);
 
+  const openPhotoEditor = useCallback(() => {
+    photoIdsOnEditorOpen.current = photos.map(photo => photo.id);
+    setPhotoEditorOpen(true);
+  }, [photos]);
+
+  const addedEditorPhotos = useCallback(() => {
+    const known = new Set(photoIdsOnEditorOpen.current);
+    return photos.filter(photo => !known.has(photo.id));
+  }, [photos]);
+
+  const discardAddedEditorPhotos = useCallback(async () => {
+    const added = addedEditorPhotos();
+    if (!userId || added.length === 0) {
+      setPhotoEditorOpen(false);
+      return;
+    }
+    setPhotoBusy(true);
+    try {
+      await Promise.all(
+        added.map(photo =>
+          removeGalleryPhoto(userId, photo, accessToken).catch(() => undefined),
+        ),
+      );
+      const keep = new Set(photoIdsOnEditorOpen.current);
+      setPhotos(prev => prev.filter(photo => keep.has(photo.id)));
+    } finally {
+      setPhotoBusy(false);
+      setPhotoEditorOpen(false);
+    }
+  }, [addedEditorPhotos, userId, accessToken]);
+
+  const requestClosePhotoEditor = useCallback(() => {
+    if (photoBusy || saving) {
+      return;
+    }
+    const added = addedEditorPhotos();
+    if (added.length === 0) {
+      setPhotoEditorOpen(false);
+      return;
+    }
+    Alert.alert(t('edit.photos_unsaved_title'), t('edit.photos_unsaved_message'), [
+      {
+        text: t('edit.photos_unsaved_discard'),
+        style: 'destructive',
+        onPress: () => {
+          void discardAddedEditorPhotos();
+        },
+      },
+      {
+        text: t('edit.photos_unsaved_keep'),
+        onPress: () => setPhotoEditorOpen(false),
+      },
+    ]);
+  }, [
+    photoBusy,
+    saving,
+    addedEditorPhotos,
+    discardAddedEditorPhotos,
+    t,
+  ]);
+
   const requestClose = useCallback(() => {
     if (saving) {
       return;
     }
-    // Bottom sheet first — don't leave the screen while it's open.
+    // Overlays first — don't leave the screen while they're open.
     if (sheetType != null) {
       closeInterestSheet();
+      return;
+    }
+    if (photoEditorOpen) {
+      requestClosePhotoEditor();
       return;
     }
     if (dirty) {
@@ -231,7 +358,16 @@ export function EditProfileScreen({ navigation, route }: Props) {
       return;
     }
     goBackToProfile();
-  }, [saving, sheetType, dirty, t, goBackToProfile, closeInterestSheet]);
+  }, [
+    saving,
+    sheetType,
+    photoEditorOpen,
+    dirty,
+    t,
+    goBackToProfile,
+    closeInterestSheet,
+    requestClosePhotoEditor,
+  ]);
 
   useEffect(() => {
     const sub = BackHandler.addEventListener('hardwareBackPress', () => {
@@ -255,20 +391,46 @@ export function EditProfileScreen({ navigation, route }: Props) {
     try {
       const [profile, typesResponse] = await Promise.all([
         getUserProfile(userId, accessToken),
-        getInterestTypes(accessToken),
+        getInterestTypes(accessToken).catch(() => null),
       ]);
-      setFirstName(profile.FirstName ?? '');
-      setLastName(profile.LastName ?? '');
-      setUsername(profile.Username ?? '');
-      setEmail(profile.Email ?? '');
-      setPhone(profile.Phone?.trim() ?? '');
+      const nextFirst = profile.FirstName ?? '';
+      const nextLast = profile.LastName ?? '';
+      const nextUser = profile.Username ?? '';
+      setFirstName(nextFirst);
+      setLastName(nextLast);
+      setUsername(nextUser);
+      setInitialFirstName(nextFirst);
+      setInitialLastName(nextLast);
+      setInitialUsername(nextUser);
       const nextBio = profile.Bio?.trim() ?? '';
       setBio(nextBio);
       setInitialBio(nextBio);
+      const nextBirth = dateKey(profile.BirthDate);
+      setBirthParts(partsFromIso(profile.BirthDate));
+      setInitialBirthDate(nextBirth);
+      setGender(profile.Gender ?? null);
+      setInitialGender(profile.Gender ?? null);
+      setSaveError(null);
 
-      const types = [
-        ...(typesResponse.GetAllInterestTypeQueryCommonObject ?? []),
-      ].sort((a, b) => a.SortOrder - b.SortOrder);
+      let types = parseInterestTypes(typesResponse);
+      if (types.length === 0) {
+        const seen = new Set<number>();
+        types = (profile.Interests ?? []).flatMap(item => {
+          const id = Number(item.InterestTypeId);
+          if (!id || seen.has(id)) {
+            return [];
+          }
+          seen.add(id);
+          return [
+            {
+              Id: id,
+              Code: item.InterestTypeCode ?? '',
+              Name: item.InterestTypeName ?? item.InterestTypeCode ?? '',
+              SortOrder: seen.size,
+            },
+          ];
+        });
+      }
       setInterestTypes(types);
 
       const nextAnswers: Record<number, string> = {};
@@ -285,9 +447,19 @@ export function EditProfileScreen({ navigation, route }: Props) {
       setAnswers(nextAnswers);
       setInitialAnswers({ ...nextAnswers });
       setInterestIds(nextIds);
+
+      try {
+        const bundle = await loadProfilePhotos(userId, accessToken);
+        setPhotos(bundle.gallery);
+      } catch {
+        setPhotos([]);
+      }
       hasLoadedRef.current = true;
+      setLoadFailed(false);
     } catch {
-      setLoadFailed(true);
+      if (!hasLoadedRef.current) {
+        setLoadFailed(true);
+      }
     } finally {
       setLoading(false);
     }
@@ -410,20 +582,162 @@ export function EditProfileScreen({ navigation, route }: Props) {
     closeInterestSheet();
   };
 
+  const onPhotoRailScroll = (
+    event: NativeSyntheticEvent<NativeScrollEvent>,
+  ) => {
+    const page = Math.round(event.nativeEvent.contentOffset.x / PHOTO_STRIDE);
+    setPhotoPage(Math.max(0, page));
+  };
+
+  const pickGalleryAsset = async () => {
+    const result = await pickPhotoFromLibrary({
+      mediaType: 'photo',
+      selectionLimit: 1,
+      quality: 0.8,
+    });
+    if (result.didCancel) return null;
+    if (result.errorCode === 'permission') {
+      Alert.alert(t('profile.photos'), t('profile.photo_permission'));
+      return null;
+    }
+    if (result.errorMessage === 'NATIVE_MODULE_MISSING') {
+      Alert.alert(t('profile.photos'), t('profile.photo_native_missing'));
+      return null;
+    }
+    if (result.errorCode) {
+      Alert.alert(t('profile.photos'), t('profile.photo_error'));
+      return null;
+    }
+    const asset = assetFromPickerResponse(result);
+    if (!asset) {
+      Alert.alert(t('profile.photos'), t('profile.photo_error'));
+      return null;
+    }
+    return asset;
+  };
+
+  const addGalleryPhoto = async () => {
+    if (!userId || photoBusy) return;
+    if (photos.length >= MAX_GALLERY_PHOTOS) {
+      Alert.alert(
+        t('profile.photos'),
+        t('profile.photos_max').replace('{count}', String(MAX_GALLERY_PHOTOS)),
+      );
+      return;
+    }
+    const asset = await pickGalleryAsset();
+    if (!asset) return;
+    setPhotoBusy(true);
+    try {
+      const photo = await pickAndAddGalleryPhoto(userId, asset, accessToken);
+      setPhotos(prev => [...prev, photo]);
+    } catch (error) {
+      if (error instanceof PhotoLimitError) {
+        Alert.alert(
+          t('profile.photos'),
+          t('profile.photos_max').replace('{count}', String(MAX_GALLERY_PHOTOS)),
+        );
+      } else {
+        Alert.alert(t('profile.photos'), t('profile.photo_error'));
+      }
+    } finally {
+      setPhotoBusy(false);
+    }
+  };
+
+  const deleteGalleryPhoto = (photo: ProfilePhoto) => {
+    if (!userId || photoBusy) return;
+    Alert.alert(t('profile.delete_photo'), t('profile.delete_photo_confirm'), [
+      { text: t('common.close'), style: 'cancel' },
+      {
+        text: t('profile.delete_photo'),
+        style: 'destructive',
+        onPress: async () => {
+          setPhotoBusy(true);
+          try {
+            await removeGalleryPhoto(userId, photo, accessToken);
+            setPhotos(prev => {
+              const next = prev.filter(item => item.id !== photo.id);
+              if (next.length === 0) {
+                setViewerIndex(null);
+              } else {
+                setViewerIndex(index =>
+                  index == null ? null : Math.min(index, next.length - 1),
+                );
+              }
+              return next;
+            });
+          } finally {
+            setPhotoBusy(false);
+          }
+        },
+      },
+    ]);
+  };
+
   const onSave = async () => {
     if (!userId) {
-      Alert.alert(t('edit.profile'), t('edit.session_missing'));
+      setSaveError(t('edit.session_missing'));
       return;
     }
     if (!dirty) {
       return;
     }
 
+    const nextFirst = firstName.trim();
+    const nextLast = lastName.trim();
+    const nextUser = normalizeUsername(username);
+    const nextBirth = formatBirthDateIso(birthParts);
+
+    if (!nextFirst) {
+      setSaveError(t('edit.first_name_required'));
+      return;
+    }
+    if (!nextLast) {
+      setSaveError(t('edit.last_name_required'));
+      return;
+    }
+    if (nextUser.length < 3 || nextUser.length > 50) {
+      setSaveError(t('auth.username_length'));
+      return;
+    }
+    if (!isValidGender(gender)) {
+      setSaveError(t('auth.gender_required'));
+      return;
+    }
+    if (!isValidRegisterAge(birthParts)) {
+      setSaveError(t('auth.age_too_young'));
+      return;
+    }
+
     setSaving(true);
+    setSaveError(null);
     try {
       const nextBio = bio.trim();
       const tasks: Promise<unknown>[] = [];
       const nextIds = { ...interestIds };
+
+      const basicsChanged =
+        nextFirst !== initialFirstName.trim() ||
+        nextLast !== initialLastName.trim() ||
+        nextUser !== normalizeUsername(initialUsername) ||
+        nextBirth !== initialBirthDate ||
+        gender !== initialGender;
+      if (basicsChanged) {
+        tasks.push(
+          updateUserBasics(
+            {
+              UserId: userId,
+              FirstName: nextFirst,
+              LastName: nextLast,
+              Username: nextUser,
+              BirthDate: `${nextBirth}T00:00:00.000Z`,
+              Gender: gender,
+            },
+            accessToken,
+          ),
+        );
+      }
 
       if (nextBio !== initialBio.trim()) {
         tasks.push(
@@ -466,33 +780,60 @@ export function EditProfileScreen({ navigation, route }: Props) {
       }
 
       await Promise.all(tasks);
+      setInitialFirstName(nextFirst);
+      setInitialLastName(nextLast);
+      setInitialUsername(nextUser);
+      setInitialBirthDate(nextBirth);
+      setInitialGender(gender);
+      setFirstName(nextFirst);
+      setLastName(nextLast);
+      setUsername(nextUser);
       setInitialBio(nextBio);
       setInitialAnswers({ ...answers });
       setInterestIds(nextIds);
       setSaving(false);
       setJustSaved(true);
-      savedTimer.current = setTimeout(goBackToProfile, SAVED_FEEDBACK_MS);
-    } catch {
+      if (savedTimer.current) clearTimeout(savedTimer.current);
+      savedTimer.current = setTimeout(() => setJustSaved(false), SAVED_FEEDBACK_MS);
+    } catch (error) {
       setSaving(false);
-      Alert.alert(t('edit.save_error_title'), t('edit.save_error_desc'));
+      setSaveError(userFacingError(error, t, 'edit.save_error_desc'));
     }
   };
 
   return (
-    <SafeAreaView
-      edges={['top']}
-      style={[styles.root, { backgroundColor: theme.colors.background }]}>
+    <View
+      style={[
+        styles.root,
+        { backgroundColor: theme.colors.background, paddingTop: topPad },
+      ]}>
       <StatusBar
         barStyle={theme.isDark ? 'light-content' : 'dark-content'}
         backgroundColor="transparent"
         translucent
       />
 
-      <Header
-        title={t('edit.title')}
-        onBack={requestClose}
-        backAccessibilityLabel={t('settings.cancel')}
-      />
+      <View style={styles.header}>
+        <Pressable
+          onPress={requestClose}
+          hitSlop={8}
+          accessibilityRole="button"
+          accessibilityLabel={t('common.back')}>
+          <View style={styles.backIcon}>
+            <FigmaIcon name="arrowRight" size={15} color={theme.colors.text} />
+          </View>
+        </Pressable>
+        <Typography variant="title" style={styles.headerTitle}>
+          {t('edit.title')}
+        </Typography>
+        <Pressable
+          onPress={load}
+          hitSlop={8}
+          accessibilityRole="button"
+          accessibilityLabel={t('profile.retry')}>
+          <FigmaIcon name="rotateRight" size={24} />
+        </Pressable>
+      </View>
 
       {loading ? (
         <EditProfileSkeleton />
@@ -505,17 +846,11 @@ export function EditProfileScreen({ navigation, route }: Props) {
             {userId ? t('edit.load_error_desc') : t('edit.session_missing')}
           </Text>
           {userId ? (
-            <Pressable
+            <FigmaButton
+              label={t('profile.retry')}
+              size="md"
               onPress={load}
-              style={[
-                styles.retryBtn,
-                { backgroundColor: theme.colors.primary },
-              ]}>
-              <Text
-                style={[styles.retryLabel, { color: theme.colors.onPrimary }]}>
-                {t('profile.retry')}
-              </Text>
-            </Pressable>
+            />
           ) : null}
         </View>
       ) : (
@@ -530,194 +865,271 @@ export function EditProfileScreen({ navigation, route }: Props) {
               styles.content,
               { paddingBottom: dock.scrollClearance },
             ]}>
-            {/* Account */}
-            <Text style={[styles.sectionLabel, { color: theme.colors.textMuted }]}>
-              {t('edit.account')}
-            </Text>
             <View
-              style={[
-                styles.card,
-                { backgroundColor: theme.colors.card },
-                theme.shadows.sm,
-              ]}>
-              {accountRows.map((row, index) => (
-                <View key={row.key}>
-                  <View style={styles.infoRow}>
-                    <View style={styles.infoText}>
-                      <Text
-                        style={[
-                          styles.infoLabel,
-                          { color: theme.colors.textMuted },
-                        ]}>
-                        {row.label}
-                      </Text>
-                      <Text
-                        style={[
-                          styles.infoValue,
-                          { color: theme.colors.text },
-                        ]}
-                        numberOfLines={1}>
-                        {row.value}
-                      </Text>
-                    </View>
-                    <Text
-                      style={[
-                        styles.lockGlyph,
-                        { color: theme.colors.textMuted },
-                      ]}>
-                      🔒
-                    </Text>
-                  </View>
-                  {index < accountRows.length - 1 ? (
-                    <View
-                      style={[
-                        styles.sep,
-                        { backgroundColor: theme.colors.border },
-                      ]}
+              style={[styles.card, { backgroundColor: theme.colors.card }]}>
+              <View style={styles.cardHead}>
+                <Icon
+                  name="user"
+                  size={theme.iconSize.md}
+                  color={theme.colors.plusCta}
+                />
+                <Typography variant="callout" weight="600">
+                  {t('edit.basics')}
+                </Typography>
+              </View>
+              <FieldRow label={t('edit.first_name')}>
+                <TextInput
+                  value={firstName}
+                  onChangeText={setFirstName}
+                  autoCapitalize="words"
+                  autoCorrect={false}
+                  placeholder={t('edit.first_name')}
+                  placeholderTextColor={theme.colors.textMuted}
+                  accessibilityLabel={t('edit.first_name')}
+                  style={[
+                    styles.infoInput,
+                    theme.typography.variants.callout,
+                    { color: theme.colors.text },
+                  ]}
+                />
+              </FieldRow>
+              <FieldRow label={t('edit.last_name')}>
+                <TextInput
+                  value={lastName}
+                  onChangeText={setLastName}
+                  autoCapitalize="words"
+                  autoCorrect={false}
+                  placeholder={t('edit.last_name')}
+                  placeholderTextColor={theme.colors.textMuted}
+                  accessibilityLabel={t('edit.last_name')}
+                  style={[
+                    styles.infoInput,
+                    theme.typography.variants.callout,
+                    { color: theme.colors.text },
+                  ]}
+                />
+              </FieldRow>
+              <FieldRow label={t('edit.username')}>
+                <TextInput
+                  value={username}
+                  onChangeText={text => setUsername(normalizeUsername(text))}
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  autoComplete="username"
+                  placeholder={t('edit.username')}
+                  placeholderTextColor={theme.colors.textMuted}
+                  accessibilityLabel={t('edit.username')}
+                  style={[
+                    styles.infoInput,
+                    theme.typography.variants.callout,
+                    { color: theme.colors.text },
+                  ]}
+                />
+              </FieldRow>
+              <FieldRow label={t('edit.birth_date')}>
+                <Pressable
+                  onPress={() => setBirthSheetOpen(true)}
+                  accessibilityRole="button"
+                  accessibilityLabel={t('edit.birth_date')}
+                  style={styles.infoValue}>
+                  <Typography variant="callout">
+                    {`${String(birthParts.day).padStart(2, '0')}.${String(birthParts.month).padStart(2, '0')}.${birthParts.year}`}
+                  </Typography>
+                </Pressable>
+              </FieldRow>
+              <FieldRow label={t('edit.gender')}>
+                <View style={styles.genderRow}>
+                  {GENDER_OPTIONS.map(option => (
+                    <Chip
+                      key={option.value}
+                      label={t(option.labelKey)}
+                      selected={gender === option.value}
+                      onPress={() => setGender(option.value)}
+                      style={styles.genderChip}
                     />
-                  ) : null}
+                  ))}
                 </View>
-              ))}
-            </View>
-            <Text style={[styles.hint, { color: theme.colors.textMuted }]}>
-              {t('edit.account_locked')}
-            </Text>
-
-            {/* Bio */}
-            <View
-              onLayout={e => {
-                bioOffsetY.current = e.nativeEvent.layout.y;
-              }}>
-              <Text
-                style={[
-                  styles.sectionLabel,
-                  { color: theme.colors.textMuted, marginTop: 22 },
-                ]}>
-                {t('profile.bio')}
-              </Text>
-              <TextInput
-                ref={bioInputRef}
-                value={bio}
-                onChangeText={text =>
-                  setBio(text.length <= BIO_MAX ? text : text.slice(0, BIO_MAX))
-                }
-                onFocus={() => {
-                  if (sheetType != null) {
-                    closeInterestSheet();
-                  }
-                  setBioFocused(true);
+              </FieldRow>
+              <View
+                onLayout={e => {
+                  bioOffsetY.current = e.nativeEvent.layout.y;
                 }}
-                onBlur={() => setBioFocused(false)}
-                multiline
-                placeholder={t('profile.add_bio_desc')}
-                placeholderTextColor={theme.colors.textMuted}
-                accessibilityLabel={t('profile.bio')}
-                style={[
-                  styles.bioInput,
-                  {
-                    color: theme.colors.text,
-                    backgroundColor: theme.colors.card,
-                    borderColor: bioFocused
-                      ? theme.colors.primary
-                      : theme.colors.border,
-                  },
-                ]}
-              />
-              <Text
-                style={[styles.bioCounter, { color: theme.colors.textMuted }]}>
-                {bio.trim().length}/{BIO_MAX}
-              </Text>
+                style={styles.aboutRow}>
+                <Typography
+                  variant="caption"
+                  color="textMuted"
+                  style={styles.infoLabel}
+                  numberOfLines={1}>
+                  {t('edit.about')}
+                </Typography>
+                <Typography variant="callout" color="textMuted">
+                  :
+                </Typography>
+                <TextInput
+                  ref={bioInputRef}
+                  value={bio}
+                  onChangeText={text =>
+                    setBio(text.length <= BIO_MAX ? text : text.slice(0, BIO_MAX))
+                  }
+                  onFocus={() => {
+                    if (sheetType != null) {
+                      closeInterestSheet();
+                    }
+                    setBioFocused(true);
+                  }}
+                  onBlur={() => setBioFocused(false)}
+                  multiline
+                  placeholder={t('profile.add_bio_desc')}
+                  placeholderTextColor={theme.colors.textMuted}
+                  accessibilityLabel={t('edit.about')}
+                  style={[
+                    styles.aboutInput,
+                    theme.typography.variants.callout,
+                    {
+                      color: theme.colors.text,
+                      borderColor: bioFocused
+                        ? theme.colors.plusCta
+                        : 'transparent',
+                    },
+                  ]}
+                />
+              </View>
             </View>
 
-            {/* Interests */}
+            <View
+              style={[styles.card, { backgroundColor: theme.colors.card }]}>
+              <View style={styles.cardHead}>
+                <Icon
+                  name="camera"
+                  size={theme.iconSize.md}
+                  color={theme.colors.plusCta}
+                />
+                <Typography variant="callout" weight="600" style={styles.flex}>
+                  {t('profile.photos')}
+                </Typography>
+                <FigmaButton
+                  label={t('edit.edit_photo')}
+                  tone="soft"
+                  size="compact"
+                  onPress={openPhotoEditor}
+                />
+              </View>
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                decelerationRate="fast"
+                snapToInterval={PHOTO_STRIDE}
+                snapToAlignment="start"
+                onScroll={onPhotoRailScroll}
+                scrollEventThrottle={16}
+                contentContainerStyle={styles.photoRail}>
+                {photos.length === 0 ? (
+                  <Pressable
+                    onPress={addGalleryPhoto}
+                    accessibilityRole="button"
+                    accessibilityLabel={t('profile.add_photo')}
+                    style={[
+                      styles.photoTile,
+                      { backgroundColor: theme.colors.surfaceAlt },
+                    ]}>
+                    <Icon
+                      name="plus"
+                      size={theme.iconSize.lg}
+                      color={theme.colors.plusCta}
+                    />
+                    <Typography variant="caption" color="textMuted">
+                      {t('profile.add_photo')}
+                    </Typography>
+                  </Pressable>
+                ) : (
+                  photos.map((photo, index) => (
+                    <Pressable
+                      key={photo.id}
+                      onPress={() => setViewerIndex(index)}
+                      accessibilityRole="imagebutton"
+                      style={[
+                        styles.photoTile,
+                        { backgroundColor: theme.colors.surfaceAlt },
+                      ]}>
+                      <Image
+                        source={{ uri: photo.uri }}
+                        fadeDuration={0}
+                        style={styles.fill}
+                      />
+                    </Pressable>
+                  ))
+                )}
+              </ScrollView>
+              {photos.length > 1 ? (
+                <View style={styles.dots}>
+                  {photos.map((photo, index) => {
+                    const active = index === photoPage;
+                    return (
+                      <View
+                        key={photo.id}
+                        style={[
+                          styles.dot,
+                          active ? styles.dotActive : styles.dotIdle,
+                          {
+                            backgroundColor: active
+                              ? theme.colors.plusCta
+                              : theme.colors.border,
+                          },
+                        ]}
+                      />
+                    );
+                  })}
+                </View>
+              ) : null}
+            </View>
+
             <View
               onLayout={e => {
                 interestsOffsetY.current = e.nativeEvent.layout.y;
               }}
               style={[
-                styles.sectionHead,
-                { marginTop: 18 },
+                styles.card,
+                { backgroundColor: theme.colors.card },
                 interestsHighlighted
-                  ? {
-                      borderRadius: 16,
-                      padding: 10,
-                      marginHorizontal: -6,
-                      backgroundColor: theme.colors.primarySoft,
-                    }
+                  ? { borderWidth: 1, borderColor: theme.colors.plusCta }
                   : null,
               ]}>
-              <View style={styles.sectionHeadText}>
-                <Text
-                  style={[
-                    styles.sectionLabel,
-                    { color: theme.colors.textMuted, marginBottom: 0 },
-                  ]}>
-                  {t('edit.interests')}
-                </Text>
-                <Text style={[styles.hint, { color: theme.colors.textMuted }]}>
-                  {t('edit.interests_hint')}
-                </Text>
+              <View style={styles.cardHead}>
+                <Icon
+                  name="heart"
+                  size={theme.iconSize.md}
+                  color={theme.colors.plusCta}
+                />
+                <Typography variant="callout" weight="600">
+                  {t('edit.favorites')}
+                </Typography>
               </View>
-              {interestTypes.length > 0 ? (
-                <View
-                  style={[
-                    styles.progressPill,
-                    { backgroundColor: theme.colors.primarySoft },
-                  ]}>
-                  <View
-                    style={[
-                      styles.progressTrack,
-                      { backgroundColor: theme.colors.surfaceAlt },
-                    ]}>
-                    <View
-                      style={[
-                        styles.progressFill,
-                        {
-                          width: `${Math.round(progress * 100)}%` as `${number}%`,
-                          backgroundColor: theme.colors.primary,
-                        },
-                      ]}
-                    />
-                  </View>
-                  <Text
-                    style={[
-                      styles.progressCount,
-                      { color: theme.colors.primary },
-                    ]}>
-                    {filledCount}/{interestTypes.length}
-                  </Text>
-                </View>
-              ) : null}
-            </View>
-
-            {interestTypes.length === 0 ? (
-              <Text style={[styles.muted, { color: theme.colors.textMuted }]}>
-                {t('edit.no_interest_types')}
-              </Text>
-            ) : (
-              <View style={styles.tileGrid}>
-                {interestTypes.map(type => {
+              {interestTypes.length === 0 ? (
+                <Typography variant="caption" color="textMuted">
+                  {t('edit.no_interest_types')}
+                </Typography>
+              ) : (
+                interestTypes.map(type => {
                   const value = (answers[type.Id] ?? '').trim();
-                  const selected = value.length > 0;
                   return (
-                    <InterestTile
+                    <FavoriteRow
                       key={type.Id}
                       emoji={interestEmoji(type)}
                       title={type.Name || type.Code}
                       value={value}
-                      selected={selected}
                       addLabel={t('edit.add_interest')}
+                      changeLabel={t('edit.change')}
                       onPress={() => openInterestSheet(type)}
                     />
                   );
-                })}
-              </View>
-            )}
+                })
+              )}
+            </View>
           </ScrollView>
         </Animated.View>
       )}
 
-      {!loading && !loadFailed && sheetType == null ? (
+      {!loading && !loadFailed && sheetType == null && !photoEditorOpen ? (
         <View
           pointerEvents="box-none"
           style={[
@@ -729,52 +1141,85 @@ export function EditProfileScreen({ navigation, route }: Props) {
               borderTopColor: theme.colors.border,
             },
           ]}>
-          {justSaved ? (
-            <View style={styles.savedRow}>
-              <Text style={{ color: theme.colors.success, fontSize: 16 }}>
-                ✓
-              </Text>
-              <Text
-                style={[styles.savedLabel, { color: theme.colors.success }]}>
-                {t('edit.saved')}
-              </Text>
-            </View>
-          ) : (
-            <Pressable
-              onPress={onSave}
-              disabled={!dirty || saving}
-              accessibilityRole="button"
-              accessibilityState={{
-                disabled: !dirty || saving,
-                busy: saving,
-              }}
-              style={[
-                styles.saveBtn,
-                {
-                  backgroundColor: dirty
-                    ? theme.colors.primary
-                    : theme.colors.primarySoft,
-                  borderColor: theme.colors.primary,
-                  opacity: saving ? 0.85 : 1,
-                },
-              ]}>
-              {saving ? (
-                <ActivityIndicator color={theme.colors.onPrimary} />
-              ) : (
-                <Text
-                  style={[
-                    styles.saveLabel,
-                    {
-                      color: dirty
-                        ? theme.colors.onPrimary
-                        : theme.colors.primary,
-                    },
-                  ]}>
-                  {t('edit.save_changes')}
-                </Text>
-              )}
-            </Pressable>
-          )}
+          {saveError ? (
+            <Typography variant="caption" tint={theme.colors.danger}>
+              {saveError}
+            </Typography>
+          ) : null}
+          <FigmaButton
+            label={
+              saving
+                ? t('edit.saving')
+                : justSaved
+                  ? t('edit.saved')
+                  : t('edit.save_changes')
+            }
+            size="md"
+            fullWidth
+            tone={justSaved || dirty ? 'solid' : 'soft'}
+            loading={saving}
+            onPress={dirty && !justSaved ? onSave : undefined}
+          />
+        </View>
+      ) : null}
+
+      {saving ? (
+        <View
+          pointerEvents="auto"
+          style={[styles.saveOverlay, { backgroundColor: theme.colors.overlay }]}>
+          <View
+            style={[
+              styles.saveCard,
+              {
+                backgroundColor: theme.colors.card,
+                borderColor: theme.colors.border,
+              },
+            ]}>
+            <FigmaSpinner size={28} />
+            <Typography variant="callout" weight="600">
+              {t('edit.saving')}
+            </Typography>
+          </View>
+        </View>
+      ) : null}
+
+      <SheetModal
+        visible={birthSheetOpen}
+        title={t('edit.birth_date')}
+        onClose={() => setBirthSheetOpen(false)}>
+        <BirthDatePicker
+          value={birthParts}
+          onChange={setBirthParts}
+          hint={t('auth.birth_date_hint')}
+        />
+        <FigmaButton
+          label={t('edit.apply_interest')}
+          size="md"
+          fullWidth
+          onPress={() => setBirthSheetOpen(false)}
+        />
+      </SheetModal>
+
+      {justSaved ? (
+        <View pointerEvents="none" style={[styles.toastHost, { top: topPad }]}>
+          <View
+            style={[
+              styles.toast,
+              {
+                backgroundColor: theme.colors.card,
+                borderColor: theme.colors.border,
+                shadowColor: theme.colors.black,
+              },
+            ]}>
+            <FigmaIcon
+              name="tickCircle"
+              size={22}
+              color={theme.colors.success}
+            />
+            <Typography variant="callout" weight="600">
+              {t('edit.saved')}
+            </Typography>
+          </View>
         </View>
       ) : null}
 
@@ -789,104 +1234,214 @@ export function EditProfileScreen({ navigation, route }: Props) {
         onClear={clearInterestSheet}
         hasValue={(answers[sheetType?.Id ?? -1] ?? '').trim().length > 0}
       />
-    </SafeAreaView>
+
+      <PhotoEditorModal
+        visible={photoEditorOpen}
+        photos={photos}
+        busy={photoBusy}
+        onClose={requestClosePhotoEditor}
+        onAdd={addGalleryPhoto}
+        onOpenPhoto={index => {
+          setPhotoEditorOpen(false);
+          setViewerIndex(index);
+        }}
+      />
+
+      <PhotoViewerModal
+        photos={photos}
+        index={viewerIndex ?? -1}
+        editable
+        busy={photoBusy}
+        onClose={() => setViewerIndex(null)}
+        onIndexChange={setViewerIndex}
+        onDelete={deleteGalleryPhoto}
+      />
+    </View>
   );
 }
 
-function InterestTile({
+function FieldRow({
+  label,
+  children,
+}: {
+  label: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <View style={styles.infoRow}>
+      <Typography
+        variant="caption"
+        color="textMuted"
+        style={styles.infoLabel}
+        numberOfLines={1}>
+        {label}
+      </Typography>
+      <Typography variant="callout" color="textMuted">
+        :
+      </Typography>
+      {children}
+    </View>
+  );
+}
+
+function FavoriteRow({
   emoji,
   title,
   value,
-  selected,
-  onPress,
   addLabel,
+  changeLabel,
+  onPress,
 }: {
   emoji: string;
   title: string;
   value: string;
-  selected: boolean;
-  onPress: () => void;
   addLabel: string;
+  changeLabel: string;
+  onPress: () => void;
 }) {
   const theme = useTheme();
-  const scale = useSharedValue(1);
-  const animated = useAnimatedStyle(() => ({
-    transform: [{ scale: scale.value }],
-  }));
+  const filled = value.length > 0;
 
   return (
     <Pressable
       onPress={onPress}
-      onPressIn={() => {
-        scale.value = withSpring(0.96, { damping: 16, stiffness: 320 });
-      }}
-      onPressOut={() => {
-        scale.value = withSpring(1, { damping: 14, stiffness: 260 });
-      }}
       accessibilityRole="button"
-      accessibilityState={{ selected }}
-      accessibilityLabel={`${title}: ${selected ? value : addLabel}`}
-      style={styles.tileWrap}>
-      <Animated.View
-        style={[
-          styles.tile,
-          {
-            backgroundColor: selected
-              ? theme.colors.primarySoft
-              : theme.colors.card,
-            borderColor: selected
-              ? theme.colors.primary
-              : theme.colors.border,
-          },
-          theme.shadows.sm,
-          animated,
-        ]}>
-        <View style={styles.tileTop}>
-          <View
-            style={[
-              styles.emojiBadge,
-              {
-                backgroundColor: selected
-                  ? theme.colors.primary
-                  : theme.colors.surfaceAlt,
-              },
-            ]}>
-            <Text style={styles.emojiText}>{emoji}</Text>
-          </View>
-          {selected ? (
-            <View
-              style={[
-                styles.checkDot,
-                { backgroundColor: theme.colors.primary },
-              ]}>
-              <Text
-                style={[styles.checkGlyph, { color: theme.colors.onPrimary }]}>
-                ✓
-              </Text>
-            </View>
-          ) : (
-            <Text style={[styles.plusGlyph, { color: theme.colors.textMuted }]}>
-              +
-            </Text>
-          )}
-        </View>
-        <Text
-          style={[styles.tileTitle, { color: theme.colors.textMuted }]}
-          numberOfLines={1}
-          ellipsizeMode="tail">
+      accessibilityLabel={`${title}: ${filled ? value : addLabel}`}
+      style={styles.favRow}>
+      <View
+        style={[styles.favIcon, { backgroundColor: theme.colors.surfaceAlt }]}>
+        <Text style={styles.favEmoji}>{emoji}</Text>
+      </View>
+      <View style={styles.favText}>
+        <Typography variant="caption" color="textMuted" numberOfLines={1}>
           {title}
-        </Text>
-        <Text
-          style={[
-            styles.tileValue,
-            { color: selected ? theme.colors.text : theme.colors.textMuted },
-          ]}
-          numberOfLines={1}
-          ellipsizeMode="tail">
-          {selected ? value : addLabel}
-        </Text>
-      </Animated.View>
+        </Typography>
+        <Typography
+          variant="callout"
+          color={filled ? 'text' : 'textMuted'}
+          numberOfLines={1}>
+          {filled ? value : addLabel}
+        </Typography>
+      </View>
+      <FigmaButton label={changeLabel} tone="soft" />
     </Pressable>
+  );
+}
+
+function PhotoEditorModal({
+  visible,
+  photos,
+  busy,
+  onClose,
+  onAdd,
+  onOpenPhoto,
+}: {
+  visible: boolean;
+  photos: ProfilePhoto[];
+  busy: boolean;
+  onClose: () => void;
+  onAdd: () => void;
+  onOpenPhoto: (index: number) => void;
+}) {
+  const theme = useTheme();
+  const { t } = useLocale();
+  const topPad = useScreenTopPad();
+  const atLimit = photos.length >= MAX_GALLERY_PHOTOS;
+  const tile = useMemo(() => {
+    const width = Dimensions.get('window').width - GRID_INSET * 2;
+    return (width - GRID_GAP * (GRID_COLS - 1)) / GRID_COLS;
+  }, []);
+  const cells: Array<ProfilePhoto | 'add'> = [...photos];
+  if (!atLimit) {
+    cells.push('add');
+  }
+
+  return (
+    <Modal
+      visible={visible}
+      animationType="slide"
+      presentationStyle="fullScreen"
+      onRequestClose={onClose}>
+      <View
+        style={[
+          styles.root,
+          { backgroundColor: theme.colors.background, paddingTop: topPad },
+        ]}>
+        <View style={styles.header}>
+          <Pressable
+            onPress={onClose}
+            hitSlop={8}
+            accessibilityRole="button"
+            accessibilityLabel={t('common.back')}>
+            <View style={styles.backIcon}>
+              <FigmaIcon name="arrowRight" size={15} color={theme.colors.text} />
+            </View>
+          </Pressable>
+          <Typography variant="title" style={styles.headerTitle}>
+            {t('profile.photos')}
+          </Typography>
+          <View style={styles.headerSpacer} />
+        </View>
+        <View style={styles.gridWrap}>
+          <View style={styles.grid}>
+            {cells.map((item, index) => {
+              if (item === 'add') {
+                return (
+                  <Pressable
+                    key="add"
+                    onPress={onAdd}
+                    disabled={busy}
+                    accessibilityRole="button"
+                    accessibilityLabel={t('profile.add_photo')}
+                    style={[
+                      styles.gridTile,
+                      {
+                        width: tile,
+                        height: tile,
+                        backgroundColor: theme.colors.surfaceAlt,
+                      },
+                    ]}>
+                    {busy ? (
+                      <FigmaSpinner />
+                    ) : (
+                      <Icon
+                        name="plus"
+                        size={theme.iconSize.lg}
+                        color={theme.colors.plusCta}
+                      />
+                    )}
+                  </Pressable>
+                );
+              }
+              return (
+                <Pressable
+                  key={item.id}
+                  onPress={() => onOpenPhoto(index)}
+                  accessibilityRole="imagebutton"
+                  style={[
+                    styles.gridTile,
+                    { width: tile, height: tile, backgroundColor: theme.colors.surfaceAlt },
+                  ]}>
+                  <Image
+                    source={{ uri: item.uri }}
+                    fadeDuration={0}
+                    style={styles.fill}
+                  />
+                </Pressable>
+              );
+            })}
+          </View>
+          {atLimit ? (
+            <Typography variant="caption" color="textMuted" align="center">
+              {t('profile.photos_max').replace(
+                '{count}',
+                String(MAX_GALLERY_PHOTOS),
+              )}
+            </Typography>
+          ) : null}
+        </View>
+      </View>
+    </Modal>
   );
 }
 
@@ -951,28 +1506,23 @@ function InterestSheet({
                 borderBottomRightRadius: keyboardHeight > 0 ? 0 : 24,
               },
             ]}>
-            <View
-              style={[
-                styles.sheetHandle,
-                { backgroundColor: theme.colors.borderStrong },
-              ]}
-            />
-            <View style={styles.sheetHeader}>
-              <View
-                style={[
-                  styles.sheetEmoji,
-                  { backgroundColor: theme.colors.primarySoft },
-                ]}>
-                <Text style={styles.sheetEmojiText}>{emoji}</Text>
-              </View>
-              <View style={styles.sheetHeaderText}>
-                <Text style={[styles.sheetTitle, { color: theme.colors.text }]}>
+            <View style={styles.sheetBar}>
+              <FigmaButton
+                label={t('settings.cancel')}
+                tone="muted"
+                onPress={onClose}
+              />
+              <View style={styles.sheetTitleWrap}>
+                <Text style={styles.sheetEmojiInline}>{emoji}</Text>
+                <Typography variant="title" numberOfLines={1}>
                   {title}
-                </Text>
-                <Text style={[styles.hint, { color: theme.colors.textMuted }]}>
-                  {t('edit.interest_sheet_hint')}
-                </Text>
+                </Typography>
               </View>
+              <FigmaButton
+                label={t('edit.save')}
+                tone="text"
+                onPress={onApply}
+              />
             </View>
             <TextInput
               value={value}
@@ -988,10 +1538,10 @@ function InterestSheet({
               accessibilityLabel={title}
               style={[
                 styles.sheetInput,
+                theme.typography.variants.callout,
                 {
                   color: theme.colors.text,
                   backgroundColor: theme.colors.surfaceAlt,
-                  borderColor: theme.colors.border,
                 },
               ]}
             />
@@ -1000,43 +1550,11 @@ function InterestSheet({
                 onPress={onClear}
                 hitSlop={8}
                 style={styles.sheetClear}>
-                <Text
-                  style={[
-                    styles.sheetClearLabel,
-                    { color: theme.colors.danger },
-                  ]}>
+                <Typography variant="caption" color="danger">
                   {t('edit.clear_interest')}
-                </Text>
+                </Typography>
               </Pressable>
             ) : null}
-            <View style={styles.sheetActions}>
-              <Pressable
-                onPress={onClose}
-                style={[styles.sheetBtn, styles.sheetGhost]}>
-                <Text
-                  style={[
-                    styles.sheetBtnLabel,
-                    { color: theme.colors.primary },
-                  ]}>
-                  {t('settings.cancel')}
-                </Text>
-              </Pressable>
-              <Pressable
-                onPress={onApply}
-                style={[
-                  styles.sheetBtn,
-                  styles.sheetPrimary,
-                  { backgroundColor: theme.colors.primary },
-                ]}>
-                <Text
-                  style={[
-                    styles.sheetBtnLabel,
-                    { color: theme.colors.onPrimary },
-                  ]}>
-                  {t('edit.apply_interest')}
-                </Text>
-              </Pressable>
-            </View>
           </View>
         </View>
       </View>
@@ -1048,6 +1566,30 @@ const styles = StyleSheet.create({
   root: { flex: 1 },
   flex: { flex: 1 },
   body: { flex: 1 },
+  fill: { width: '100%', height: '100%' },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 10,
+    paddingTop: 0,
+    paddingBottom: 8,
+  },
+  headerTitle: {
+    flex: 1,
+    textAlign: 'center',
+  },
+  headerSpacer: {
+    width: 24,
+    height: 24,
+  },
+  backIcon: {
+    transform: [{ rotate: '180deg' }],
+    width: 24,
+    height: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   sheetModalRoot: {
     flex: 1,
   },
@@ -1064,157 +1606,183 @@ const styles = StyleSheet.create({
   },
   errorTitle: { fontSize: 18, fontWeight: '700', textAlign: 'center' },
   muted: { fontSize: 14, textAlign: 'center', lineHeight: 20 },
-  retryBtn: {
-    marginTop: 8,
-    paddingHorizontal: 20,
-    height: 44,
-    borderRadius: 999,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  retryLabel: { fontSize: 15, fontWeight: '700' },
   content: {
-    paddingHorizontal: 20,
-    paddingTop: 0,
+    paddingHorizontal: 10,
+    paddingTop: 4,
+    gap: 10,
   },
   stickyDock: {
     position: 'absolute',
     left: 0,
     right: 0,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
+    flexDirection: 'column',
+    alignItems: 'stretch',
+    gap: 8,
     paddingHorizontal: 16,
     paddingTop: 12,
     borderTopWidth: StyleSheet.hairlineWidth,
     zIndex: 20,
   },
-  sectionLabel: {
-    fontSize: 11,
-    fontWeight: '700',
-    letterSpacing: 1.1,
-    textTransform: 'uppercase',
-    marginBottom: 8,
-  },
   card: {
-    borderRadius: 16,
-    overflow: 'hidden',
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+    gap: 4,
+  },
+  cardHead: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 8,
   },
   infoRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    gap: 12,
+    minHeight: 32,
+    gap: 6,
   },
-  infoText: { flex: 1, gap: 2 },
-  infoLabel: { fontSize: 12 },
-  infoValue: { fontSize: 15, fontWeight: '600' },
-  lockGlyph: { fontSize: 12 },
-  sep: {
-    height: StyleSheet.hairlineWidth,
-    marginLeft: 16,
+  infoLabel: {
+    width: 100,
   },
-  hint: { fontSize: 12, lineHeight: 16, marginTop: 6 },
-  bioInput: {
-    minHeight: 110,
-    borderRadius: 16,
-    borderWidth: 1,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    fontSize: 16,
-    lineHeight: 22,
-    textAlignVertical: 'top',
+  infoValue: {
+    flex: 1,
+    justifyContent: 'center',
+    minHeight: 32,
   },
-  bioCounter: {
-    alignSelf: 'flex-end',
-    fontSize: 12,
-    marginTop: 6,
+  infoInput: {
+    flex: 1,
+    minHeight: 32,
+    paddingVertical: 0,
+    paddingHorizontal: 0,
   },
-  sectionHead: {
+  genderRow: {
+    flex: 1,
+    flexDirection: 'row',
+    flexWrap: 'nowrap',
+    alignItems: 'center',
+    gap: 6,
+  },
+  genderChip: {
+    flex: 1,
+    justifyContent: 'center',
+    minHeight: 36,
+  },
+  aboutRow: {
     flexDirection: 'row',
     alignItems: 'flex-start',
-    justifyContent: 'space-between',
-    gap: 12,
-    marginTop: 20,
-    marginBottom: 8,
+    gap: 6,
+    minHeight: 44,
   },
-  sectionHeadText: { flex: 1, gap: 2 },
-  progressPill: {
+  aboutInput: {
+    flex: 1,
+    minHeight: 44,
+    paddingVertical: 0,
+    paddingHorizontal: 4,
+    borderWidth: 1,
+    borderRadius: 8,
+    textAlignVertical: 'top',
+  },
+  photoRail: {
+    gap: PHOTO_GAP,
+    paddingVertical: 4,
+  },
+  photoTile: {
+    width: PHOTO_TILE_W,
+    height: PHOTO_TILE_H,
+    borderRadius: 10,
+    overflow: 'hidden',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+  },
+  dots: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-    paddingVertical: 4,
-    paddingHorizontal: 12,
-    borderRadius: 999,
+    justifyContent: 'center',
+    gap: 4,
+    marginTop: 8,
   },
-  progressTrack: {
-    width: 36,
-    height: 4,
-    borderRadius: 2,
-    overflow: 'hidden',
+  dot: {
+    borderRadius: 3,
   },
-  progressFill: { height: '100%', borderRadius: 2 },
-  progressCount: { fontSize: 12, fontWeight: '700' },
-  tileGrid: {
+  dotActive: {
+    width: 16,
+    height: 6,
+  },
+  dotIdle: {
+    width: 6,
+    height: 6,
+  },
+  favRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    height: 52,
+    gap: 10,
+  },
+  favIcon: {
+    width: 30,
+    height: 30,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  favEmoji: {
+    fontSize: 15,
+  },
+  favText: {
+    flex: 1,
+    gap: 1,
+  },
+  gridWrap: {
+    paddingHorizontal: GRID_INSET,
+    paddingTop: 8,
+    gap: 12,
+  },
+  grid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    justifyContent: 'space-between',
-    rowGap: 10,
+    gap: GRID_GAP,
   },
-  tileWrap: { width: TILE_WIDTH, height: TILE_HEIGHT },
-  tile: {
-    flex: 1,
-    height: TILE_HEIGHT,
-    borderRadius: 16,
-    borderWidth: 1,
-    paddingHorizontal: 10,
-    paddingVertical: 10,
-    overflow: 'hidden',
-  },
-  tileTop: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 6,
-  },
-  emojiBadge: {
-    width: 28,
-    height: 28,
+  gridTile: {
     borderRadius: 10,
+    overflow: 'hidden',
     alignItems: 'center',
     justifyContent: 'center',
   },
-  emojiText: { fontSize: 14 },
-  checkDot: {
-    width: 18,
-    height: 18,
-    borderRadius: 9,
+  saveOverlay: {
+    ...StyleSheet.absoluteFill,
     alignItems: 'center',
     justifyContent: 'center',
+    zIndex: 40,
   },
-  checkGlyph: { fontSize: 11, fontWeight: '700' },
-  plusGlyph: { fontSize: 18, fontWeight: '500' },
-  tileTitle: { fontSize: 11, lineHeight: 14, marginBottom: 2 },
-  tileValue: { fontSize: 13, lineHeight: 16, fontWeight: '600' },
-  saveBtn: {
-    flex: 1,
-    height: SAVE_BTN_HEIGHT,
-    borderRadius: 999,
-    borderWidth: 1.5,
+  saveCard: {
+    minWidth: 168,
+    borderRadius: 16,
+    borderWidth: StyleSheet.hairlineWidth,
+    paddingHorizontal: 22,
+    paddingVertical: 18,
     alignItems: 'center',
-    justifyContent: 'center',
+    gap: 10,
   },
-  saveLabel: { fontSize: 16, fontWeight: '700' },
-  savedRow: {
-    flex: 1,
+  toastHost: {
+    position: 'absolute',
+    left: 12,
+    right: 12,
+    zIndex: 50,
+  },
+  toast: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    height: SAVE_BTN_HEIGHT,
+    gap: 10,
+    borderRadius: 16,
+    borderWidth: StyleSheet.hairlineWidth,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.18,
+    shadowRadius: 16,
+    elevation: 8,
   },
-  savedLabel: { fontSize: 16, fontWeight: '700' },
   backdrop: {
     ...StyleSheet.absoluteFill,
   },
@@ -1222,63 +1790,35 @@ const styles = StyleSheet.create({
     width: '100%',
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
-    paddingHorizontal: 20,
-    paddingTop: 8,
+    paddingHorizontal: 16,
+    paddingTop: 12,
     gap: 12,
+  },
+  sheetBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 8,
+  },
+  sheetTitleWrap: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+  },
+  sheetEmojiInline: {
+    fontSize: 15,
   },
   sheetClear: {
     alignSelf: 'flex-start',
     paddingVertical: 2,
   },
-  sheetClearLabel: {
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  sheetHandle: {
-    alignSelf: 'center',
-    width: 36,
-    height: 4,
-    borderRadius: 2,
-    marginBottom: 4,
-  },
-  sheetHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-  },
-  sheetEmoji: {
-    width: 52,
-    height: 52,
-    borderRadius: 16,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  sheetEmojiText: { fontSize: 24 },
-  sheetHeaderText: { flex: 1, gap: 2 },
-  sheetTitle: { fontSize: 17, fontWeight: '600' },
   sheetInput: {
     height: 52,
-    borderRadius: 16,
-    borderWidth: 1,
+    borderRadius: 10,
     paddingHorizontal: 16,
-    fontSize: 16,
   },
-  sheetActions: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    marginTop: 4,
-  },
-  sheetBtn: {
-    flex: 1,
-    height: 48,
-    borderRadius: 999,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  sheetGhost: {},
-  sheetPrimary: {},
-  sheetBtnLabel: { fontSize: 15, fontWeight: '700' },
 });
 
 export default EditProfileScreen;

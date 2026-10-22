@@ -4,5 +4,6 @@ export * from './validation';
 export * from './gender';
 export * from './jwt';
 export * from './crashLog';
+export * from './afterUiSettled';
 export * from './birthDate';
 export * from './zodiac';

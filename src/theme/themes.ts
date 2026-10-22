@@ -43,10 +43,14 @@ export interface ThemeColors {
   premium: string;
   premiumSoft: string;
   onPremium: string;
+  plusCta: string;
+  plusSoft: string;
+  plusIconSoft: string;
   overlay: string;
   backdrop: string;
   skeleton: string;
   tabBar: string;
+  tabIndicator: string;
   white: string;
   black: string;
   transparent: string;
@@ -55,6 +59,10 @@ export interface ThemeColors {
 export interface ThemeGradients {
   primary: string[];
   premium: string[];
+  /** Instagram-style story ring from Meerk Figma. */
+  storyRing: string[];
+  /** Home Plus membership card. */
+  plusCard: string[];
   /** Subtle vertical wash used behind hero sections. */
   hero: string[];
   /** Glassy card background gradient. */
@@ -157,6 +165,10 @@ export function buildTheme(mode: ColorMode, accentKey: AccentKey): Theme {
     premium: premium.start,
     premiumSoft: premium.soft,
     onPremium: premium.on,
+    plusCta: premium.cta,
+    plusSoft: premium.plusSoft,
+    plusIconSoft: premium.plusIconSoft,
+    tabIndicator: premium.tabIndicator,
     white: common.white,
     black: common.black,
     transparent: common.transparent,
@@ -165,6 +177,14 @@ export function buildTheme(mode: ColorMode, accentKey: AccentKey): Theme {
   const gradients: ThemeGradients = {
     primary: accent.gradient,
     premium: premium.gradient,
+    storyRing: ['#F7D046', '#F29D14', '#FE2A8A', '#A855F7', '#3B9EFF'] as [
+      string,
+      string,
+      string,
+      string,
+      string,
+    ],
+    plusCard: premium.cardGradient,
     hero:
       mode === 'dark'
         ? [accent.primary, n.backgroundAlt, n.background]

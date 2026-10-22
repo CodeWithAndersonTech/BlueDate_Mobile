@@ -2,8 +2,66 @@ import { useRoute } from '@react-navigation/native';
 import { useWindowDimensions } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-/** Height of the floating pill itself (safe-area excluded). */
-export const FLOATING_TAB_BAR_HEIGHT = 56;
+/** Figma tab bar is drawn on a 393pt frame. */
+const FIGMA_SCREEN_W = 393;
+const FIGMA_PILL_H = 45;
+const FIGMA_PILL_SIDE = 22;
+const FIGMA_PILL_PAD = 10;
+const FIGMA_ICON = 24;
+const FIGMA_INDICATOR_W = 54;
+const FIGMA_INDICATOR_H = 39;
+const FIGMA_INDICATOR_TOP = 3;
+
+export type TabBarMetrics = {
+  scale: number;
+  side: number;
+  pillWidth: number;
+  pillHeight: number;
+  pillRadius: number;
+  pillPad: number;
+  iconSize: number;
+  indicatorWidth: number;
+  indicatorHeight: number;
+  indicatorRadius: number;
+  indicatorTop: number;
+};
+
+/** Layout for the floating pill at the current window width. */
+export function tabBarMetrics(screenWidth: number): TabBarMetrics {
+  const scale = Math.max(1, screenWidth / FIGMA_SCREEN_W);
+  const side = Math.round(FIGMA_PILL_SIDE * scale);
+  const iconSize = Math.round(FIGMA_ICON * scale * 1.15);
+  const pillHeight = iconSize + Math.round(20 * scale);
+  const indicatorHeight = Math.round(FIGMA_INDICATOR_H * scale * 1.12);
+  return {
+    scale,
+    side,
+    pillWidth: Math.max(280, screenWidth - side * 2),
+    pillHeight,
+    pillRadius: pillHeight / 2,
+    pillPad: Math.round(FIGMA_PILL_PAD * scale),
+    iconSize,
+    indicatorWidth: Math.round(FIGMA_INDICATOR_W * scale * 1.12),
+    indicatorHeight: Math.min(indicatorHeight, pillHeight - 4),
+    indicatorRadius: pillHeight / 2,
+    indicatorTop: Math.max(2, Math.round(FIGMA_INDICATOR_TOP * scale)),
+  };
+}
+
+export function useTabBarMetrics(): TabBarMetrics {
+  const { width } = useWindowDimensions();
+  return tabBarMetrics(width);
+}
+
+/** Height of the floating pill itself (safe-area excluded). Figma: 45. */
+export const FLOATING_TAB_BAR_HEIGHT = FIGMA_PILL_H;
+/** @deprecated Prefer tabBarMetrics(width).pillWidth — kept for existing imports. */
+export const TAB_PILL_WIDTH = 350;
+export const TAB_PILL_RADIUS = 22;
+export const TAB_PILL_PAD = FIGMA_PILL_PAD;
+export const TAB_INDICATOR_WIDTH = FIGMA_INDICATOR_W;
+export const TAB_INDICATOR_HEIGHT = FIGMA_INDICATOR_H;
+export const TAB_INDICATOR_RADIUS = 20;
 
 /** The pill keeps at least this much distance from the physical bottom edge. */
 export const MIN_BOTTOM_INSET = 12;
@@ -31,9 +89,8 @@ export const DOCK_PAD_TOP = 12;
  */
 export function useTabBarClearance(extra = 16) {
   const insets = useSafeAreaInsets();
-  return (
-    FLOATING_TAB_BAR_HEIGHT + Math.max(insets.bottom, MIN_BOTTOM_INSET) + extra
-  );
+  const { pillHeight } = useTabBarMetrics();
+  return pillHeight + Math.max(insets.bottom, MIN_BOTTOM_INSET) + extra;
 }
 
 /**
@@ -42,9 +99,8 @@ export function useTabBarClearance(extra = 16) {
  */
 export function useFloatingTabOffset(gap = 12) {
   const insets = useSafeAreaInsets();
-  return (
-    FLOATING_TAB_BAR_HEIGHT + Math.max(insets.bottom, MIN_BOTTOM_INSET) + gap
-  );
+  const { pillHeight } = useTabBarMetrics();
+  return pillHeight + Math.max(insets.bottom, MIN_BOTTOM_INSET) + gap;
 }
 
 /**
@@ -109,9 +165,8 @@ export function useStickyDockLayout(
   const bottomSafe = Math.max(insets.bottom, MIN_BOTTOM_INSET);
   const topSafe = insets.top;
 
-  const dockBottom = tabBarVisible
-    ? FLOATING_TAB_BAR_HEIGHT + bottomSafe + 16
-    : 0;
+  const { pillHeight } = useTabBarMetrics();
+  const dockBottom = tabBarVisible ? pillHeight + bottomSafe + 16 : 0;
   const dockPaddingBottom = tabBarVisible ? DOCK_PAD_TOP : bottomSafe;
   // Visual height of the dock chrome (not including absolute offset).
   const dockHeight = DOCK_PAD_TOP + actionHeight + dockPaddingBottom;

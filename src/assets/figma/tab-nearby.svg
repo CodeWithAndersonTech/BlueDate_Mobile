@@ -1,0 +1,20 @@
+<svg preserveAspectRatio="none" overflow="visible" style="display: block;" width="24" height="24.5793" viewBox="0 0 24 24.5793" fill="none" xmlns="http://www.w3.org/2000/svg">
+<g id="Group 87">
+<path id="Ellipse 57" d="M23.5 12.5793C23.5 18.9306 18.3513 24.0793 12 24.0793C5.64873 24.0793 0.5 18.9306 0.5 12.5793C0.5 6.22802 5.64873 1.0793 12 1.0793C18.3513 1.0793 23.5 6.22802 23.5 12.5793Z" stroke="#F39F17"/>
+<path id="Ellipse 58" d="M19 12.5793C19 16.4453 15.866 19.5793 12 19.5793C8.13401 19.5793 5 16.4453 5 12.5793C5 8.7133 8.13401 5.5793 12 5.5793C15.866 5.5793 19 8.7133 19 12.5793Z" stroke="#F39F17"/>
+<path id="Ellipse 59" d="M14.5 12.5793C14.5 13.96 13.3807 15.0793 12 15.0793C10.6193 15.0793 9.5 13.96 9.5 12.5793C9.5 11.1986 10.6193 10.0793 12 10.0793C13.3807 10.0793 14.5 11.1986 14.5 12.5793Z" stroke="#F39F17"/>
+<g id="Vector 19" filter="url(#filter0_f_0_18)">
+<path d="M6 2.83017L12 12.5802L18 2.83017C13.2 0.0588864 8 1.67547 6 2.83017Z" fill="#F39F17" fill-opacity="0.35"/>
+</g>
+<path id="Ellipse 60" d="M18.5 6.9543C18.5 7.85176 17.7725 8.5793 16.875 8.5793C15.9775 8.5793 15.25 7.85176 15.25 6.9543C15.25 6.05683 15.9775 5.3293 16.875 5.3293C17.7725 5.3293 18.5 6.05683 18.5 6.9543Z" fill="#F39F17" stroke-width="0.5" stroke="#533F2F"/>
+<path id="Ellipse 61" d="M6.5 14.4543C6.5 15.3518 5.77246 16.0793 4.875 16.0793C3.97754 16.0793 3.25 15.3518 3.25 14.4543C3.25 13.5568 3.97754 12.8293 4.875 12.8293C5.77246 12.8293 6.5 13.5568 6.5 14.4543Z" fill="#F39F17" stroke-width="0.5" stroke="#533F2F"/>
+<path id="Ellipse 62" d="M23 20.4543C23 21.3518 22.2725 22.0793 21.375 22.0793C20.4775 22.0793 19.75 21.3518 19.75 20.4543C19.75 19.5568 20.4775 18.8293 21.375 18.8293C22.2725 18.8293 23 19.5568 23 20.4543Z" fill="#F39F17" stroke-width="0.5" stroke="#533F2F"/>
+</g>
+<defs>
+<filter id="filter0_f_0_18" x="4.7" y="0" width="14.6" height="13.8802" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
+<feFlood flood-opacity="0" result="BackgroundImageFix"/>
+<feBlend mode="normal" in="SourceGraphic" in2="BackgroundImageFix" result="shape"/>
+<feGaussianBlur stdDeviation="0.65" result="effect1_foregroundBlur_0_18"/>
+</filter>
+</defs>
+</svg>

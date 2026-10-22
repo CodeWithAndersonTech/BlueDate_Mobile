@@ -2,7 +2,7 @@ import React from 'react';
 import { Image, StyleSheet, View } from 'react-native';
 import { images } from '../../assets';
 import type { Treat } from '../../api';
-import { Avatar, Icon, Typography } from '../../components';
+import { Avatar, FigmaIcon, Typography } from '../../components';
 import { useLocale } from '../../i18n';
 import { useTheme } from '../../theme';
 
@@ -34,7 +34,7 @@ export function TreatHero({ treat, title, subtitle, subject }: Props) {
       <View
         style={[
           styles.art,
-          { backgroundColor: theme.colors.primarySoft, borderRadius: theme.radius.xxl },
+          { backgroundColor: theme.colors.plusSoft, borderRadius: theme.radius.xxl },
         ]}>
         <Image source={images.appLogo} style={styles.logo} resizeMode="contain" fadeDuration={0} />
       </View>
@@ -56,7 +56,7 @@ export function TreatHero({ treat, title, subtitle, subject }: Props) {
           ]}>
           <Typography variant="h2">{emoji}</Typography>
         </View>
-        <Icon name="chevron-right" size={18} color={theme.colors.premium} />
+        <FigmaIcon name="arrowRight" size={15} color={theme.colors.premium} />
         <Avatar uri={who.ProfileImage ?? undefined} name={whoName} size="lg" />
       </View>
       <Typography variant="caption" color="textMuted" align="center">

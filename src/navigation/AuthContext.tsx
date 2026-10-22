@@ -6,6 +6,7 @@ import React, {
   useMemo,
   useState,
 } from 'react';
+import { AppState } from 'react-native';
 import { loginUser, refreshSession, registerUser } from '../api';
 import {
   clearSessionTokens,
@@ -268,12 +269,62 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setStatus('signedOut');
   }, []);
 
+  useEffect(() => {
+    if (status !== 'signedIn') {
+      return;
+    }
+
+    let cancelled = false;
+
+    const dropExpiredSession = async () => {
+      if (hasActiveAccessToken(accessToken)) {
+        return;
+      }
+
+      const nextAccess = await withTimeout(
+        refreshAccessToken(refreshToken =>
+          refreshSession({ RefreshToken: refreshToken }),
+        ),
+        4000,
+        'auth refresh timeout',
+      ).catch(() => null);
+
+      if (cancelled) {
+        return;
+      }
+
+      if (hasActiveAccessToken(nextAccess)) {
+        setAccessToken(nextAccess);
+        return;
+      }
+
+      await clearSessionTokens();
+      if (cancelled) {
+        return;
+      }
+      setAccessToken(null);
+      setUserId(null);
+      setStatus('signedOut');
+    };
+
+    void dropExpiredSession();
+
+    const sub = AppState.addEventListener('change', state => {
+      if (state === 'active') {
+        void dropExpiredSession();
+      }
+    });
+
+    return () => {
+      cancelled = true;
+      sub.remove();
+    };
+  }, [status, accessToken]);
+
   const value = useMemo<AuthContextValue>(
     () => ({
       status,
-      // App shell requires both signed-in status and a stored access token.
-      // Expiry is enforced at hydrate + on 401 refresh failure (clears session).
-      isSignedIn: status === 'signedIn' && Boolean(accessToken),
+      isSignedIn: status === 'signedIn' && hasActiveAccessToken(accessToken),
       userId,
       accessToken,
       signIn,

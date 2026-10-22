@@ -1,7 +1,7 @@
 import { API_PATHS, getApiBaseUrl } from '../config/api';
 import { apiRequest, ApiEnvelope, ApiError, genericErrorMessage } from './client';
 import { getApiLanguageCode } from './languageHeader';
-import { resolveMediaUrl } from './photos';
+import { resolveMediaUrlWithBase } from './photos';
 
 export type StoryMediaType = 'photo' | 'video';
 
@@ -106,10 +106,28 @@ function normalizeGroup(group: RawGroup): StoryUserGroup {
   const stories = (group.Stories ?? group.stories ?? [])
     .map(normalizeStoryItem)
     .filter(s => s.Id > 0 && !!s.MediaUrl);
+  const user = normalizeUser(group.User ?? group.user);
+  if (user.UserId <= 0) {
+    const fromStory = stories.find(s => s.UserId > 0)?.UserId;
+    if (fromStory) {
+      user.UserId = fromStory;
+    }
+  }
   return {
-    User: normalizeUser(group.User ?? group.user),
+    User: user,
     Stories: stories,
   };
+}
+
+export function isStoryGroupForUser(
+  group: StoryUserGroup,
+  userId: number,
+): boolean {
+  const id = Number(userId);
+  return (
+    Number(group.User.UserId) === id ||
+    group.Stories.some(story => Number(story.UserId) === id)
+  );
 }
 
 export async function getStoryFeed(
@@ -302,22 +320,17 @@ export function deleteStory(
 export async function resolveStoryMediaUrls(
   groups: StoryUserGroup[],
 ): Promise<StoryUserGroup[]> {
-  return Promise.all(
-    groups.map(async group => {
-      const profileImage = await resolveMediaUrl(group.User.ProfileImage);
-      const stories = await Promise.all(
-        group.Stories.map(async story => ({
-          ...story,
-          MediaUrl: (await resolveMediaUrl(story.MediaUrl)) ?? story.MediaUrl,
-        })),
-      );
-      return {
-        User: {
-          ...group.User,
-          ProfileImage: profileImage ?? group.User.ProfileImage,
-        },
-        Stories: stories,
-      };
-    }),
-  );
+  const base = await getApiBaseUrl();
+  return groups.map(group => ({
+    User: {
+      ...group.User,
+      ProfileImage:
+        resolveMediaUrlWithBase(base, group.User.ProfileImage) ??
+        group.User.ProfileImage,
+    },
+    Stories: group.Stories.map(story => ({
+      ...story,
+      MediaUrl: resolveMediaUrlWithBase(base, story.MediaUrl) ?? story.MediaUrl,
+    })),
+  }));
 }

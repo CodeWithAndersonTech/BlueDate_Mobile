@@ -19,6 +19,7 @@ export type UserProfileResponse = ApiEnvelope & {
   ProfileImage?: string | null;
   Phone?: string | null;
   BirthDate?: string | null;
+  Gender?: number | null;
   /** Whole years derived from BirthDate. */
   Age?: number | null;
   IsEmailVerified: boolean;
@@ -50,7 +51,42 @@ export type InterestTypeItem = {
 
 export type InterestTypesResponse = ApiEnvelope & {
   GetAllInterestTypeQueryCommonObject?: InterestTypeItem[];
+  getAllInterestTypeQueryCommonObject?: InterestTypeItem[];
+  GetAllInterestTypeQueryResponseCommonObjectDto?: InterestTypeItem[];
 };
+
+export function parseInterestTypes(
+  raw: InterestTypesResponse | null | undefined,
+): InterestTypeItem[] {
+  const list = (raw?.GetAllInterestTypeQueryCommonObject ??
+    raw?.getAllInterestTypeQueryCommonObject ??
+    raw?.GetAllInterestTypeQueryResponseCommonObjectDto ??
+    []) as Array<
+    InterestTypeItem & {
+      id?: number;
+      code?: string;
+      keyName?: string | null;
+      name?: string;
+      sortOrder?: number;
+      languageKeyId?: number | null;
+    }
+  >;
+  if (!Array.isArray(list)) {
+    return [];
+  }
+  return list
+    .filter((item): item is NonNullable<typeof item> => item != null)
+    .map(item => ({
+      Id: Number(item.Id ?? item.id ?? 0),
+      Code: String(item.Code ?? item.code ?? ''),
+      KeyName: item.KeyName ?? item.keyName ?? null,
+      Name: String(item.Name ?? item.name ?? item.Code ?? item.code ?? ''),
+      SortOrder: Number(item.SortOrder ?? item.sortOrder ?? 0),
+      LanguageKeyId: item.LanguageKeyId ?? item.languageKeyId ?? null,
+    }))
+    .filter(item => item.Id > 0)
+    .sort((a, b) => a.SortOrder - b.SortOrder || a.Id - b.Id);
+}
 
 export type UserInterestItem = {
   Id: number;
@@ -84,27 +120,177 @@ export type UpdateUserBioResponse = ApiEnvelope & {
   Bio: string;
 };
 
+function asList<T>(value: unknown): T[] {
+  if (Array.isArray(value)) {
+    return value;
+  }
+  if (value && typeof value === 'object') {
+    const wrapped = (value as { $values?: unknown; items?: unknown }).$values
+      ?? (value as { items?: unknown }).items;
+    if (Array.isArray(wrapped)) {
+      return wrapped as T[];
+    }
+  }
+  return [];
+}
+
+function asText(value: unknown): string | null {
+  if (typeof value === 'string') {
+    return value;
+  }
+  if (value == null) {
+    return null;
+  }
+  return String(value);
+}
+
 export async function getUserProfile(userId: number, token?: string | null) {
   const raw = await apiRequest<
     UserProfileResponse & {
+      id?: number;
+      firstName?: string;
+      lastName?: string;
+      username?: string;
+      email?: string;
+      bio?: string | null;
+      profileImage?: string | null;
+      phone?: string | null;
       birthDate?: string | null;
+      gender?: number | null;
       age?: number | null;
+      isEmailVerified?: boolean;
+      isVerified?: boolean;
+      interests?: UserProfileInterest[];
+      photos?: UserProfilePhoto[];
     }
   >(API_PATHS.userProfile, {
     query: { userId },
     token,
+    acceptFailedEnvelope: true,
   });
-  return {
-    ...raw,
-    BirthDate: raw.BirthDate ?? raw.birthDate ?? null,
-    Age: typeof raw.Age === 'number' ? raw.Age : raw.age ?? null,
-    StatusText: raw.StatusText ?? raw.statusText ?? null,
-    StatusExpiresAt: raw.StatusExpiresAt ?? raw.statusExpiresAt ?? null,
-  };
+
+  try {
+    const photos = asList<
+      UserProfilePhoto & { id?: number; url?: string; sortOrder?: number }
+    >(raw?.Photos ?? raw?.photos).map((item, index) => ({
+      Id: Number(item?.Id ?? item?.id ?? 0),
+      Url: String(item?.Url ?? item?.url ?? ''),
+      SortOrder: item?.SortOrder ?? item?.sortOrder ?? index,
+    }));
+
+    const interests = asList<
+      UserProfileInterest & {
+        id?: number;
+        value?: string;
+        interestTypeId?: number | null;
+        interestTypeCode?: string | null;
+        interestTypeName?: string | null;
+      }
+    >(raw?.Interests ?? raw?.interests).map(item => ({
+      Id: Number(item?.Id ?? item?.id ?? 0),
+      Value: String(item?.Value ?? item?.value ?? ''),
+      InterestTypeId: item?.InterestTypeId ?? item?.interestTypeId ?? null,
+      InterestTypeCode: item?.InterestTypeCode ?? item?.interestTypeCode ?? null,
+      InterestTypeName: item?.InterestTypeName ?? item?.interestTypeName ?? null,
+    }));
+
+    return {
+      IsSuccess: raw?.IsSuccess ?? true,
+      Id: Number(raw?.Id ?? raw?.id ?? userId),
+      FirstName: asText(raw?.FirstName ?? raw?.firstName) ?? '',
+      LastName: asText(raw?.LastName ?? raw?.lastName) ?? '',
+      Username: asText(raw?.Username ?? raw?.username) ?? '',
+      Email: asText(raw?.Email ?? raw?.email) ?? '',
+      Bio: asText(raw?.Bio ?? raw?.bio),
+      ProfileImage: asText(raw?.ProfileImage ?? raw?.profileImage),
+      Phone: asText(raw?.Phone ?? raw?.phone),
+      BirthDate: asText(raw?.BirthDate ?? raw?.birthDate),
+      Gender: raw?.Gender ?? raw?.gender ?? null,
+      Age: typeof raw?.Age === 'number' ? raw.Age : raw?.age ?? null,
+      IsEmailVerified: raw?.IsEmailVerified ?? raw?.isEmailVerified ?? false,
+      IsVerified: raw?.IsVerified ?? raw?.isVerified ?? false,
+      StatusText: asText(raw?.StatusText ?? raw?.statusText),
+      StatusExpiresAt: asText(raw?.StatusExpiresAt ?? raw?.statusExpiresAt),
+      Interests: interests,
+      Photos: photos,
+    };
+  } catch {
+    return {
+      IsSuccess: true,
+      Id: Number(raw?.Id ?? raw?.id ?? userId),
+      FirstName: asText(raw?.FirstName ?? raw?.firstName) ?? '',
+      LastName: asText(raw?.LastName ?? raw?.lastName) ?? '',
+      Username: asText(raw?.Username ?? raw?.username) ?? '',
+      Email: asText(raw?.Email ?? raw?.email) ?? '',
+      Bio: null,
+      ProfileImage: asText(raw?.ProfileImage ?? raw?.profileImage),
+      Interests: [],
+      Photos: [],
+      IsEmailVerified: false,
+      IsVerified: false,
+    };
+  }
+}
+
+/** Nearby / badge: API flag, or interests + photo if the flag is stale. */
+export function isProfileReadyForNearby(
+  profile: Pick<
+    UserProfileResponse,
+    'IsVerified' | 'Interests' | 'Photos' | 'ProfileImage'
+  >,
+  types: InterestTypeItem[],
+): boolean {
+  if (profile.IsVerified) {
+    return true;
+  }
+  if (types.length === 0) {
+    return false;
+  }
+  const interests = profile.Interests ?? [];
+  const interestsComplete = types.every(type =>
+    interests.some(
+      item =>
+        Number(item.InterestTypeId) === Number(type.Id) &&
+        (item.Value ?? '').trim().length > 0,
+    ),
+  );
+  const hasPhoto =
+    (profile.Photos?.length ?? 0) > 0 ||
+    Boolean(profile.ProfileImage?.trim());
+  return interestsComplete && hasPhoto;
 }
 
 export function updateUserBio(payload: UpdateUserBioRequest, token?: string | null) {
   return apiRequest<UpdateUserBioResponse>(API_PATHS.userBio, {
+    method: 'PUT',
+    body: payload,
+    token,
+  });
+}
+
+export type UpdateUserBasicsRequest = {
+  UserId: number;
+  FirstName: string;
+  LastName: string;
+  Username: string;
+  BirthDate: string;
+  Gender: number;
+};
+
+export type UpdateUserBasicsResponse = ApiEnvelope & {
+  UserId: number;
+  FirstName: string;
+  LastName: string;
+  Username: string;
+  BirthDate?: string | null;
+  Gender?: number | null;
+};
+
+export function updateUserBasics(
+  payload: UpdateUserBasicsRequest,
+  token?: string | null,
+) {
+  return apiRequest<UpdateUserBasicsResponse>(API_PATHS.userBasics, {
     method: 'PUT',
     body: payload,
     token,

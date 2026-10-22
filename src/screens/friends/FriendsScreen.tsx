@@ -2,50 +2,72 @@ import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useFocusEffect } from '@react-navigation/native';
 import React, { useCallback, useRef, useState } from 'react';
 import {
-  ActivityIndicator,
   Alert,
+  Image,
   Pressable,
   StyleSheet,
   View,
 } from 'react-native';
 import {
-  Button,
   EmptyState,
-  Header,
-  Icon,
-  IconButton,
+  FigmaButton,
+  FigmaIcon,
+  FigmaSpinner,
   Screen,
-  SegmentedControl,
   TabScreenScrollView,
   Typography,
-  UserListItem,
 } from '../../components';
 import {
   acceptFriendRequest,
   cancelFriendRequest,
   displayName,
-  formatRelativeTime,
   FriendshipListItem,
+  FriendshipRelation,
   friendshipItems,
   getFriends,
   getIncomingFriendRequests,
+  getOrCreateDirectConversation,
   getSentFriendRequests,
   rejectFriendRequest,
   resolveFriendshipAvatars,
+  unfriend,
 } from '../../api';
 import { useLocale, userFacingError } from '../../i18n';
 import { useAuth } from '../../navigation/AuthContext';
+import { useChat } from '../../navigation/ChatContext';
 import { FriendsStackParamList } from '../../navigation/types';
 import { useTheme } from '../../theme';
+import { openFriendProfile } from '../../services/profile/visitCache';
 
 type Props = NativeStackScreenProps<FriendsStackParamList, 'FriendsMain'>;
 
 type Tab = 'friends' | 'incoming' | 'sent';
 
+function Face({ uri, name }: { uri?: string | null; name: string }) {
+  const theme = useTheme();
+  const letter = name.trim().charAt(0).toLocaleUpperCase('tr-TR') || '?';
+  return (
+    <View
+      style={[
+        styles.face,
+        { backgroundColor: theme.colors.surfaceAlt, overflow: 'hidden' },
+      ]}>
+      {uri ? (
+        <Image source={{ uri }} fadeDuration={0} style={StyleSheet.absoluteFill} />
+      ) : (
+        <Typography variant="callout" weight="600">
+          {letter}
+        </Typography>
+      )}
+    </View>
+  );
+}
+
 export function FriendsScreen({ navigation }: Props) {
   const { t } = useLocale();
   const theme = useTheme();
   const { userId, accessToken } = useAuth();
+  const { refreshInbox } = useChat();
   const [tab, setTab] = useState<Tab>('friends');
   const [loading, setLoading] = useState(true);
   const [friends, setFriends] = useState<FriendshipListItem[]>([]);
@@ -56,83 +78,108 @@ export function FriendsScreen({ navigation }: Props) {
   const [busyId, setBusyId] = useState<number | null>(null);
   const lastLoadAt = useRef(0);
 
-  const load = useCallback(async (opts?: { silent?: boolean }) => {
-    if (!userId) {
-      setFriends([]);
-      setIncomingRequests([]);
-      setSentRequests([]);
-      setLoading(false);
-      return;
-    }
-    if (!opts?.silent) {
-      setLoading(true);
-    }
-    try {
-      const [friendsRes, incomingRes, sentRes] = await Promise.all([
-        getFriends(userId, accessToken),
-        getIncomingFriendRequests(userId, accessToken),
-        getSentFriendRequests(userId, accessToken),
-      ]);
-      const [nextFriends, nextIncoming, nextSent] = await Promise.all([
-        resolveFriendshipAvatars(friendshipItems(friendsRes)),
-        resolveFriendshipAvatars(friendshipItems(incomingRes)),
-        resolveFriendshipAvatars(friendshipItems(sentRes)),
-      ]);
-      setFriends(nextFriends);
-      setIncomingRequests(nextIncoming);
-      setSentRequests(nextSent);
-    } catch (error) {
-      if (!opts?.silent) {
+  const load = useCallback(
+    async (opts?: { silent?: boolean }) => {
+      if (!userId) {
         setFriends([]);
         setIncomingRequests([]);
         setSentRequests([]);
-        Alert.alert(
-          t('friends.title'),
-          userFacingError(error, t, 'user_profile.action_error'),
-        );
+        setLoading(false);
+        return;
       }
-    } finally {
-      setLoading(false);
-    }
-  }, [userId, accessToken, t]);
+      if (!opts?.silent) {
+        setLoading(true);
+      }
+      try {
+        const [friendsRes, incomingRes, sentRes] = await Promise.all([
+          getFriends(userId, accessToken),
+          getIncomingFriendRequests(userId, accessToken),
+          getSentFriendRequests(userId, accessToken),
+        ]);
+        const [nextFriends, nextIncoming, nextSent] = await Promise.all([
+          resolveFriendshipAvatars(friendshipItems(friendsRes)),
+          resolveFriendshipAvatars(friendshipItems(incomingRes)),
+          resolveFriendshipAvatars(friendshipItems(sentRes)),
+        ]);
+        setFriends(nextFriends);
+        setIncomingRequests(nextIncoming);
+        setSentRequests(nextSent);
+        nextFriends.slice(0, 6).forEach(item => {
+          openFriendProfile(item.User, accessToken, FriendshipRelation.Friends);
+        });
+      } catch (error) {
+        if (!opts?.silent) {
+          setFriends([]);
+          setIncomingRequests([]);
+          setSentRequests([]);
+          Alert.alert(
+            t('friends.title'),
+            userFacingError(error, t, 'user_profile.action_error'),
+          );
+        }
+      } finally {
+        setLoading(false);
+      }
+    },
+    [userId, accessToken, t],
+  );
 
   useFocusEffect(
     useCallback(() => {
-      const silent =
+      const recent =
         lastLoadAt.current > 0 && Date.now() - lastLoadAt.current < 20_000;
-      void load({ silent }).finally(() => {
-        lastLoadAt.current = Date.now();
-      });
+      if (recent) return;
+      const silent = lastLoadAt.current > 0;
+      lastLoadAt.current = Date.now();
+      void load({ silent });
     }, [load]),
   );
 
-  const segments = [
-    {
-      key: 'friends',
-      label: t('friends.tab.friends'),
-      badge: friends.length,
-    },
-    {
-      key: 'incoming',
-      label: t('friends.tab.incoming'),
-      badge: incomingRequests.length,
-    },
-    {
-      key: 'sent',
-      label: t('friends.tab.sent'),
-      badge: sentRequests.length,
-    },
+  const segments: { key: Tab; label: string }[] = [
+    { key: 'friends', label: t('friends.tab.friends') },
+    { key: 'incoming', label: t('friends.tab.incoming') },
+    { key: 'sent', label: t('friends.tab.sent') },
   ];
 
-  const openProfile = (id: number) =>
-    navigation.navigate('UserProfile', { userId: String(id) });
+  const openProfile = (item: FriendshipListItem) => {
+    openFriendProfile(item.User, accessToken, FriendshipRelation.Friends);
+    navigation.navigate('UserProfile', { userId: String(item.User.UserId) });
+  };
+
+  const openChat = async (otherUserId: number) => {
+    if (!userId) return;
+    setBusyId(otherUserId);
+    try {
+      const res = await getOrCreateDirectConversation(
+        userId,
+        otherUserId,
+        accessToken,
+      );
+      if (!res.conversationId) {
+        throw new Error(t('user_profile.action_error'));
+      }
+      await refreshInbox();
+      const params = { conversationId: String(res.conversationId) };
+      const tabs = navigation.getParent();
+      const app = tabs?.getParent() ?? tabs ?? navigation;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (app as any).navigate('ChatThread', params);
+    } catch (error) {
+      Alert.alert(
+        t('friends.message'),
+        userFacingError(error, t, 'user_profile.action_error'),
+      );
+    } finally {
+      setBusyId(null);
+    }
+  };
 
   const onAccept = async (item: FriendshipListItem) => {
     if (!userId) return;
     setBusyId(item.FriendshipId);
     try {
       await acceptFriendRequest(userId, item.FriendshipId, accessToken);
-      await load();
+      await load({ silent: true });
       setTab('friends');
     } catch (error) {
       Alert.alert(
@@ -149,7 +196,7 @@ export function FriendsScreen({ navigation }: Props) {
     setBusyId(item.FriendshipId);
     try {
       await rejectFriendRequest(userId, item.FriendshipId, accessToken);
-      await load();
+      await load({ silent: true });
     } catch (error) {
       Alert.alert(
         t('friends.reject'),
@@ -165,7 +212,7 @@ export function FriendsScreen({ navigation }: Props) {
     setBusyId(item.FriendshipId);
     try {
       await cancelFriendRequest(userId, item.FriendshipId, accessToken);
-      await load();
+      await load({ silent: true });
     } catch (error) {
       Alert.alert(
         t('friends.cancel'),
@@ -176,161 +223,194 @@ export function FriendsScreen({ navigation }: Props) {
     }
   };
 
+  const onRemove = (item: FriendshipListItem) => {
+    if (!userId) return;
+    Alert.alert(t('user_profile.unfriend_title'), t('user_profile.unfriend_confirm'), [
+      { text: t('profile.status_cancel'), style: 'cancel' },
+      {
+        text: t('friends.remove'),
+        style: 'destructive',
+        onPress: () => {
+          void (async () => {
+            setBusyId(item.FriendshipId);
+            try {
+              await unfriend(userId, item.User.UserId, accessToken);
+              await load({ silent: true });
+            } catch (error) {
+              Alert.alert(
+                t('friends.remove'),
+                userFacingError(error, t, 'user_profile.action_error'),
+              );
+            } finally {
+              setBusyId(null);
+            }
+          })();
+        },
+      },
+    ]);
+  };
+
+  const rows =
+    tab === 'friends'
+      ? friends
+      : tab === 'incoming'
+        ? incomingRequests
+        : sentRequests;
+
+  const emptyTitle =
+    tab === 'friends'
+      ? t('friends.empty_title')
+      : tab === 'incoming'
+        ? t('friends.incoming_empty_title')
+        : t('friends.sent_empty_title');
+  const emptyDesc =
+    tab === 'friends'
+      ? t('friends.empty_desc')
+      : tab === 'incoming'
+        ? t('friends.incoming_empty_desc')
+        : t('friends.sent_empty_desc');
+
+  const showSpinner = loading && rows.length === 0;
+
   return (
     <Screen edges={['top']}>
-      <Header
-        large
-        subtitle={t('friends.subtitle').replace(
-          '{count}',
-          String(friends.length),
-        )}
-        title={t('friends.title')}
-        actions={[
-          { icon: 'search', onPress: () => navigation.navigate('SearchUsers') },
-        ]}
-      />
-
-      <View style={styles.segmentWrap}>
-        <SegmentedControl
-          items={segments}
-          value={tab}
-          onChange={key => setTab(key as Tab)}
-        />
+      <View style={styles.header}>
+        <FigmaIcon name="tabFriends" size={24} color={theme.colors.plusCta} />
+        <Typography variant="title" style={styles.headerTitle}>
+          {t('friends.title')}
+        </Typography>
+        <Pressable
+          onPress={() => navigation.navigate('SearchUsers')}
+          hitSlop={8}
+          accessibilityRole="button"
+          accessibilityLabel={t('friends.search_title')}>
+          <FigmaIcon name="searchNormal" size={24} />
+        </Pressable>
       </View>
 
-      {loading ? (
-        <View style={styles.loading}>
-          <ActivityIndicator color={theme.colors.primary} />
-        </View>
+      <View style={styles.tabs}>
+        {segments.map(seg => {
+          const active = seg.key === tab;
+          return (
+            <Pressable
+              key={seg.key}
+              onPress={() => setTab(seg.key)}
+              accessibilityRole="tab"
+              accessibilityState={{ selected: active }}
+              style={styles.tab}>
+              <Typography
+                variant="callout"
+                weight={active ? '600' : '400'}
+                tint={active ? theme.colors.plusCta : theme.colors.textMuted}>
+                {seg.label}
+              </Typography>
+              <View
+                style={[
+                  styles.tabLine,
+                  {
+                    backgroundColor: active
+                      ? theme.colors.plusCta
+                      : theme.colors.transparent,
+                  },
+                ]}
+              />
+            </Pressable>
+          );
+        })}
+      </View>
+
+      {showSpinner ? (
+        <FigmaSpinner fill />
       ) : (
         <TabScreenScrollView contentContainerStyle={styles.content}>
-          {tab === 'friends' &&
-            (friends.length === 0 ? (
-              <EmptyState
-                icon="users"
-                title={t('friends.empty_title')}
-                description={t('friends.empty_desc')}
-              />
-            ) : (
-              friends.map(f => {
-                const name = displayName(f.User);
-                return (
-                  <UserListItem
-                    key={f.FriendshipId}
-                    name={name}
-                    subtitle={`@${f.User.Username}`}
-                    avatarUri={f.User.ProfileImage ?? undefined}
-                    premium={f.User.IsVerified}
-                    onPress={() => openProfile(f.User.UserId)}
-                    right={
-                      <View style={styles.rowActions}>
-                        <IconButton
-                          name="message"
-                          size={18}
-                          onPress={() => {}}
-                        />
-                      </View>
-                    }
-                  />
-                );
-              })
-            ))}
-
-          {tab === 'incoming' &&
-            (incomingRequests.length === 0 ? (
-              <EmptyState
-                icon="bell"
-                title={t('friends.incoming_empty_title')}
-                description={t('friends.incoming_empty_desc')}
-              />
-            ) : (
-              incomingRequests.map(r => {
-                const name = displayName(r.User);
-                const busy = busyId === r.FriendshipId;
-                return (
-                  <UserListItem
-                    key={r.FriendshipId}
-                    name={name}
-                    subtitle={t('friends.incoming_meta')
-                      .replace('{count}', '0')
-                      .replace('{time}', formatRelativeTime(r.CreatedDate))}
-                    avatarUri={r.User.ProfileImage ?? undefined}
-                    premium={r.User.IsVerified}
-                    onPress={() => openProfile(r.User.UserId)}
-                    right={
-                      <View style={styles.rowActions}>
-                        <Button
-                          label={t('friends.accept')}
-                          size="sm"
-                          minWidth={108}
-                          fullWidth={false}
-                          disabled={busy}
-                          onPress={() => onAccept(r)}
-                        />
-                        <IconButton
-                          name="close"
-                          size={18}
-                          variant="surface"
-                          disabled={busy}
-                          onPress={() => onReject(r)}
-                        />
-                      </View>
-                    }
-                  />
-                );
-              })
-            ))}
-
-          {tab === 'sent' &&
-            (sentRequests.length === 0 ? (
-              <EmptyState
-                icon="send"
-                title={t('friends.sent_empty_title')}
-                description={t('friends.sent_empty_desc')}
-              />
-            ) : (
-              sentRequests.map(r => {
-                const name = displayName(r.User);
-                const busy = busyId === r.FriendshipId;
-                return (
-                  <UserListItem
-                    key={r.FriendshipId}
-                    name={name}
-                    subtitle={t('friends.sent_meta').replace(
-                      '{time}',
-                      formatRelativeTime(r.CreatedDate),
-                    )}
-                    avatarUri={r.User.ProfileImage ?? undefined}
-                    onPress={() => openProfile(r.User.UserId)}
-                    right={
-                      <Pressable
-                        onPress={() => onCancel(r)}
-                        disabled={busy}
-                        hitSlop={6}
-                        accessibilityRole="button"
-                        accessibilityLabel={t('friends.cancel')}
-                        style={({ pressed }) => [
-                          styles.cancelChip,
-                          {
-                            backgroundColor: theme.colors.surfaceAlt,
-                            borderColor: theme.colors.border,
-                            opacity: busy ? 0.45 : pressed ? 0.82 : 1,
-                          },
-                        ]}>
-                        <Icon
-                          name="close"
-                          size={14}
-                          color={theme.colors.textMuted}
-                        />
-                        <Typography variant="caption" color="textSecondary">
-                          {t('friends.cancel')}
+          {rows.length === 0 ? (
+            <EmptyState
+              figmaIcon="tabFriends"
+              title={emptyTitle}
+              description={emptyDesc}
+            />
+          ) : (
+            rows.map(item => {
+              const name = displayName(item.User);
+              const busy = busyId === item.FriendshipId || busyId === item.User.UserId;
+              return (
+                <View key={item.FriendshipId}>
+                  <View style={styles.row}>
+                    <Pressable
+                      onPress={() => openProfile(item)}
+                      style={styles.identity}
+                      accessibilityRole="button">
+                      <Face uri={item.User.ProfileImage} name={name} />
+                      <View style={styles.names}>
+                        <Typography variant="callout" weight="600" numberOfLines={1}>
+                          {name}
                         </Typography>
-                      </Pressable>
-                    }
+                        {item.User.Username ? (
+                          <Typography variant="caption" color="textMuted" numberOfLines={1}>
+                            {item.User.Username}
+                          </Typography>
+                        ) : null}
+                      </View>
+                    </Pressable>
+                    <View style={styles.actions}>
+                      {tab === 'friends' ? (
+                        <>
+                          <FigmaButton
+                            label={t('friends.message')}
+                            disabled={busy}
+                            onPress={() => {
+                              void openChat(item.User.UserId);
+                            }}
+                          />
+                          <FigmaButton
+                            label={t('friends.remove')}
+                            tone="ghost"
+                            disabled={busy}
+                            onPress={() => onRemove(item)}
+                          />
+                        </>
+                      ) : null}
+                      {tab === 'incoming' ? (
+                        <>
+                          <FigmaButton
+                            label={t('friends.accept')}
+                            disabled={busy}
+                            onPress={() => {
+                              void onAccept(item);
+                            }}
+                          />
+                          <FigmaButton
+                            label={t('friends.reject')}
+                            tone="ghost"
+                            disabled={busy}
+                            onPress={() => {
+                              void onReject(item);
+                            }}
+                          />
+                        </>
+                      ) : null}
+                      {tab === 'sent' ? (
+                        <>
+                          <FigmaButton label={t('friends.pending')} tone="soft" />
+                          <FigmaButton
+                            label={t('friends.cancel')}
+                            tone="ghost"
+                            disabled={busy}
+                            onPress={() => {
+                              void onCancel(item);
+                            }}
+                          />
+                        </>
+                      ) : null}
+                    </View>
+                  </View>
+                  <View
+                    style={[styles.divider, { backgroundColor: theme.colors.border }]}
                   />
-                );
-              })
-            ))}
+                </View>
+              );
+            })
+          )}
         </TabScreenScrollView>
       )}
     </Screen>
@@ -338,19 +418,77 @@ export function FriendsScreen({ navigation }: Props) {
 }
 
 const styles = StyleSheet.create({
-  segmentWrap: { paddingHorizontal: 20, marginBottom: 8 },
-  content: { paddingHorizontal: 20, paddingTop: 8, gap: 4 },
-  rowActions: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  cancelChip: {
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 10,
+    paddingTop: 0,
+    paddingBottom: 2,
+  },
+  headerTitle: {
+    flex: 1,
+    textAlign: 'center',
+  },
+  tabs: {
+    flexDirection: 'row',
+    paddingHorizontal: 10,
+    height: 43,
+  },
+  tab: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  tabLine: {
+    position: 'absolute',
+    left: 16,
+    right: 16,
+    bottom: 0,
+    height: 2,
+    borderRadius: 1,
+  },
+  content: {
+    paddingHorizontal: 10,
+    paddingTop: 10,
+    flexGrow: 1,
+  },
+  row: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    minHeight: 60,
+    paddingVertical: 5,
+    gap: 8,
+  },
+  identity: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 5,
-    height: 34,
-    paddingHorizontal: 12,
-    borderRadius: 17,
-    borderWidth: StyleSheet.hairlineWidth,
+    minWidth: 0,
   },
-  loading: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+  names: {
+    minWidth: 0,
+    flexShrink: 1,
+  },
+  face: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  actions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    flexShrink: 0,
+  },
+  divider: {
+    height: StyleSheet.hairlineWidth,
+    width: '100%',
+  },
 });
 
 export default FriendsScreen;

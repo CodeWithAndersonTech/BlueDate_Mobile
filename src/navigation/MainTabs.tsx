@@ -3,10 +3,10 @@ import {
   MaterialTopTabBarProps,
 } from '@react-navigation/material-top-tabs';
 import React from 'react';
-import { MessagesScreen } from '../screens/messages/MessagesScreen';
 import { CustomTabBar } from './CustomTabBar';
 import { FriendsStack } from './FriendsStack';
 import { HomeStack } from './HomeStack';
+import { MessagesStack } from './MessagesStack';
 import { NearbyStack } from './NearbyStack';
 import { ProfileStack } from './ProfileStack';
 import { MainTabParamList } from './types';
@@ -36,7 +36,7 @@ export function MainTabs() {
       <Tab.Screen name="Home" component={HomeStack} />
       <Tab.Screen name="Friends" component={FriendsStack} />
       <Tab.Screen name="Nearby" component={NearbyStack} />
-      <Tab.Screen name="Messages" component={MessagesScreen} />
+      <Tab.Screen name="Messages" component={MessagesStack} />
       <Tab.Screen name="Profile" component={ProfileStack} />
     </Tab.Navigator>
   );

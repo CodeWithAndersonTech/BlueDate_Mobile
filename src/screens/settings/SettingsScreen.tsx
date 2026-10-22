@@ -12,7 +12,6 @@ import {
   View,
 } from 'react-native';
 import LinearGradient from 'react-native-linear-gradient';
-import { SafeAreaView } from 'react-native-safe-area-context';
 import {
   CountryFlag,
   Header,
@@ -23,6 +22,7 @@ import {
   SettingsGroup,
   SettingsSep,
   Switch,
+  useScreenTopPad,
 } from '../../components';
 import { useScreenBottomPad } from '../../navigation/tabBarLayout';
 import { getUserPreference, updateUserPreference, UserPreference } from '../../api';
@@ -58,6 +58,7 @@ export function SettingsScreen() {
   const navigation =
     useNavigation<NativeStackNavigationProp<ProfileStackParamList>>();
   const theme = useTheme();
+  const topPad = useScreenTopPad();
   const bottomPad = useScreenBottomPad(32);
   const { t, languageCode, languages, setLanguage } = useLocale();
   const { preference, setPreference, accentKey, setAccent } =
@@ -176,9 +177,11 @@ export function SettingsScreen() {
   const languageOptions = languages.length ? languages : FALLBACK_LANGUAGES;
 
   return (
-    <SafeAreaView
-      edges={['top']}
-      style={[styles.root, { backgroundColor: theme.colors.background }]}>
+    <View
+      style={[
+        styles.root,
+        { backgroundColor: theme.colors.background, paddingTop: topPad },
+      ]}>
       <StatusBar
         barStyle={theme.isDark ? 'light-content' : 'dark-content'}
         backgroundColor="transparent"
@@ -387,10 +390,10 @@ export function SettingsScreen() {
                       styles.langChip,
                       {
                         backgroundColor: selected
-                          ? theme.colors.primarySoft
+                          ? theme.colors.plusSoft
                           : theme.colors.surfaceAlt,
                         borderColor: selected
-                          ? theme.colors.primary
+                          ? theme.colors.plusCta
                           : theme.colors.border,
                       },
                     ]}>
@@ -400,7 +403,7 @@ export function SettingsScreen() {
                         styles.langName,
                         {
                           color: selected
-                            ? theme.colors.primary
+                            ? theme.colors.plusCta
                             : theme.colors.text,
                         },
                       ]}>
@@ -410,7 +413,7 @@ export function SettingsScreen() {
                       <Icon
                         name="check"
                         size={16}
-                        color={theme.colors.primary}
+                        color={theme.colors.plusCta}
                         strokeWidth={2.5}
                       />
                     ) : (
@@ -452,7 +455,7 @@ export function SettingsScreen() {
           </SettingsGroup>
         </View>
       </ScrollView>
-    </SafeAreaView>
+    </View>
   );
 }
 

@@ -2,7 +2,6 @@ import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useFocusEffect } from '@react-navigation/native';
 import React, { useCallback, useMemo, useRef, useState } from 'react';
 import {
-  ActivityIndicator,
   Alert,
   Image,
   Pressable,
@@ -12,18 +11,13 @@ import {
   Text,
   View,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { EmptyState, Header, Icon } from '../../components';
+import { EmptyState, FigmaButton, Header, Typography, useScreenTopPad } from '../../components';
 import {
   acceptFriendRequest,
   FriendshipRelation,
-  friendshipItems,
-  getFriends,
   getFriendshipStatus,
   getOrCreateDirectConversation,
   getStoriesByUser,
-  getUserProfile,
-  resolveMediaUrl,
   sendFriendRequest,
   StoryUserGroup,
   unfriend,
@@ -33,7 +27,7 @@ import {
   isBlockedByMe,
   unblockUser,
 } from '../../api';
-import { useLocale, userFacingError } from '../../i18n';
+import { isAccountGoneError, useLocale, userFacingError } from '../../i18n';
 import { useAuth } from '../../navigation/AuthContext';
 import { useChat } from '../../navigation/ChatContext';
 import {
@@ -43,11 +37,7 @@ import {
   useStickyDockLayout,
 } from '../../navigation/tabBarLayout';
 import { useLockTabSwipe } from '../../navigation/useLockTabSwipe';
-import {
-  loadProfilePhotos,
-  mergeAvatarIntoDisplayPhotos,
-  ProfilePhoto,
-} from '../../services/photos/photoStore';
+import { ProfilePhoto } from '../../services/photos/photoStore';
 import { zodiacSymbolFromBirthDate } from '../../utils/zodiac';
 import { useTheme } from '../../theme';
 import {
@@ -59,17 +49,26 @@ import {
   peekLastCoordinates,
 } from '../../services/location/currentPosition';
 import { useHideTabBar } from '../../navigation/useHideTabBar';
+import { prefetchMediaUris } from '../../services/photos/prefetchMedia';
+import { afterUiSettled } from '../../utils/afterUiSettled';
+import {
+  CachedVisit,
+  patchVisit,
+  peekVisit,
+  prefetchUserProfile,
+  VISIT_STALE_MS,
+  writeVisit,
+} from '../../services/profile/visitCache';
 import { StoryViewer } from '../home/StoryViewer';
 import { TreatSheet } from '../treat/TreatSheet';
 import { BlockSheet } from './BlockSheet';
 import { ProfilePhotoGrid } from './ProfilePhotoGrid';
+import { ProfileSkeleton } from './ProfileSkeleton';
 
 type UserProfileParams = { UserProfile: { userId: string; openTreat?: boolean } };
 type Props = NativeStackScreenProps<UserProfileParams, 'UserProfile'>;
 
 const AVATAR_SIZE = 86;
-const TILE_WIDTH = '48%';
-const TILE_HEIGHT = 100;
 
 const INTEREST_EMOJI: Record<string, string> = {
   food: '🍽',
@@ -106,6 +105,7 @@ export function UserProfileScreen({ navigation, route }: Props) {
   const theme = useTheme();
   const { refreshInbox } = useChat();
   const { t } = useLocale();
+  const topPad = useScreenTopPad();
   const screenBottomPad = useScreenBottomPad(20);
   // Friend profile sits inside Material Top Tabs — keep CTAs above the pill
   // even when the tab bar hide heuristic flickers.
@@ -114,24 +114,50 @@ export function UserProfileScreen({ navigation, route }: Props) {
   });
   const { userId: meId, accessToken } = useAuth();
   const targetId = Number(route.params.userId);
+  const seeded = Number.isFinite(targetId) ? peekVisit(targetId) : undefined;
 
-  const [profile, setProfile] = useState<UserProfileResponse | null>(null);
-  const [photos, setPhotos] = useState<ProfilePhoto[]>([]);
-  const [avatarUri, setAvatarUri] = useState<string | undefined>();
-  const [loading, setLoading] = useState(true);
+  const [profile, setProfile] = useState<UserProfileResponse | null>(
+    seeded?.profile ?? null,
+  );
+  const [photos, setPhotos] = useState<ProfilePhoto[]>(seeded?.photos ?? []);
+  const [avatarUri, setAvatarUri] = useState<string | undefined>(
+    seeded?.avatarUri,
+  );
+  const [loading, setLoading] = useState(!seeded);
   const [notFound, setNotFound] = useState(false);
-  const [relation, setRelation] = useState<number>(FriendshipRelation.None);
-  const [friendshipId, setFriendshipId] = useState<number | null>(null);
-  const [displayAge, setDisplayAge] = useState<number | null>(null);
-  const [friendCount, setFriendCount] = useState(0);
+  const [relation, setRelation] = useState<number>(
+    seeded?.relation ?? FriendshipRelation.None,
+  );
+  const [friendshipId, setFriendshipId] = useState<number | null>(
+    seeded?.friendshipId ?? null,
+  );
+  const [displayAge, setDisplayAge] = useState<number | null>(
+    seeded?.displayAge ?? null,
+  );
   const [busy, setBusy] = useState(false);
-  const [blockedByMe, setBlockedByMe] = useState(false);
-  const [stories, setStories] = useState<StoryUserGroup | null>(null);
+  const [blockedByMe, setBlockedByMe] = useState(seeded?.blockedByMe ?? false);
+  const [stories, setStories] = useState<StoryUserGroup | null>(
+    seeded?.stories ?? null,
+  );
   const [storyOpen, setStoryOpen] = useState(false);
   const [treatOpen, setTreatOpen] = useState(false);
   const [blockOpen, setBlockOpen] = useState(false);
   useHideTabBar(storyOpen);
-  const loadedProfileIdRef = useRef<number | null>(null);
+  const loadedProfileIdRef = useRef<number | null>(seeded?.profile.Id ?? null);
+
+  const applyVisit = useCallback((cached: CachedVisit) => {
+    setProfile(cached.profile);
+    setPhotos(cached.photos);
+    setAvatarUri(cached.avatarUri);
+    setRelation(cached.relation);
+    setFriendshipId(cached.friendshipId);
+    setDisplayAge(cached.displayAge);
+    setBlockedByMe(cached.blockedByMe);
+    setStories(cached.stories);
+    loadedProfileIdRef.current = cached.profile.Id;
+    setNotFound(false);
+    setLoading(false);
+  }, []);
 
   const load = useCallback(async () => {
     if (!Number.isFinite(targetId) || targetId <= 0) {
@@ -140,16 +166,20 @@ export function UserProfileScreen({ navigation, route }: Props) {
       return;
     }
 
-    // Keep previous content mounted while refreshing the same profile —
-    // full-screen spinner caused a visible blink when opening from Nearby.
-    if (loadedProfileIdRef.current !== targetId) {
-      setLoading(true);
-      loadedProfileIdRef.current = null;
-    }
-    setNotFound(false);
-    setBlockedByMe(false);
+    const isSwitch = loadedProfileIdRef.current !== targetId;
+    const cached = peekVisit(targetId);
+    const cacheFresh = Boolean(cached && Date.now() - cached.at < VISIT_STALE_MS);
 
-    // Incoming / Sent mock rows — render a full local profile preview.
+    if (isSwitch) {
+      if (cached) {
+        applyVisit(cached);
+      } else {
+        setLoading(true);
+        loadedProfileIdRef.current = null;
+        setNotFound(false);
+      }
+    }
+
     if (isMockProfileUserId(targetId)) {
       const mock = getMockUserProfile(targetId);
       if (!mock) {
@@ -185,73 +215,85 @@ export function UserProfileScreen({ navigation, route }: Props) {
           sortOrder: index,
         })),
       );
-      setAvatarUri(mock.profileImage ?? mock.photoUris[0]);
+      const mockAvatar = mock.profileImage ?? mock.photoUris[0];
+      setAvatarUri(mockAvatar);
       setRelation(mock.relation);
       setFriendshipId(mock.friendshipId);
       setDisplayAge(mock.age ?? null);
-      setFriendCount(mock.relation === 3 ? 36 : 12);
       loadedProfileIdRef.current = mock.userId;
       setLoading(false);
+      return;
+    }
+
+    if (cacheFresh && !isSwitch) {
       return;
     }
 
     try {
       const other = Boolean(meId && meId !== targetId);
       const cachedCoords = peekLastCoordinates();
-      const [profileRes, photoBundle, friendsRes, storyGroup, statusRes, blockRes] =
-        await Promise.all([
-          getUserProfile(targetId, accessToken),
-          loadProfilePhotos(targetId, accessToken).catch(() => ({
-            gallery: [] as ProfilePhoto[],
-            avatarUri: undefined as string | undefined,
-          })),
-          getFriends(targetId, accessToken).catch(() => ({ Items: [] })),
-          other ? getStoriesByUser(meId!, targetId, cachedCoords) : Promise.resolve(null),
-          other
-            ? getFriendshipStatus(meId!, targetId, accessToken)
-            : Promise.resolve(null),
-          other ? getBlockStatus(targetId).catch(() => null) : Promise.resolve(null),
-        ]);
-      setStories(storyGroup);
-      setProfile(profileRes);
-      loadedProfileIdRef.current = profileRes.Id;
-      const profileAvatar = await resolveMediaUrl(profileRes.ProfileImage);
-      const avatarUriResolved = photoBundle.avatarUri ?? profileAvatar;
-      setAvatarUri(avatarUriResolved);
-      // Friend profiles: count/show avatar + gallery (users see both as "photos").
-      setPhotos(
-        mergeAvatarIntoDisplayPhotos({
-          avatarUri: avatarUriResolved,
-          gallery: photoBundle.gallery,
-        }),
-      );
-      setDisplayAge(
-        typeof profileRes.Age === 'number' ? profileRes.Age : null,
-      );
-      setFriendCount(friendshipItems(friendsRes).length);
+      const extrasPromise = Promise.all([
+        other
+          ? getFriendshipStatus(meId!, targetId, accessToken)
+          : Promise.resolve(null),
+        other ? getBlockStatus(targetId).catch(() => null) : Promise.resolve(null),
+        other
+          ? getStoriesByUser(meId!, targetId, cachedCoords)
+          : Promise.resolve(null),
+      ]);
+      const warmed =
+        (await prefetchUserProfile(targetId, accessToken)) ??
+        peekVisit(targetId);
+      if (!Number(warmed?.profile.Id)) {
+        setNotFound(true);
+        setLoading(false);
+        return;
+      }
+      applyVisit(warmed);
+      void prefetchMediaUris([warmed.avatarUri, warmed.photos[0]?.uri], 600);
+
+      const [statusRes, blockRes, storyGroup] = await extrasPromise;
+      if (loadedProfileIdRef.current !== warmed.profile.Id) return;
 
       if (statusRes) {
         setRelation(statusRes.Relation);
         setFriendshipId(statusRes.FriendshipId);
       }
-      setBlockedByMe(isBlockedByMe(blockRes));
+      const blocked = isBlockedByMe(blockRes);
+      setBlockedByMe(blocked);
+      setStories(storyGroup);
 
-      // Footprint stories need GPS; never block first paint on a fresh fix.
+      writeVisit(warmed.profile.Id, {
+        ...warmed,
+        at: Date.now(),
+        relation: statusRes?.Relation ?? warmed.relation,
+        friendshipId: statusRes?.FriendshipId ?? warmed.friendshipId,
+        blockedByMe: blocked,
+        stories: storyGroup,
+      });
+
       if (other && !storyGroup) {
         void getCurrentCoordinates(1500).then(fresh => {
           if (!fresh || loadedProfileIdRef.current !== targetId) return;
           return getStoriesByUser(meId!, targetId, fresh).then(next => {
-            if (next && loadedProfileIdRef.current === targetId) setStories(next);
+            if (next && loadedProfileIdRef.current === targetId) {
+              setStories(next);
+              patchVisit(targetId, { stories: next });
+            }
           });
         });
       }
-    } catch {
-      setProfile(null);
-      setNotFound(true);
+    } catch (error) {
+      if (cached) {
+        applyVisit(cached);
+      } else if (isAccountGoneError(error)) {
+        setProfile(null);
+        setNotFound(true);
+      }
     } finally {
       setLoading(false);
     }
-  }, [targetId, meId, accessToken]);
+  }, [targetId, meId, accessToken, applyVisit]);
 
   useFocusEffect(
     useCallback(() => {
@@ -399,10 +441,10 @@ export function UserProfileScreen({ navigation, route }: Props) {
 
   const onMessagePress = async () => {
     if (!meId || busy || meId === targetId) return;
-    if (relation !== FriendshipRelation.Friends) {
+    if (blockedByMe) {
       Alert.alert(
         t('user_profile.message'),
-        t('user_profile.message_friends_only'),
+        t('safety.users_blocked'),
       );
       return;
     }
@@ -471,17 +513,19 @@ export function UserProfileScreen({ navigation, route }: Props) {
   };
 
   const openSafetyMenu = () => {
-    Alert.alert(name || t('user_profile.title'), undefined, [
-      ...(relation === FriendshipRelation.Friends && !blockedByMe
-        ? [{ text: t('user_profile.unfriend'), onPress: onUnfriend }]
-        : []),
-      {
-        text: blockedByMe ? t('safety.unblock') : t('safety.block'),
-        style: 'destructive' as const,
-        onPress: blockedByMe ? onUnblock : openBlock,
-      },
-      { text: t('settings.cancel'), style: 'cancel' as const },
-    ]);
+    afterUiSettled(() => {
+      Alert.alert(name || t('user_profile.title'), undefined, [
+        ...(relation === FriendshipRelation.Friends && !blockedByMe
+          ? [{ text: t('user_profile.unfriend'), onPress: onUnfriend }]
+          : []),
+        {
+          text: blockedByMe ? t('safety.unblock') : t('safety.block'),
+          style: 'destructive' as const,
+          onPress: blockedByMe ? onUnblock : openBlock,
+        },
+        { text: t('settings.cancel'), style: 'cancel' as const },
+      ]);
+    });
   };
 
   const openTreat = () => {
@@ -497,37 +541,64 @@ export function UserProfileScreen({ navigation, route }: Props) {
     }
   }, [openTreatRequested, profile, blockedByMe, meId, targetId, navigation]);
 
+  const goBack = () => {
+    if (navigation.canGoBack()) {
+      navigation.goBack();
+      return;
+    }
+    navigation.getParent()?.goBack();
+  };
+
   if (loading) {
     return (
-      <SafeAreaView
-        edges={['top', 'bottom']}
-        style={[styles.viewport, { backgroundColor: theme.colors.background }]}>
-        <Header title={t('user_profile.title')} />
-        <View style={styles.loading}>
-          <ActivityIndicator color={theme.colors.primary} />
-        </View>
-      </SafeAreaView>
-    );
-  }
-
-  if (notFound || !profile) {
-    return (
-      <SafeAreaView
-        edges={['top', 'bottom']}
-        style={[styles.viewport, { backgroundColor: theme.colors.background }]}>
+      <View
+        style={[
+          styles.viewport,
+          { backgroundColor: theme.colors.background, paddingTop: topPad },
+        ]}>
         <StatusBar
           barStyle={theme.isDark ? 'light-content' : 'dark-content'}
           backgroundColor="transparent"
           translucent
         />
-        <Header title={t('user_profile.title')} />
+        <Header
+          title={t('user_profile.title')}
+          onBack={goBack}
+          backAccessibilityLabel={t('common.back')}
+        />
+        <ProfileSkeleton variant="visit" />
+      </View>
+    );
+  }
+
+  if (notFound || !profile) {
+    return (
+      <View
+        style={[
+          styles.viewport,
+          {
+            backgroundColor: theme.colors.background,
+            paddingTop: topPad,
+            paddingBottom: screenBottomPad,
+          },
+        ]}>
+        <StatusBar
+          barStyle={theme.isDark ? 'light-content' : 'dark-content'}
+          backgroundColor="transparent"
+          translucent
+        />
+        <Header
+          title={t('user_profile.title')}
+          onBack={goBack}
+          backAccessibilityLabel={t('common.back')}
+        />
         <EmptyState
           fill
-          icon="user"
+          figmaIcon="tabProfile"
           title={t('user_profile.not_found_title')}
           description={t('user_profile.not_found_desc')}
         />
-      </SafeAreaView>
+      </View>
     );
   }
 
@@ -540,7 +611,7 @@ export function UserProfileScreen({ navigation, route }: Props) {
     <View
       style={[
         styles.viewport,
-        { backgroundColor: theme.colors.background },
+        { backgroundColor: theme.colors.background, paddingTop: topPad },
       ]}>
       <StatusBar
         barStyle={theme.isDark ? 'light-content' : 'dark-content'}
@@ -548,12 +619,13 @@ export function UserProfileScreen({ navigation, route }: Props) {
         translucent
       />
 
-      <SafeAreaView edges={['top']} style={styles.flex}>
+      <View style={styles.flex}>
         <Header
           title={
             isSelf ? t('user_profile.preview_title') : t('user_profile.title')
           }
-          style={isSelf ? styles.previewHeader : undefined}
+          onBack={goBack}
+          backAccessibilityLabel={t('common.back')}
           actions={
             !isSelf
               ? [
@@ -579,17 +651,13 @@ export function UserProfileScreen({ navigation, route }: Props) {
               style={[
                 styles.previewBanner,
                 {
-                  backgroundColor: theme.colors.primarySoft,
+                  backgroundColor: theme.colors.plusSoft,
                   borderColor: theme.colors.border,
                 },
               ]}>
-              <Text
-                style={[
-                  styles.previewBannerText,
-                  { color: theme.colors.text },
-                ]}>
+              <Typography variant="callout" weight="600">
                 {t('user_profile.preview_banner')}
-              </Text>
+              </Typography>
             </View>
           ) : null}
           <View style={styles.header}>
@@ -598,7 +666,7 @@ export function UserProfileScreen({ navigation, route }: Props) {
                 style={[
                   styles.avatarRing,
                   stories && {
-                    borderColor: theme.colors.primary,
+                    borderColor: theme.colors.plusCta,
                     borderWidth: 2.5,
                     borderRadius: (AVATAR_SIZE + 8) / 2,
                     padding: 2,
@@ -611,6 +679,7 @@ export function UserProfileScreen({ navigation, route }: Props) {
                 {avatarUri ? (
                   <Image
                     source={{ uri: avatarUri }}
+                    fadeDuration={0}
                     style={[styles.avatar, { borderColor: theme.colors.border }]}
                   />
                 ) : (
@@ -619,217 +688,92 @@ export function UserProfileScreen({ navigation, route }: Props) {
                       styles.avatar,
                       styles.avatarFallback,
                       {
-                        backgroundColor: theme.colors.primarySoft,
+                        backgroundColor: theme.colors.plusSoft,
                         borderColor: theme.colors.border,
                       },
                     ]}>
-                    <Text
-                      style={[
-                        styles.avatarInitials,
-                        { color: theme.colors.primary },
-                      ]}>
+                    <Typography variant="title" tint={theme.colors.plusCta}>
                       {initialsFromName(name)}
-                    </Text>
+                    </Typography>
                   </View>
                 )}
+              </Pressable>
+
+              <View style={styles.nameBlock}>
+                <Typography variant="title" numberOfLines={1}>
+                  {nameWithAgeAndZodiac}
+                </Typography>
+                <Typography variant="callout" color="textMuted" numberOfLines={1}>
+                  {formatUsername(profile.Username)}
+                </Typography>
                 {statusText ? (
                   <View
                     style={[
-                      styles.statusBubble,
+                      styles.statusChip,
                       {
-                        backgroundColor: theme.colors.card,
+                        backgroundColor: theme.colors.surfaceAlt,
                         borderColor: theme.colors.border,
                       },
-                      theme.shadows.sm,
                     ]}>
-                    <Text
-                      style={[
-                        styles.statusBubbleText,
-                        { color: theme.colors.text },
-                      ]}
-                      numberOfLines={1}>
+                    <Typography variant="caption" weight="600" numberOfLines={2}>
                       {statusText}
-                    </Text>
+                    </Typography>
                   </View>
                 ) : null}
-              </Pressable>
-
-              <View style={styles.statsRow}>
-                <View style={styles.statItem}>
-                  <Text style={[styles.statValue, { color: theme.colors.text }]}>
-                    {photos.length}
-                  </Text>
-                  <Text
-                    style={[
-                      styles.statLabel,
-                      { color: theme.colors.textMuted },
-                    ]}>
-                    {t('profile.stat_photos')}
-                  </Text>
-                </View>
-                <View style={styles.statItem}>
-                  <Text style={[styles.statValue, { color: theme.colors.text }]}>
-                    {friendCount}
-                  </Text>
-                  <Text
-                    style={[
-                      styles.statLabel,
-                      { color: theme.colors.textMuted },
-                    ]}>
-                    {t('profile.stat_friends')}
-                  </Text>
-                </View>
               </View>
-            </View>
-
-            <View style={styles.nameBlock}>
-              <Text
-                style={[styles.name, { color: theme.colors.text }]}
-                numberOfLines={1}>
-                {nameWithAgeAndZodiac}
-              </Text>
-              <View style={styles.usernameRow}>
-                <Text
-                  style={[styles.username, { color: theme.colors.textMuted }]}
-                  numberOfLines={1}>
-                  {formatUsername(profile.Username)}
-                </Text>
-              </View>
-              {statusText ? (
-                <View
-                  style={[
-                    styles.statusChip,
-                    {
-                      backgroundColor: theme.colors.surfaceAlt,
-                      borderColor: theme.colors.border,
-                    },
-                  ]}>
-                  <Text
-                    style={[styles.statusChipText, { color: theme.colors.text }]}
-                    numberOfLines={2}>
-                    {statusText}
-                  </Text>
-                </View>
-              ) : null}
             </View>
           </View>
 
           <View style={styles.body}>
-          <Text
-            style={[styles.bioFieldLabel, { color: theme.colors.textMuted }]}>
-            {t('profile.bio')}
-          </Text>
-          <View
-            style={[
-              styles.bioField,
-              !hasBio && styles.bioFieldEmpty,
-              {
-                backgroundColor: hasBio
-                  ? theme.colors.card
-                  : theme.colors.surfaceAlt,
-                borderColor: hasBio
-                  ? theme.colors.border
-                  : theme.colors.borderStrong,
-              },
-            ]}>
-            <Text
-              style={[
-                hasBio ? styles.bio : styles.bioPlaceholder,
-                {
-                  color: hasBio
-                    ? theme.colors.text
-                    : theme.colors.textMuted,
-                },
-              ]}>
-              {hasBio ? profile.Bio : t('user_profile.bio_empty')}
-            </Text>
-          </View>
-
-          {photos.length > 0 ? (
-            <ProfilePhotoGrid photos={photos} editable={false} />
-          ) : null}
-
-          <View style={styles.section}>
-            <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>
-              {t('profile.interests')}
-            </Text>
-
             {interests.length > 0 ? (
-              <View style={styles.tileGrid}>
+              <View style={styles.favGrid}>
                 {interests.map(item => (
-                  <View key={item.key} style={styles.tileWrap}>
+                  <View
+                    key={item.key}
+                    style={[
+                      styles.favCard,
+                      { backgroundColor: theme.colors.surfaceAlt },
+                    ]}>
                     <View
                       style={[
-                        styles.tile,
-                        {
-                          backgroundColor: theme.colors.primarySoft,
-                          borderColor: theme.colors.primary,
-                        },
-                        theme.shadows.sm,
+                        styles.favIcon,
+                        { backgroundColor: theme.colors.plusSoft },
                       ]}>
-                      <View style={styles.tileTop}>
-                        <View
-                          style={[
-                            styles.emojiBadge,
-                            { backgroundColor: theme.colors.primary },
-                          ]}>
-                          <Text style={styles.emojiText}>{item.emoji}</Text>
-                        </View>
-                        <View
-                          style={[
-                            styles.checkDot,
-                            { backgroundColor: theme.colors.primary },
-                          ]}>
-                          <Text
-                            style={[
-                              styles.checkGlyph,
-                              { color: theme.colors.onPrimary },
-                            ]}>
-                            ✓
-                          </Text>
-                        </View>
-                      </View>
-                      <Text
-                        style={[
-                          styles.tileTitle,
-                          { color: theme.colors.textMuted },
-                        ]}
-                        numberOfLines={1}
-                        ellipsizeMode="tail">
+                      <Text style={styles.favEmoji}>{item.emoji}</Text>
+                    </View>
+                    <View style={styles.favCopy}>
+                      <Typography variant="caption" color="textMuted" numberOfLines={1}>
                         {item.label}
-                      </Text>
-                      <Text
-                        style={[styles.tileValue, { color: theme.colors.text }]}
-                        numberOfLines={1}
-                        ellipsizeMode="tail">
+                      </Typography>
+                      <Typography variant="callout" weight="600" numberOfLines={1}>
                         {item.value}
-                      </Text>
+                      </Typography>
                     </View>
                   </View>
                 ))}
               </View>
             ) : (
-              <View
-                style={[
-                  styles.emptyInterests,
-                  {
-                    backgroundColor: theme.colors.surfaceAlt,
-                    borderColor: theme.colors.borderStrong,
-                  },
-                ]}>
-                <Text
-                  style={[
-                    styles.emptyInterestsText,
-                    { color: theme.colors.textMuted },
-                  ]}>
-                  {t('profile.interests_empty')}
-                </Text>
-              </View>
+              <Typography variant="callout" color="textMuted">
+                {t('profile.interests_empty')}
+              </Typography>
             )}
+
+            <View style={styles.about}>
+              <Typography variant="title">{t('edit.about')}</Typography>
+              <Typography
+                variant="callout"
+                color={hasBio ? 'text' : 'textMuted'}
+                style={styles.aboutBody}>
+                {hasBio ? profile.Bio : t('user_profile.bio_empty')}
+              </Typography>
+            </View>
+
+            {photos.length > 0 ? (
+              <ProfilePhotoGrid photos={photos} editable={false} />
+            ) : null}
           </View>
-        </View>
         </ScrollView>
-      </SafeAreaView>
+      </View>
 
       {!isSelf ? (
         <View
@@ -847,129 +791,58 @@ export function UserProfileScreen({ navigation, route }: Props) {
             },
           ]}>
           {blockedByMe ? (
-            <Pressable
-              onPress={onUnblock}
+            <FigmaButton
+              label={t('safety.unblock')}
+              tone="ghost"
+              size="md"
+              fullWidth
               disabled={busy}
-              style={[
-                styles.actionBtn,
-                styles.actionBtnSecondary,
-                {
-                  backgroundColor: theme.colors.surfaceAlt,
-                  borderColor: theme.colors.border,
-                  opacity: busy ? 0.7 : 1,
-                },
-              ]}>
-              <Text
-                style={[styles.actionBtnLabel, { color: theme.colors.text }]}>
-                {t('safety.unblock')}
-              </Text>
-            </Pressable>
+              onPress={onUnblock}
+            />
           ) : areFriends ? (
             <>
-              <Pressable
-                key="message"
+              <FigmaButton
+                label={t('user_profile.message')}
+                size="md"
+                disabled={busy}
                 onPress={onMessagePress}
+                style={styles.dockBtn}
+              />
+              <FigmaButton
+                label={t('treat.cta')}
+                tone="soft"
+                size="md"
                 disabled={busy}
-                style={[
-                  styles.actionBtn,
-                  styles.actionBtnPrimary,
-                  {
-                    backgroundColor: theme.colors.primary,
-                    borderColor: theme.colors.primary,
-                    opacity: busy ? 0.7 : 1,
-                  },
-                ]}>
-                <Text
-                  style={[
-                    styles.actionBtnLabel,
-                    { color: theme.colors.onPrimary },
-                  ]}>
-                  {t('user_profile.message')}
-                </Text>
-              </Pressable>
-              <Pressable
-                key="treat"
                 onPress={openTreat}
-                disabled={busy}
-                accessibilityRole="button"
-                style={[
-                  styles.actionBtn,
-                  styles.actionBtnSecondary,
-                  styles.actionBtnRow,
-                  {
-                    backgroundColor: theme.colors.premiumSoft,
-                    borderColor: theme.colors.premium,
-                    opacity: busy ? 0.7 : 1,
-                  },
-                ]}>
-                <Icon name="gift" size={theme.iconSize.sm} color={theme.colors.premium} />
-                <Text
-                  numberOfLines={1}
-                  style={[styles.actionBtnLabel, { color: theme.colors.text }]}>
-                  {t('treat.cta')}
-                </Text>
-              </Pressable>
+                style={styles.dockBtn}
+              />
             </>
           ) : (
             <>
-            <Pressable
-              key="friend-action"
-              onPress={onFriendAction}
-              disabled={
-                busy ||
-                isSelf ||
-                relation === FriendshipRelation.PendingOutgoing
-              }
-              style={[
-                styles.actionBtn,
-                styles.actionBtnPrimary,
-                {
-                  opacity: busy ? 0.7 : 1,
-                  backgroundColor:
-                    relation === FriendshipRelation.PendingOutgoing
-                      ? theme.colors.surfaceAlt
-                      : theme.colors.primary,
-                  borderColor:
-                    relation === FriendshipRelation.PendingOutgoing
-                      ? theme.colors.border
-                      : theme.colors.primary,
-                },
-              ]}>
-              <Text
-                style={[
-                  styles.actionBtnLabel,
-                  {
-                    color:
-                      relation === FriendshipRelation.PendingOutgoing
-                        ? theme.colors.text
-                        : theme.colors.onPrimary,
-                  },
-                ]}>
-                {friendLabel}
-              </Text>
-            </Pressable>
-              <Pressable
-                key="treat-nf"
-                onPress={openTreat}
+              <FigmaButton
+                label={friendLabel}
+                size="md"
+                tone={
+                  relation === FriendshipRelation.PendingOutgoing
+                    ? 'soft'
+                    : 'solid'
+                }
+                disabled={
+                  busy ||
+                  isSelf ||
+                  relation === FriendshipRelation.PendingOutgoing
+                }
+                onPress={onFriendAction}
+                style={styles.dockBtn}
+              />
+              <FigmaButton
+                label={t('treat.cta')}
+                tone="soft"
+                size="md"
                 disabled={busy}
-                accessibilityRole="button"
-                style={[
-                  styles.actionBtn,
-                  styles.actionBtnSecondary,
-                  styles.actionBtnRow,
-                  {
-                    backgroundColor: theme.colors.premiumSoft,
-                    borderColor: theme.colors.premium,
-                    opacity: busy ? 0.7 : 1,
-                  },
-                ]}>
-                <Icon name="gift" size={theme.iconSize.sm} color={theme.colors.premium} />
-                <Text
-                  numberOfLines={1}
-                  style={[styles.actionBtnLabel, { color: theme.colors.text }]}>
-                  {t('treat.cta')}
-                </Text>
-              </Pressable>
+                onPress={openTreat}
+                style={styles.dockBtn}
+              />
             </>
           )}
         </View>
@@ -983,9 +856,11 @@ export function UserProfileScreen({ navigation, route }: Props) {
             receiverName={name}
             favorites={(profile.Interests ?? []).filter(i => (i.Value ?? '').trim().length > 0)}
             onClose={() => setTreatOpen(false)}
-            onSent={() => {
+            onSent={treat => {
               setTreatOpen(false);
-              Alert.alert(t('treat.title'), t('treat.sent_body').replace('{name}', name));
+              const root = navigation.getParent() ?? navigation;
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+              (root as any).navigate('TreatResult', { treatId: treat.id });
             }}
           />
           <BlockSheet
@@ -1021,10 +896,6 @@ const styles = StyleSheet.create({
   },
   flex: { flex: 1, minHeight: 0 },
   scrollContent: { paddingBottom: 20 },
-  previewHeader: {
-    marginTop: -10,
-    minHeight: 48,
-  },
   previewBanner: {
     marginHorizontal: 16,
     marginTop: 2,
@@ -1033,11 +904,6 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     borderRadius: 12,
     borderWidth: StyleSheet.hairlineWidth,
-  },
-  previewBannerText: {
-    fontSize: 13,
-    fontWeight: '600',
-    lineHeight: 18,
   },
   stickyDock: {
     position: 'absolute',
@@ -1062,7 +928,7 @@ const styles = StyleSheet.create({
   headerTop: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
+    gap: 14,
     marginTop: 4,
     overflow: 'visible',
   },
@@ -1080,151 +946,49 @@ const styles = StyleSheet.create({
     borderWidth: 1.5,
   },
   avatarFallback: { alignItems: 'center', justifyContent: 'center' },
-  avatarInitials: { fontSize: 26, fontWeight: '700' },
-  statusBubble: {
-    position: 'absolute',
-    top: -6,
-    left: -4,
-    maxWidth: AVATAR_SIZE + 36,
-    minWidth: 32,
-    minHeight: 28,
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 14,
-    borderWidth: StyleSheet.hairlineWidth,
-    zIndex: 20,
-    elevation: 20,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  statusBubbleText: {
-    fontSize: 12,
-    fontWeight: '700',
-  },
   statusChip: {
     alignSelf: 'flex-start',
-    marginTop: 6,
+    marginTop: 4,
     maxWidth: '100%',
     paddingHorizontal: 10,
     paddingVertical: 5,
     borderRadius: 12,
     borderWidth: StyleSheet.hairlineWidth,
   },
-  statusChipText: {
-    fontSize: 13,
-    fontWeight: '600',
-  },
-  statsRow: {
-    flex: 1,
+  nameBlock: { flex: 1, gap: 2, paddingRight: 8, minWidth: 0 },
+  body: { paddingHorizontal: 16, paddingTop: 8, gap: 20 },
+  favGrid: {
     flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-around',
-  },
-  statItem: { alignItems: 'center', gap: 2, flex: 1 },
-  statValue: { fontSize: 18, fontWeight: '700' },
-  statLabel: { fontSize: 11 },
-  nameBlock: { gap: 2, paddingRight: 8 },
-  name: {
-    fontSize: 18,
-    fontWeight: '700',
-    letterSpacing: -0.2,
-  },
-  usernameRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
     flexWrap: 'wrap',
+    gap: 5,
+  },
+  favCard: {
+    width: '48.5%',
+    flexGrow: 1,
+    minHeight: 52,
+    borderRadius: 12,
+    paddingHorizontal: 11,
+    paddingVertical: 11,
+    flexDirection: 'row',
+    alignItems: 'center',
     gap: 8,
-    marginTop: 2,
   },
-  username: { fontSize: 14 },
-  body: { paddingHorizontal: 16, paddingTop: 4 },
-  bioFieldLabel: {
-    fontSize: 11,
-    fontWeight: '700',
-    letterSpacing: 1.1,
-    textTransform: 'uppercase',
-    marginBottom: 8,
-  },
-  bioField: {
-    minHeight: 88,
-    borderRadius: 14,
-    borderWidth: 1,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-  },
-  bioFieldEmpty: {
-    borderStyle: 'dashed',
-    justifyContent: 'center',
-  },
-  bio: { fontSize: 15, lineHeight: 22 },
-  bioPlaceholder: { fontSize: 14, lineHeight: 20 },
-  section: { marginTop: 22, gap: 12 },
-  sectionTitle: { fontSize: 18, fontWeight: '700' },
-  tileGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'space-between',
-    rowGap: 10,
-  },
-  tileWrap: { width: TILE_WIDTH, height: TILE_HEIGHT },
-  tile: {
-    flex: 1,
-    height: TILE_HEIGHT,
-    borderRadius: 16,
-    borderWidth: 1,
-    paddingHorizontal: 10,
-    paddingVertical: 10,
-    overflow: 'hidden',
-  },
-  tileTop: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 6,
-  },
-  emojiBadge: {
-    width: 28,
-    height: 28,
-    borderRadius: 10,
+  favIcon: {
+    width: 30,
+    height: 30,
+    borderRadius: 8,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  emojiText: { fontSize: 14 },
-  checkDot: {
-    width: 18,
-    height: 18,
-    borderRadius: 9,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  checkGlyph: { fontSize: 11, fontWeight: '700' },
-  tileTitle: { fontSize: 11, lineHeight: 14, marginBottom: 2 },
-  tileValue: { fontSize: 13, lineHeight: 16, fontWeight: '600' },
-  emptyInterests: {
-    borderRadius: 14,
-    borderWidth: 1,
-    borderStyle: 'dashed',
-    padding: 16,
-  },
-  emptyInterestsText: { fontSize: 13, lineHeight: 18 },
-  actionBtn: {
-    height: DOCK_ACTION_HEIGHT,
-    borderRadius: 999,
-    borderWidth: StyleSheet.hairlineWidth,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 12,
-  },
-  actionBtnPrimary: {
-    flex: 1.4,
-    minWidth: 0,
-  },
-  actionBtnSecondary: {
+  favEmoji: { fontSize: 16 },
+  favCopy: { flex: 1, minWidth: 0, gap: 0 },
+  about: { gap: 10, minHeight: 94 },
+  aboutBody: { lineHeight: 22 },
+  dockBtn: {
     flex: 1,
     minWidth: 0,
+    alignSelf: 'stretch',
   },
-  actionBtnLabel: { fontSize: 14, fontWeight: '700' },
-  actionBtnRow: { flexDirection: 'row', gap: 6 },
 });
 
 export default UserProfileScreen;

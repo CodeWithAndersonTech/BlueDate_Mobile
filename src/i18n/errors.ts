@@ -66,7 +66,11 @@ const ENGLISH_TO_KEY: Record<string, string> = {
   'Message body is required.': 'chat.body_required',
   'Conversation peer not found.': 'chat.peer_not_found',
   'Users must be friends to send messages.': 'chat.friends_only',
+  'You must be friends to send messages.': 'chat.friends_only',
+  'Mesaj göndermek için arkadaş olmalısınız.': 'chat.friends_only',
   'Users must be friends to start a conversation.': 'chat.start_friends_only',
+  'You must be friends to start a conversation.': 'chat.start_friends_only',
+  'Sohbet başlatmak için arkadaş olmalısınız.': 'chat.start_friends_only',
   'Conversation not found.': 'chat.conversation_not_found',
   'Message not found.': 'chat.message_not_found',
   'Message not found in this conversation.': 'chat.message_not_found',
@@ -136,6 +140,18 @@ function mapApiMessage(message: string): string | null {
   }
   if (/^Caption max length is \d+/i.test(trimmed)) {
     return 'stories.caption_max';
+  }
+  if (
+    /must be friends to send messages/i.test(folded) ||
+    /mesaj göndermek için arkadaş/i.test(folded)
+  ) {
+    return 'chat.friends_only';
+  }
+  if (
+    /must be friends to start a conversation/i.test(folded) ||
+    /sohbet başlatmak için arkadaş/i.test(folded)
+  ) {
+    return 'chat.start_friends_only';
   }
   if (looksLikeKey(trimmed)) {
     return trimmed;

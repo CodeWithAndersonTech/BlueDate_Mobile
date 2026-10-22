@@ -9,12 +9,15 @@ import {
   ViewStyle,
 } from 'react-native';
 import { useTheme } from '../theme';
-import { Button } from './Button';
+import { FigmaButton } from './FigmaUi';
+import { FigmaIcon, FigmaSvgName } from './FigmaIcon';
 import { Icon, IconName } from './Icon';
 import { Typography } from './Typography';
 
 export interface EmptyStateProps {
   icon?: IconName;
+  /** Meerk Figma glyph — preferred over the legacy `icon` set. */
+  figmaIcon?: FigmaSvgName;
   /** App logo / illustration — takes priority over `icon` when set. */
   image?: ImageSourcePropType;
   /** Makes the logo/icon tappable (e.g. restart nearby scan). */
@@ -31,6 +34,7 @@ export interface EmptyStateProps {
 
 export function EmptyState({
   icon = 'sparkles',
+  figmaIcon,
   image,
   onImagePress,
   imageAccessibilityLabel,
@@ -42,26 +46,24 @@ export function EmptyState({
   style,
 }: EmptyStateProps) {
   const theme = useTheme();
-  const media = (
+  const media = image ? (
     <View
       style={[
         styles.iconWrap,
         {
-          backgroundColor: image
-            ? theme.colors.surfaceAlt
-            : theme.colors.primarySoft,
+          backgroundColor: theme.colors.surfaceAlt,
           borderRadius: 28,
           borderColor: theme.colors.border,
-          borderWidth: image ? StyleSheet.hairlineWidth : 0,
+          borderWidth: StyleSheet.hairlineWidth,
           overflow: 'hidden',
         },
       ]}>
-      {image ? (
-        <Image source={image} style={styles.logo} />
-      ) : (
-        <Icon name={icon} size={34} color={theme.colors.primary} />
-      )}
+      <Image source={image} style={styles.logo} />
     </View>
+  ) : figmaIcon ? (
+    <FigmaIcon name={figmaIcon} size={48} color={theme.colors.plusCta} />
+  ) : (
+    <Icon name={icon} size={48} color={theme.colors.plusCta} />
   );
 
   return (
@@ -87,11 +89,10 @@ export function EmptyState({
         </Typography>
       )}
       {actionLabel && (
-        <Button
+        <FigmaButton
           label={actionLabel}
           onPress={onAction}
-          variant="primary"
-          fullWidth={false}
+          size="cta"
           style={styles.action}
         />
       )}

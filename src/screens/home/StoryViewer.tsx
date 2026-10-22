@@ -4,6 +4,7 @@ import {
   Image,
   Pressable,
   ScrollView,
+  StatusBar,
   StyleSheet,
   View,
 } from 'react-native';
@@ -22,9 +23,18 @@ import Animated, {
   withSpring,
   withTiming,
 } from 'react-native-reanimated';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import {
+  initialWindowMetrics,
+  useSafeAreaInsets,
+} from 'react-native-safe-area-context';
 import Video from 'react-native-video';
-import { Avatar, Icon, Typography } from '../../components';
+import {
+  Avatar,
+  FigmaIcon,
+  FigmaSpinner,
+  SafeOverlay,
+  Typography,
+} from '../../components';
 import { StoryItem, StoryUserGroup } from '../../api';
 import { useLocale } from '../../i18n';
 
@@ -47,6 +57,36 @@ function userLabel(group: StoryUserGroup) {
   return name || group.User.Username || '?';
 }
 
+function StoryChromeButton({
+  onPress,
+  label,
+  children,
+}: {
+  onPress: () => void;
+  label: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <Pressable
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      hitSlop={8}
+      style={styles.chromeBtn}>
+      {children}
+    </Pressable>
+  );
+}
+
+function CloseGlyph() {
+  return (
+    <View style={styles.xWrap}>
+      <View style={[styles.xBar, { transform: [{ rotate: '45deg' }] }]} />
+      <View style={[styles.xBar, { transform: [{ rotate: '-45deg' }] }]} />
+    </View>
+  );
+}
+
 export function StoryViewer({
   visible,
   groups,
@@ -58,10 +98,16 @@ export function StoryViewer({
 }: Props) {
   const { t } = useLocale();
   const insets = useSafeAreaInsets();
+  const topPad = Math.max(
+    insets.top,
+    initialWindowMetrics?.insets.top ?? 0,
+    47,
+  );
   const [groupIndex, setGroupIndex] = useState(startGroupIndex);
   const [storyIndex, setStoryIndex] = useState(0);
   const [progress, setProgress] = useState(0);
   const [paused, setPaused] = useState(false);
+  const [readyForId, setReadyForId] = useState<number | null>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const translateY = useSharedValue(0);
   const backdrop = useSharedValue(1);
@@ -73,7 +119,8 @@ export function StoryViewer({
 
   const group = activeGroups[groupIndex];
   const story = group?.Stories[storyIndex];
-  const isOwner = story?.UserId === viewerUserId;
+  const mediaReady = story != null && readyForId === story.Id;
+  const isOwner = Number(story?.UserId) === Number(viewerUserId);
   const otherGroups = activeGroups.filter(
     g => g.User.UserId !== group?.User.UserId,
   );
@@ -90,12 +137,26 @@ export function StoryViewer({
     setStoryIndex(0);
     setProgress(0);
     setPaused(false);
+    setReadyForId(null);
     translateY.value = 0;
     backdrop.value = 1;
   }, [visible, startGroupIndex, activeGroups.length, backdrop, translateY]);
 
   useEffect(() => {
-    if (!visible || !story || paused) {
+    if (!story?.MediaUrl) {
+      return;
+    }
+    if (story.MediaType === 'photo') {
+      void Image.prefetch(story.MediaUrl).catch(() => undefined);
+    }
+    const next = group?.Stories[storyIndex + 1];
+    if (next?.MediaType === 'photo' && next.MediaUrl) {
+      void Image.prefetch(next.MediaUrl).catch(() => undefined);
+    }
+  }, [story?.Id, story?.MediaUrl, story?.MediaType, group, storyIndex]);
+
+  useEffect(() => {
+    if (!visible || !story || paused || !mediaReady) {
       if (timerRef.current) {
         clearInterval(timerRef.current);
         timerRef.current = null;
@@ -129,7 +190,7 @@ export function StoryViewer({
       }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [visible, groupIndex, storyIndex, story?.Id, paused]);
+  }, [visible, groupIndex, storyIndex, story?.Id, paused, mediaReady]);
 
   const pan = Gesture.Pan()
     .activeOffsetY(14)
@@ -234,7 +295,15 @@ export function StoryViewer({
   }
 
   return (
+    <SafeOverlay visible={visible} onRequestClose={dismiss}>
     <GestureHandlerRootView style={styles.root}>
+      <StatusBar
+        hidden
+        animated
+        barStyle="light-content"
+        backgroundColor="#000"
+        translucent
+      />
       <Animated.View style={[styles.rootFill, rootStyle]}>
         <GestureDetector gesture={pan}>
           <Animated.View style={[styles.sheet, sheetStyle]}>
@@ -246,14 +315,16 @@ export function StoryViewer({
                   style={styles.media}
                   resizeMode="cover"
                   controls={false}
-                  paused={paused}
+                  paused={paused || !mediaReady}
+                  onLoad={() => setReadyForId(story.Id)}
+                  onReadyForDisplay={() => setReadyForId(story.Id)}
                   onProgress={({ currentTime, seekableDuration }) => {
-                    if (seekableDuration > 0) {
-                      setProgress(Math.min(1, currentTime / seekableDuration));
+                    if (!mediaReady || seekableDuration <= 0) {
+                      return;
                     }
+                    setProgress(Math.min(1, currentTime / seekableDuration));
                   }}
                   onEnd={goNext}
-                  onError={goNext}
                 />
               ) : (
                 <Image
@@ -261,8 +332,15 @@ export function StoryViewer({
                   source={{ uri: story.MediaUrl }}
                   style={styles.media}
                   resizeMode="cover"
+                  fadeDuration={0}
+                  onLoad={() => setReadyForId(story.Id)}
                 />
               )}
+              {!mediaReady ? (
+                <View style={styles.mediaGate} pointerEvents="none">
+                  <FigmaSpinner size={32} color="#fff" />
+                </View>
+              ) : null}
               {story.Caption ? (
                 <View style={[styles.caption, { bottom: insets.bottom + 24 }]}>
                   <Typography variant="body" tint="#fff" align="center">
@@ -277,7 +355,9 @@ export function StoryViewer({
               <Pressable style={styles.tapRight} onPress={goNext} />
             </View>
 
-            <View style={styles.top} pointerEvents="box-none">
+            <View
+              style={[styles.top, { paddingTop: topPad + 6 }]}
+              pointerEvents="box-none">
               <View style={styles.bars}>
                 {group.Stories.map((s, i) => (
                   <View key={s.Id} style={styles.barTrack}>
@@ -346,19 +426,17 @@ export function StoryViewer({
 
                 <View style={styles.headerActions}>
                   {isOwner && onDelete ? (
-                    <Pressable
+                    <StoryChromeButton
                       onPress={() => onDelete(story)}
-                      hitSlop={10}
-                      accessibilityLabel={t('stories.delete')}>
-                      <Icon name="trash" size={20} color="#fff" />
-                    </Pressable>
+                      label={t('stories.delete')}>
+                      <FigmaIcon name="trash" size={20} color="#fff" />
+                    </StoryChromeButton>
                   ) : null}
-                  <Pressable
+                  <StoryChromeButton
                     onPress={onClose}
-                    hitSlop={10}
-                    accessibilityLabel={t('common.close')}>
-                    <Icon name="close" size={22} color="#fff" />
-                  </Pressable>
+                    label={t('common.close')}>
+                    <CloseGlyph />
+                  </StoryChromeButton>
                 </View>
               </View>
             </View>
@@ -366,16 +444,18 @@ export function StoryViewer({
         </GestureDetector>
       </Animated.View>
     </GestureHandlerRootView>
+    </SafeOverlay>
   );
 }
 
 const styles = StyleSheet.create({
   root: {
-    ...StyleSheet.absoluteFill,
-    zIndex: 50,
+    flex: 1,
+    backgroundColor: '#000',
   },
   rootFill: {
     flex: 1,
+    backgroundColor: '#000',
   },
   sheet: {
     flex: 1,
@@ -387,6 +467,12 @@ const styles = StyleSheet.create({
   media: {
     width: '100%',
     height: '100%',
+  },
+  mediaGate: {
+    ...StyleSheet.absoluteFill,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#000',
   },
   top: {
     position: 'absolute',
@@ -400,7 +486,7 @@ const styles = StyleSheet.create({
   bars: {
     flexDirection: 'row',
     gap: 4,
-    marginBottom: 0,
+    marginBottom: 10,
   },
   barTrack: {
     flex: 1,
@@ -450,8 +536,31 @@ const styles = StyleSheet.create({
   headerActions: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 16,
+    gap: 10,
     flexShrink: 0,
+  },
+  chromeBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    borderWidth: 1.5,
+    borderColor: 'rgba(255,255,255,0.95)',
+    backgroundColor: 'rgba(0,0,0,0.45)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  xWrap: {
+    width: 16,
+    height: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  xBar: {
+    position: 'absolute',
+    width: 16,
+    height: 2.5,
+    borderRadius: 1.5,
+    backgroundColor: '#fff',
   },
   caption: {
     position: 'absolute',

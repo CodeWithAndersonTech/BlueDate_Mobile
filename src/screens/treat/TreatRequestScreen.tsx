@@ -1,8 +1,16 @@
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import React, { useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, ScrollView, StyleSheet, View } from 'react-native';
+import { Alert, ScrollView, StyleSheet, View } from 'react-native';
 import { acceptTreat, getTreat, rejectTreat, Treat, treatUserName } from '../../api';
-import { Avatar, Button, EmptyState, Header, Screen, Typography } from '../../components';
+import {
+  Avatar,
+  EmptyState,
+  FigmaButton,
+  FigmaSpinner,
+  Header,
+  Screen,
+  Typography,
+} from '../../components';
 import { useLocale, userFacingError } from '../../i18n';
 import { useScreenBottomPad } from '../../navigation/tabBarLayout';
 import { AppStackParamList } from '../../navigation/types';
@@ -79,11 +87,9 @@ export function TreatRequestScreen({ navigation, route }: Props) {
         backAccessibilityLabel={t('common.back')}
       />
       {failed ? (
-        <EmptyState fill icon="gift" title={t('treat.not_found')} />
+        <EmptyState fill figmaIcon="gift" title={t('treat.not_found')} />
       ) : !treat || !sender ? (
-        <View style={styles.loading}>
-          <ActivityIndicator color={theme.colors.primary} />
-        </View>
+        <FigmaSpinner fill />
       ) : (
         <ScrollView
           contentContainerStyle={[
@@ -105,18 +111,21 @@ export function TreatRequestScreen({ navigation, route }: Props) {
 
           {treat.status === 'pending' ? (
             <View style={{ gap: theme.space.md }}>
-              <Button
+              <FigmaButton
                 label={t('treat.accept')}
-                leftIcon="check"
+                size="md"
+                fullWidth
                 loading={busy === 'accept'}
                 disabled={busy !== null}
                 onPress={() => {
                   void onAccept();
                 }}
               />
-              <Button
+              <FigmaButton
                 label={t('treat.reject')}
-                variant="secondary"
+                tone="ghost"
+                size="md"
+                fullWidth
                 loading={busy === 'reject'}
                 disabled={busy !== null}
                 onPress={() => {
@@ -130,9 +139,10 @@ export function TreatRequestScreen({ navigation, route }: Props) {
                 {treat.status === 'accepted' ? t('treat.already_accepted') : t('treat.already_rejected')}
               </Typography>
               {treat.status === 'accepted' && treat.conversationId ? (
-                <Button
+                <FigmaButton
                   label={t('treat.go_chat')}
-                  leftIcon="message"
+                  size="md"
+                  fullWidth
                   onPress={() =>
                     navigation.replace('ChatThread', {
                       conversationId: String(treat.conversationId),
@@ -150,7 +160,6 @@ export function TreatRequestScreen({ navigation, route }: Props) {
 
 const styles = StyleSheet.create({
   flex: { flex: 1 },
-  loading: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   content: { flexGrow: 1 },
   senderRow: { flexDirection: 'row', alignItems: 'center' },
 });

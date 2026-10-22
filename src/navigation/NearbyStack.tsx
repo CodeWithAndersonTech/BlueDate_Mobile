@@ -14,7 +14,13 @@ const nestedOptions = {
 
 export function NearbyStack() {
   return (
-    <Stack.Navigator screenOptions={{ headerShown: false }}>
+    <Stack.Navigator
+      screenOptions={{
+        headerShown: false,
+        // Screen already applies tightTopInset — native stack inset
+        // stacked a second island gap above the Nearby header.
+        safeAreaInsets: { top: 0, bottom: 0 },
+      }}>
       <Stack.Screen name="NearbyMain" component={NearbyScreen} />
       <Stack.Screen
         name="UserProfile"

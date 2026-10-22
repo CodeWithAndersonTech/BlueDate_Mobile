@@ -99,7 +99,7 @@ const styles = StyleSheet.create({
   root: { flexGrow: 1 },
   header: {
     paddingHorizontal: H_PAD,
-    paddingTop: 4,
+    paddingTop: 0,
     paddingBottom: 10,
     flexDirection: 'row',
     alignItems: 'flex-start',

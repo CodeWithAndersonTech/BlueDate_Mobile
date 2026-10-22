@@ -64,7 +64,7 @@ export function FriendsListScreen({ navigation }: Props) {
         {list.length === 0 ? (
           <EmptyState
             fill
-            icon="users"
+            figmaIcon="tabFriends"
             title={t('friends.empty_title')}
             description={t('friends.empty_desc')}
           />
@@ -88,7 +88,7 @@ export function FriendsListScreen({ navigation }: Props) {
                 <IconButton
                   name="message"
                   size={18}
-                  color={theme.colors.primary}
+                  color={theme.colors.plusCta}
                   onPress={() => {}}
                 />
               }

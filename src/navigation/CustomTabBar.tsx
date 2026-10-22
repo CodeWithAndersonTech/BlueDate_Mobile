@@ -3,7 +3,6 @@ import { getFocusedRouteNameFromRoute } from '@react-navigation/native';
 import React, { useEffect, useMemo } from 'react';
 import {
   Animated as RNAnimated,
-  Image,
   Pressable,
   StyleSheet,
   useWindowDimensions,
@@ -15,12 +14,11 @@ import Animated, {
   withSpring,
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { images } from '../assets';
-import { Icon, IconName, Typography } from '../components';
+import { FigmaIcon, FigmaSvgName, Typography } from '../components';
 import { useLocale } from '../i18n';
 import { useTheme } from '../theme';
 import { useChat } from './ChatContext';
-import { FLOATING_TAB_BAR_HEIGHT, TAB_ROOT_SCREENS } from './tabBarLayout';
+import { TAB_ROOT_SCREENS, useTabBarMetrics } from './tabBarLayout';
 import { useTabBarForceHidden } from './useHideTabBar';
 
 // Layout hooks live in ./tabBarLayout (single source of truth for clearance
@@ -34,12 +32,12 @@ export {
   useTabBarClearance,
 } from './tabBarLayout';
 
-const TAB_ICONS: Record<string, IconName> = {
-  Home: 'home',
-  Nearby: 'map-pin',
-  Friends: 'users',
-  Messages: 'message',
-  Profile: 'user',
+const TAB_ICONS: Record<string, FigmaSvgName> = {
+  Home: 'tabHome',
+  Nearby: 'tabNearby',
+  Friends: 'tabFriends',
+  Messages: 'tabMessages',
+  Profile: 'tabProfile',
 };
 
 const TAB_A11Y_KEYS: Record<string, string> = {
@@ -51,11 +49,6 @@ const TAB_A11Y_KEYS: Record<string, string> = {
 };
 
 const SPRING = { damping: 18, stiffness: 200, mass: 0.7 };
-const BAR_HEIGHT = FLOATING_TAB_BAR_HEIGHT;
-const PILL_MARGIN_H = 20;
-const PILL_RADIUS = 34;
-const PILL_PADDING_H = 6;
-const INDICATOR_INSET = 5;
 
 function shouldHideTabBar(state: MaterialTopTabBarProps['state']): boolean {
   const route = state.routes[state.index];
@@ -105,17 +98,18 @@ export function CustomTabBar({
   const { unreadCount: unreadMessages } = useChat();
   const insets = useSafeAreaInsets();
   const { width: windowWidth } = useWindowDimensions();
+  const metrics = useTabBarMetrics();
   const forceHidden = useTabBarForceHidden();
   const hide = shouldHideTabBar(state) || forceHidden;
 
   const bottomInset = Math.max(insets.bottom, 12);
-  const totalHeight = BAR_HEIGHT + bottomInset;
+  const totalHeight = metrics.pillHeight + bottomInset;
   const barWidth = layout.width || windowWidth;
-  const pillWidth = barWidth - PILL_MARGIN_H * 2;
+  const pillWidth = Math.min(metrics.pillWidth, barWidth - metrics.side * 2);
   const tabCount = state.routes.length;
-  const innerWidth = pillWidth - PILL_PADDING_H * 2;
+  const innerWidth = pillWidth - metrics.pillPad * 2;
   const tabWidth = innerWidth / tabCount;
-  const indicatorWidth = Math.max(tabWidth - INDICATOR_INSET * 2, 44);
+  const indicatorWidth = metrics.indicatorWidth;
 
   // Must run unconditionally — early return before this caused "fewer hooks".
   const indicatorTranslateX = useMemo(() => {
@@ -126,7 +120,7 @@ export function CustomTabBar({
     const inputRange = state.routes.map((_, i) => i);
     const outputRange = state.routes.map(
       (_, i) =>
-        PILL_PADDING_H + i * tabWidth + (tabWidth - indicatorWidth) / 2,
+        metrics.pillPad + i * tabWidth + (tabWidth - indicatorWidth) / 2,
     );
 
     return position.interpolate({
@@ -134,22 +128,12 @@ export function CustomTabBar({
       outputRange,
       extrapolate: 'clamp',
     });
-  }, [position, state.routes, tabCount, tabWidth, indicatorWidth]);
+  }, [metrics.pillPad, position, state.routes, tabCount, tabWidth, indicatorWidth]);
 
   const staticIndicatorOffset =
-    PILL_PADDING_H +
+    metrics.pillPad +
     state.index * tabWidth +
     (tabWidth - indicatorWidth) / 2;
-
-  const pillBackground = theme.isDark
-    ? 'rgba(22, 22, 30, 0.92)'
-    : 'rgba(255, 255, 255, 0.94)';
-  const pillBorder = theme.isDark
-    ? 'rgba(255, 255, 255, 0.08)'
-    : 'rgba(0, 0, 0, 0.06)';
-  const indicatorBackground = theme.isDark
-    ? 'rgba(255, 255, 255, 0.12)'
-    : theme.colors.primarySoft;
 
   // Never unmount the tab bar (return null). Material Top Tabs + UIKit
   // appearance transitions crash when the bar is removed mid page-change
@@ -168,11 +152,11 @@ export function CustomTabBar({
         <View
           style={[
             styles.pill,
-            theme.shadows.md,
             {
               width: pillWidth,
-              backgroundColor: pillBackground,
-              borderColor: pillBorder,
+              height: metrics.pillHeight,
+              borderRadius: metrics.pillRadius,
+              backgroundColor: theme.colors.tabBar,
             },
           ]}>
           <RNAnimated.View
@@ -180,8 +164,11 @@ export function CustomTabBar({
             style={[
               styles.indicator,
               {
+                top: metrics.indicatorTop,
                 width: indicatorWidth,
-                backgroundColor: indicatorBackground,
+                height: metrics.indicatorHeight,
+                borderRadius: metrics.indicatorRadius,
+                backgroundColor: theme.colors.tabIndicator,
                 transform: [
                   {
                     translateX: indicatorTranslateX ?? staticIndicatorOffset,
@@ -191,7 +178,7 @@ export function CustomTabBar({
             ]}
           />
 
-          <View style={styles.row}>
+          <View style={[styles.row, { paddingHorizontal: metrics.pillPad }]}>
             {state.routes.map((route, index) => {
               const focused = state.index === index;
 
@@ -214,8 +201,9 @@ export function CustomTabBar({
                 <TabItem
                   key={route.key}
                   focused={focused}
-                  icon={TAB_ICONS[route.name] ?? 'home'}
-                  useAppLogo={route.name === 'Nearby'}
+                  iconSize={metrics.iconSize}
+                  icon={TAB_ICONS[route.name] ?? 'tabHome'}
+                  keepDesignColor={route.name === 'Nearby' && focused}
                   accessibilityLabel={
                     TAB_A11Y_KEYS[route.name]
                       ? t(TAB_A11Y_KEYS[route.name])
@@ -235,8 +223,9 @@ export function CustomTabBar({
 
 interface TabItemProps {
   focused: boolean;
-  icon: IconName;
-  useAppLogo?: boolean;
+  icon: FigmaSvgName;
+  iconSize: number;
+  keepDesignColor?: boolean;
   accessibilityLabel: string;
   badge?: number;
   onPress: () => void;
@@ -245,7 +234,8 @@ interface TabItemProps {
 function TabItem({
   focused,
   icon,
-  useAppLogo = false,
+  iconSize,
+  keepDesignColor = false,
   accessibilityLabel,
   badge = 0,
   onPress,
@@ -259,11 +249,15 @@ function TabItem({
   }, [focused, progress]);
 
   const iconStyle = useAnimatedStyle(() => ({
-    transform: [{ scale: press.value * (1 + 0.12 * progress.value) }],
-    opacity: useAppLogo ? 0.75 + 0.25 * progress.value : 0.5 + 0.5 * progress.value,
+    transform: [{ scale: press.value }],
+    opacity: 1,
   }));
 
-  const iconColor = focused ? theme.colors.text : theme.colors.textMuted;
+  const iconColor = keepDesignColor
+    ? undefined
+    : focused
+      ? theme.colors.plusCta
+      : theme.colors.textMuted;
 
   return (
     <Pressable
@@ -275,22 +269,7 @@ function TabItem({
       accessibilityState={{ selected: focused }}
       style={styles.item}>
       <Animated.View style={iconStyle}>
-        {useAppLogo ? (
-          <Image
-            source={images.appLogo}
-            style={[
-              styles.appLogo,
-              {
-                opacity: focused ? 1 : 0.72,
-                borderColor: focused
-                  ? theme.colors.primary
-                  : 'transparent',
-              },
-            ]}
-          />
-        ) : (
-          <Icon name={icon} size={26} color={iconColor} filled={focused} />
-        )}
+        <FigmaIcon name={icon} size={iconSize} color={iconColor} />
         {badge > 0 ? (
           <View
             style={[
@@ -323,26 +302,18 @@ const styles = StyleSheet.create({
     backgroundColor: 'transparent',
     justifyContent: 'flex-end',
     alignItems: 'center',
-    paddingHorizontal: PILL_MARGIN_H,
   },
   pill: {
-    height: BAR_HEIGHT,
-    borderRadius: PILL_RADIUS,
-    borderWidth: StyleSheet.hairlineWidth,
     overflow: 'hidden',
     justifyContent: 'center',
   },
   indicator: {
     position: 'absolute',
-    top: INDICATOR_INSET,
-    bottom: INDICATOR_INSET,
-    borderRadius: PILL_RADIUS - INDICATOR_INSET,
   },
   row: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: PILL_PADDING_H,
   },
   item: {
     flex: 1,
@@ -361,12 +332,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 4,
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  appLogo: {
-    width: 30,
-    height: 30,
-    borderRadius: 9,
-    borderWidth: 1.5,
   },
 });
 

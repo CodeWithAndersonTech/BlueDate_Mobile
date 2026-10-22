@@ -1,7 +1,6 @@
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
-  ActivityIndicator,
   Alert,
   Pressable,
   StatusBar,
@@ -17,9 +16,16 @@ import Animated, {
   withSpring,
   withTiming,
 } from 'react-native-reanimated';
-import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { purchasePremium } from '../../api';
-import { Header, Icon, IconName, TabScreenScrollView, Typography } from '../../components';
+import {
+  FigmaButton,
+  FigmaIcon,
+  Icon,
+  IconName,
+  TabScreenScrollView,
+  useScreenTopPad,
+} from '../../components';
 import { publishPremium, usePremium } from '../../hooks/usePremium';
 import { useLocale, userFacingError } from '../../i18n';
 import { useAuth } from '../../navigation/AuthContext';
@@ -56,6 +62,7 @@ export function PremiumScreen({ navigation }: Props) {
   const onGold = theme.colors.onPremium;
   const { t } = useLocale();
   const insets = useSafeAreaInsets();
+  const topPad = useScreenTopPad();
   const tabBarOffset = Math.max(insets.bottom, 12) + FOOTER_GAP;
   const { userId } = useAuth();
   const { premium, isPremium, planCode } = usePremium();
@@ -158,34 +165,51 @@ export function PremiumScreen({ navigation }: Props) {
 
   if (loading) {
     return (
-      <SafeAreaView
-        edges={['top']}
-        style={[styles.root, { backgroundColor: theme.colors.background }]}>
+      <View
+        style={[
+          styles.root,
+          { backgroundColor: theme.colors.background, paddingTop: topPad },
+        ]}>
         <StatusBar
           barStyle={theme.isDark ? 'light-content' : 'dark-content'}
           backgroundColor="transparent"
           translucent
         />
         <PremiumSkeleton />
-      </SafeAreaView>
+      </View>
     );
   }
 
   return (
-    <SafeAreaView
-      edges={['top']}
-      style={[styles.root, { backgroundColor: theme.colors.background }]}>
+    <View
+      style={[
+        styles.root,
+        { backgroundColor: theme.colors.background, paddingTop: topPad },
+      ]}>
       <StatusBar
         barStyle={theme.isDark ? 'light-content' : 'dark-content'}
         backgroundColor="transparent"
         translucent
       />
 
-      <Header
-        title={t('premium.title')}
-        onBack={() => navigation.goBack()}
-        backAccessibilityLabel={t('common.back')}
-      />
+      <View style={styles.topBar}>
+        <Pressable
+          onPress={() => navigation.goBack()}
+          hitSlop={8}
+          accessibilityRole="button"
+          accessibilityLabel={t('common.back')}>
+          <View style={styles.backIcon}>
+            <FigmaIcon name="arrowRight" size={15} color={theme.colors.text} />
+          </View>
+        </Pressable>
+        <View style={styles.topBarSpacer} />
+        <Pressable
+          hitSlop={8}
+          accessibilityRole="button"
+          accessibilityLabel={t('premium.title')}>
+          <FigmaIcon name="moreDots" size={20} color={theme.colors.text} />
+        </Pressable>
+      </View>
       <Animated.View style={[styles.flex, contentFadeStyle]}>
         <TabScreenScrollView
           style={styles.flex}
@@ -195,15 +219,18 @@ export function PremiumScreen({ navigation }: Props) {
             <LinearGradient colors={gold} style={StyleSheet.absoluteFill} />
             <View style={styles.heroInner}>
               <View style={styles.crownWrap}>
-                <Icon name="crown" size={28} color={onGold} filled />
+                <FigmaIcon name="crown" size={28} color={onGold} />
               </View>
               <Text style={[styles.heroTitle, { color: onGold }]}>
-                {t('premium.title')}
+                {t('premium.hero_title')}
+              </Text>
+              <Text style={[styles.heroTitle, { color: onGold }]}>
+                {t('premium.hero_subtitle')}
               </Text>
               <Text style={styles.heroDesc}>{t('premium.subtitle')}</Text>
               {premium?.isPremium ? (
                 <View style={styles.trialPill}>
-                  <Icon name="check" size={12} color={onGold} />
+                  <FigmaIcon name="tickCircle" size={12} color={onGold} />
                   <Text style={[styles.trialText, { color: onGold }]}>
                     {(currentPlan === 'plus'
                       ? t('premium.current_plus')
@@ -233,7 +260,7 @@ export function PremiumScreen({ navigation }: Props) {
                       {
                         backgroundColor: theme.colors.card,
                         borderColor: selected
-                          ? theme.colors.primary
+                          ? theme.colors.plusCta
                           : theme.colors.border,
                         borderWidth: selected ? 2 : StyleSheet.hairlineWidth,
                       },
@@ -245,10 +272,10 @@ export function PremiumScreen({ navigation }: Props) {
                           styles.radio,
                           {
                             borderColor: selected
-                              ? theme.colors.primary
+                              ? theme.colors.plusCta
                               : theme.colors.borderStrong,
                             backgroundColor: selected
-                              ? theme.colors.primary
+                              ? theme.colors.plusCta
                               : 'transparent',
                           },
                         ]}>
@@ -276,7 +303,7 @@ export function PremiumScreen({ navigation }: Props) {
                                 styles.tag,
                                 {
                                   backgroundColor: selected
-                                    ? theme.colors.primarySoft
+                                    ? theme.colors.plusSoft
                                     : theme.colors.surfaceAlt,
                                 },
                               ]}>
@@ -285,7 +312,7 @@ export function PremiumScreen({ navigation }: Props) {
                                   styles.tagText,
                                   {
                                     color: selected
-                                      ? theme.colors.primary
+                                      ? theme.colors.plusCta
                                       : theme.colors.textMuted,
                                   },
                                 ]}>
@@ -297,12 +324,12 @@ export function PremiumScreen({ navigation }: Props) {
                             <View
                               style={[
                                 styles.pop,
-                                { backgroundColor: theme.colors.primarySoft },
+                                { backgroundColor: theme.colors.plusSoft },
                               ]}>
                               <Text
                                 style={[
                                   styles.popText,
-                                  { color: theme.colors.primary },
+                                  { color: theme.colors.plusCta },
                                 ]}>
                                 {t('premium.popular')}
                               </Text>
@@ -365,14 +392,13 @@ export function PremiumScreen({ navigation }: Props) {
                       {
                         backgroundColor: perk.plusOnly
                           ? theme.colors.premiumSoft
-                          : theme.colors.primarySoft,
+                          : theme.colors.plusSoft,
                       },
                     ]}>
                     <Icon
                       name={perk.icon as IconName}
                       size={18}
-                      color={perk.plusOnly ? onGold : theme.colors.primary}
-                      filled={perk.icon !== 'eye-off'}
+                      color={perk.plusOnly ? onGold : theme.colors.plusCta}
                     />
                   </View>
                   <View style={styles.perkBody}>
@@ -449,55 +475,57 @@ export function PremiumScreen({ navigation }: Props) {
                 </Text>
               </Text>
             </View>
-            <Pressable
-              disabled={buying || ownsActive}
-              onPressIn={() => {
-                scale.value = withSpring(0.97, { damping: 16, stiffness: 320 });
-              }}
-              onPressOut={() => {
-                scale.value = withSpring(1, { damping: 14, stiffness: 260 });
-              }}
+            <FigmaButton
+              label={
+                ownsActive
+                  ? t('premium.cta_owned')
+                  : active.id === 'plus'
+                    ? t('premium.cta_plus')
+                    : t('premium.cta')
+              }
+              size="md"
+              fullWidth
+              loading={buying}
+              disabled={ownsActive}
               onPress={() => {
                 void onBuy();
-              }}>
-              <Animated.View style={[ctaStyle, theme.shadows.md, ownsActive && styles.ctaOwned]}>
-                <LinearGradient colors={gold} style={styles.cta}>
-                  {buying ? (
-                    <ActivityIndicator color={onGold} />
-                  ) : (
-                    <Icon name="crown" size={18} color={onGold} filled />
-                  )}
-                  <Text style={[styles.ctaLabel, { color: onGold }]}>
-                    {ownsActive
-                      ? t('premium.cta_owned')
-                      : active.id === 'plus'
-                        ? t('premium.cta_plus')
-                        : t('premium.cta')}
-                  </Text>
-                </LinearGradient>
-              </Animated.View>
-            </Pressable>
-            <Pressable
+              }}
+            />
+            <FigmaButton
+              label={restoring ? t('premium.restoring') : t('premium.restore')}
+              tone="muted"
+              fullWidth
+              disabled={restoring}
               onPress={() => {
                 void onRestore();
               }}
-              disabled={restoring}
-              hitSlop={8}
-              style={styles.restore}>
-              <Typography variant="caption" color="textMuted" align="center">
-                {restoring ? t('premium.restoring') : t('premium.restore')}
-              </Typography>
-            </Pressable>
+            />
           </View>
         </View>
       </Animated.View>
-    </SafeAreaView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   root: { flex: 1 },
   flex: { flex: 1 },
+  topBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 10,
+    paddingTop: 0,
+    paddingBottom: 8,
+    minHeight: 30,
+  },
+  topBarSpacer: { flex: 1 },
+  backIcon: {
+    transform: [{ rotate: '180deg' }],
+    width: 24,
+    height: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   content: {
     paddingHorizontal: 20,
     paddingTop: 8,

@@ -3,8 +3,8 @@ import { useFocusEffect } from '@react-navigation/native';
 import React, { useCallback, useState } from 'react';
 import { Alert, ScrollView, StyleSheet, View } from 'react-native';
 import {
-  Button,
   EmptyState,
+  FigmaButton,
   Header,
   Screen,
   UserListItem,
@@ -105,7 +105,7 @@ export function BlockedUsersScreen({ navigation }: Props) {
         {!loading && items.length === 0 ? (
           <EmptyState
             fill
-            icon="shield"
+            figmaIcon="shield"
             title={t('safety.blocked_empty_title')}
             description={t('safety.blocked_empty_desc')}
           />
@@ -128,10 +128,9 @@ export function BlockedUsersScreen({ navigation }: Props) {
                 onPress={() => openProfile(item.UserId)}
                 right={
                   <View style={styles.right}>
-                    <Button
+                    <FigmaButton
                       label={t('safety.unblock')}
-                      variant="ghost"
-                      size="sm"
+                      tone="ghost"
                       loading={busyId === item.UserId}
                       disabled={busyId === item.UserId}
                       onPress={() => onUnblock(item.UserId)}

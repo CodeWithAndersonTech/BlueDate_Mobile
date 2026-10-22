@@ -5,8 +5,6 @@ import {
 } from '@react-navigation/native';
 import React, { useCallback, useEffect, useState } from 'react';
 import { useOnboardingGate } from '../hooks/useOnboardingGate';
-import { RecoveryScreen } from '../components/RecoveryScreen';
-import { useLocale } from '../i18n';
 import { SplashScreen } from '../screens/auth/SplashScreen';
 import { OnboardingSetupScreen } from '../screens/onboarding/OnboardingSetupScreen';
 import { useTheme } from '../theme';
@@ -28,7 +26,6 @@ function activeRouteName(
 
 export function RootNavigator() {
   const theme = useTheme();
-  const { languageCode } = useLocale();
   const { status, isSignedIn, signOut } = useAuth();
   const { ready, needsOnboarding, accountGone, refresh } = useOnboardingGate();
   const [splashGaveUp, setSplashGaveUp] = useState(false);
@@ -52,6 +49,12 @@ export function RootNavigator() {
     setSplashGaveUp(true);
   }, [showSplash, status, isSignedIn]);
 
+  useEffect(() => {
+    if (accountGone) {
+      void signOut();
+    }
+  }, [accountGone, signOut]);
+
   return (
     <NavigationContainer
       theme={toNavigationTheme(theme)}
@@ -60,17 +63,7 @@ export function RootNavigator() {
       }}>
       {showSplash ? (
         <SplashScreen />
-      ) : accountGone ? (
-        <RecoveryScreen
-          languageCode={languageCode}
-          onRetry={() => {
-            void refresh();
-          }}
-          onLeave={() => {
-            void signOut();
-          }}
-        />
-      ) : !isSignedIn ? (
+      ) : !isSignedIn || accountGone ? (
         <AuthStack />
       ) : needsOnboarding ? (
         <OnboardingSetupScreen onCompleted={onOnboardingCompleted} />

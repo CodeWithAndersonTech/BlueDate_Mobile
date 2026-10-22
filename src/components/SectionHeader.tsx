@@ -23,7 +23,7 @@ export function SectionHeader({
       <Typography variant="h3">{title}</Typography>
       {actionLabel && (
         <Pressable hitSlop={8} onPress={onAction}>
-          <Typography variant="callout" tint={theme.colors.primary}>
+          <Typography variant="callout" tint={theme.colors.plusCta}>
             {actionLabel}
           </Typography>
         </Pressable>

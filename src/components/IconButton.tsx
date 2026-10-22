@@ -30,7 +30,7 @@ export function IconButton({
   size,
   color,
   filled = false,
-  variant = 'surface',
+  variant = 'plain',
   disabled = false,
   badge,
   accessibilityLabel,
@@ -95,7 +95,7 @@ export function IconButton({
             style={[
               styles.badge,
               {
-                backgroundColor: theme.colors.primary,
+                backgroundColor: theme.colors.plusCta,
                 minWidth: recipe.badge,
                 height: recipe.badge,
                 borderRadius: recipe.badge / 2,

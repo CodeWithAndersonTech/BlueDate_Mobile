@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Alert, StyleSheet, TextInput, View } from 'react-native';
 import { blockUser, reportAndBlockUser } from '../../api';
-import { Button, SheetModal, Typography } from '../../components';
+import { FigmaButton, SheetModal, Typography } from '../../components';
 import { useLocale, userFacingError } from '../../i18n';
 import { useTheme } from '../../theme';
 
@@ -54,18 +54,21 @@ export function BlockSheet({ visible, targetUserId, targetName, onClose, onBlock
           <Typography variant="callout" color="textMuted">
             {t('safety.block_sheet_body').replace('{name}', targetName)}
           </Typography>
-          <Button
+          <FigmaButton
             label={t('safety.block_only')}
-            variant="secondary"
+            tone="ghost"
+            size="md"
+            fullWidth
             loading={busy}
             onPress={() => {
               void run(() => blockUser(targetUserId), 'safety.blocked_done');
             }}
           />
-          <Button
+          <FigmaButton
             label={t('safety.report_and_block')}
-            variant="danger"
-            leftIcon="flag"
+            tone="danger"
+            size="md"
+            fullWidth
             disabled={busy}
             onPress={() => setMode('report')}
           />
@@ -98,17 +101,21 @@ export function BlockSheet({ visible, targetUserId, targetName, onClose, onBlock
           />
           <View style={[styles.actions, { gap: theme.space.md }]}>
             <View style={styles.slot}>
-              <Button
+              <FigmaButton
                 label={t('common.back')}
-                variant="secondary"
+                tone="ghost"
+                size="md"
+                fullWidth
                 disabled={busy}
                 onPress={() => setMode('choose')}
               />
             </View>
             <View style={styles.slot}>
-              <Button
+              <FigmaButton
                 label={t('safety.report_send')}
-                variant="danger"
+                tone="danger"
+                size="md"
+                fullWidth
                 loading={busy}
                 disabled={details.trim().length === 0}
                 onPress={() => {

@@ -7,8 +7,26 @@ import {
   View,
   ViewStyle,
 } from 'react-native';
-import { Edge, SafeAreaView } from 'react-native-safe-area-context';
+import { Edge, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../theme';
+
+/**
+ * Content sits just under the notch / Dynamic Island.
+ * Figma headers start at y=24; we must still clear the island, but do not
+ * stack extra padding on top of the inset (that gap showed on every page).
+ */
+export function tightTopInset(top: number) {
+  return Math.max(6, top - 16);
+}
+
+export function useScreenTopPad() {
+  const insets = useSafeAreaInsets();
+  return tightTopInset(insets.top);
+}
+
+function hasEdge(edges: readonly Edge[], edge: Edge) {
+  return edges.includes(edge);
+}
 
 export interface ScreenProps {
   children: React.ReactNode;
@@ -37,6 +55,7 @@ export function Screen({
   backgroundColor,
 }: ScreenProps) {
   const theme = useTheme();
+  const insets = useSafeAreaInsets();
   const bg = backgroundColor ?? theme.colors.background;
 
   const pad = theme.components.screen.paddingH;
@@ -46,7 +65,17 @@ export function Screen({
   ];
 
   return (
-    <SafeAreaView edges={edges} style={[styles.safe, { backgroundColor: bg }]}>
+    <View
+      style={[
+        styles.safe,
+        {
+          backgroundColor: bg,
+          paddingTop: hasEdge(edges, 'top') ? tightTopInset(insets.top) : 0,
+          paddingBottom: hasEdge(edges, 'bottom') ? insets.bottom : 0,
+          paddingLeft: hasEdge(edges, 'left') ? insets.left : 0,
+          paddingRight: hasEdge(edges, 'right') ? insets.right : 0,
+        },
+      ]}>
       <StatusBar
         barStyle={theme.isDark ? 'light-content' : 'dark-content'}
         backgroundColor="transparent"
@@ -66,7 +95,7 @@ export function Screen({
       ) : (
         <View style={[styles.flex, innerStyle]}>{children}</View>
       )}
-    </SafeAreaView>
+    </View>
   );
 }
 

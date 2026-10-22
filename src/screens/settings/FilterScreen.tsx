@@ -1,12 +1,13 @@
 import { useNavigation } from '@react-navigation/native';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, Alert, StyleSheet, View } from 'react-native';
+import { Alert, StyleSheet, View } from 'react-native';
 import { ScrollView } from 'react-native-gesture-handler';
 import { fetchFilterPrefs, saveFilterPrefs } from '../../api/filterPrefs';
 import {
-  Button,
   Card,
   Chip,
+  FigmaButton,
+  FigmaSpinner,
   Header,
   IconName,
   RangeSlider,
@@ -183,7 +184,7 @@ export function FilterScreen() {
       />
       {loading ? (
         <View style={styles.loading}>
-          <ActivityIndicator color={theme.colors.primary} />
+          <FigmaSpinner />
         </View>
       ) : (
         <View style={styles.body}>
@@ -203,7 +204,7 @@ export function FilterScreen() {
                   <Typography variant="bodyStrong">
                     {t('filter.age_label')}
                   </Typography>
-                  <Typography variant="bodyStrong" tint={theme.colors.primary}>
+                  <Typography variant="bodyStrong" tint={theme.colors.plusCta}>
                     {age.low} -{' '}
                     {age.high === FILTER_AGE_MAX
                       ? `${FILTER_AGE_MAX}+`
@@ -296,11 +297,14 @@ export function FilterScreen() {
                 borderTopColor: theme.colors.border,
               },
             ]}>
-            <Button
+            <FigmaButton
               label={saving ? t('filter.saving') : t('filter.apply')}
-              leftIcon="check"
-              onPress={onApply}
+              size="md"
+              fullWidth
+              trailing="arrow"
+              loading={saving}
               disabled={saving || !userId}
+              onPress={onApply}
               style={styles.applyBtn}
             />
           </View>

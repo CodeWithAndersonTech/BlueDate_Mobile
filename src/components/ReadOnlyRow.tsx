@@ -39,7 +39,7 @@ export function ReadOnlyRow({
             styles.iconChip,
             { backgroundColor: theme.colors.surfaceAlt },
           ]}>
-          <Icon name={icon} size={16} color={theme.colors.primary} />
+          <Icon name={icon} size={16} color={theme.colors.plusCta} />
         </View>
       ) : null}
       <View style={styles.texts}>

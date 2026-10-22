@@ -1,6 +1,7 @@
 import React from 'react';
 import { Pressable, StyleProp, StyleSheet, View, ViewStyle } from 'react-native';
 import { useTheme } from '../theme';
+import { FigmaIcon } from './FigmaIcon';
 import { Icon, IconName } from './Icon';
 import { Typography } from './Typography';
 
@@ -48,7 +49,7 @@ export function ListRow({
               borderRadius: 12,
             },
           ]}>
-          <Icon name={icon} size={18} color={iconColor ?? theme.colors.primary} />
+          <Icon name={icon} size={18} color={iconColor ?? theme.colors.plusCta} />
         </View>
       )}
       <View style={styles.texts}>
@@ -68,7 +69,7 @@ export function ListRow({
       )}
       {right}
       {showChevron && onPress && !right && (
-        <Icon name="chevron-right" size={18} color={theme.colors.textMuted} />
+        <FigmaIcon name="arrowRight" size={15} color={theme.colors.textMuted} />
       )}
     </View>
   );

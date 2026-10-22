@@ -40,17 +40,17 @@ export function LanguagePicker({
                 styles.chip,
                 {
                   borderColor: selected
-                    ? theme.colors.primary
+                    ? theme.colors.plusCta
                     : theme.colors.border,
                   backgroundColor: selected
-                    ? theme.colors.primarySoft ?? theme.colors.surfaceAlt
+                    ? theme.colors.plusSoft ?? theme.colors.surfaceAlt
                     : theme.colors.surfaceAlt,
                   borderRadius: 16,
                 },
               ]}>
               <Typography
                 variant="callout"
-                tint={selected ? theme.colors.primary : theme.colors.text}>
+                tint={selected ? theme.colors.plusCta : theme.colors.text}>
                 {language.Name}
               </Typography>
             </Pressable>

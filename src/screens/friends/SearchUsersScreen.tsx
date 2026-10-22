@@ -1,19 +1,21 @@
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  ActivityIndicator,
   Alert,
+  Pressable,
   ScrollView,
   StyleSheet,
+  TextInput,
   View,
 } from 'react-native';
 import {
-  Button,
   EmptyState,
-  Header,
-  Input,
+  FigmaButton,
+  FigmaIcon,
+  FigmaSpinner,
   Screen,
   SectionHeader,
+  Typography,
   UserListItem,
 } from '../../components';
 import {
@@ -31,6 +33,7 @@ import { useScreenBottomPad } from '../../navigation/tabBarLayout';
 import { useLockTabSwipe } from '../../navigation/useLockTabSwipe';
 import { FriendsStackParamList } from '../../navigation/types';
 import { useTheme } from '../../theme';
+import { openFriendProfile } from '../../services/profile/visitCache';
 
 type Props = NativeStackScreenProps<FriendsStackParamList, 'SearchUsers'>;
 
@@ -47,6 +50,7 @@ export function SearchUsersScreen({ navigation }: Props) {
   const bottomPad = useScreenBottomPad(24);
   const { userId, accessToken } = useAuth();
   const [query, setQuery] = useState('');
+  const searchRef = useRef<TextInput>(null);
   const [directory, setDirectory] = useState<SocialUser[]>([]);
   const [loading, setLoading] = useState(false);
   const [rowState, setRowState] = useState<Record<number, RowState>>({});
@@ -140,33 +144,15 @@ export function SearchUsersScreen({ navigation }: Props) {
     const busy = state?.busy;
 
     if (relation === FriendshipRelation.Friends) {
-      return (
-        <Button
-          label={t('friends.added')}
-          size="sm"
-          variant="outline"
-          fullWidth={false}
-          disabled
-        />
-      );
+      return <FigmaButton label={t('friends.added')} tone="soft" />;
     }
     if (relation === FriendshipRelation.PendingOutgoing) {
-      return (
-        <Button
-          label={t('friends.pending')}
-          size="sm"
-          variant="outline"
-          fullWidth={false}
-          disabled
-        />
-      );
+      return <FigmaButton label={t('friends.pending')} tone="soft" />;
     }
     if (relation === FriendshipRelation.PendingIncoming) {
       return (
-        <Button
+        <FigmaButton
           label={t('user_profile.accept_request')}
-          size="sm"
-          fullWidth={false}
           onPress={() =>
             navigation.navigate('UserProfile', {
               userId: String(user.UserId),
@@ -177,11 +163,8 @@ export function SearchUsersScreen({ navigation }: Props) {
     }
 
     return (
-      <Button
+      <FigmaButton
         label={t('friends.add')}
-        size="sm"
-        fullWidth={false}
-        leftIcon="user-plus"
         disabled={busy}
         onPress={() => onAdd(user)}
       />
@@ -195,36 +178,62 @@ export function SearchUsersScreen({ navigation }: Props) {
       subtitle={`@${u.Username}`}
       avatarUri={u.ProfileImage ?? undefined}
       premium={u.IsVerified}
-      onPress={() =>
-        navigation.navigate('UserProfile', { userId: String(u.UserId) })
-      }
+      onPress={() => {
+        openFriendProfile(u, accessToken, FriendshipRelation.None);
+        navigation.navigate('UserProfile', { userId: String(u.UserId) });
+      }}
       right={renderRight(u)}
     />
   );
 
   return (
     <Screen edges={['top']}>
-      <Header
-        onBack={() => navigation.goBack()}
-        backAccessibilityLabel={t('common.back')}
-        title={t('friends.search_title')}
-      />
+      <View style={styles.header}>
+        <Pressable
+          onPress={() => navigation.goBack()}
+          hitSlop={8}
+          accessibilityRole="button"
+          accessibilityLabel={t('common.back')}>
+          <View style={styles.backIcon}>
+            <FigmaIcon name="arrowRight" size={15} color={theme.colors.text} />
+          </View>
+        </Pressable>
+        <Typography variant="title" style={styles.headerTitle}>
+          {t('friends.search_title')}
+        </Typography>
+        <Pressable
+          onPress={() => searchRef.current?.focus()}
+          hitSlop={8}
+          accessibilityRole="button"
+          accessibilityLabel={t('friends.search_placeholder')}>
+          <FigmaIcon name="searchNormal" size={24} />
+        </Pressable>
+      </View>
 
       <View style={styles.searchWrap}>
-        <Input
-          placeholder={t('friends.search_placeholder')}
-          leftIcon="search"
-          autoFocus
-          autoCapitalize="none"
-          value={query}
-          onChangeText={setQuery}
-        />
+        <View
+          style={[styles.search, { backgroundColor: theme.colors.surfaceAlt }]}>
+          <TextInput
+            ref={searchRef}
+            placeholder={t('friends.search_placeholder')}
+            placeholderTextColor={theme.colors.textMuted}
+            autoFocus
+            autoCapitalize="none"
+            autoCorrect={false}
+            value={query}
+            onChangeText={setQuery}
+            style={[
+              styles.searchInput,
+              theme.typography.variants.callout,
+              { color: theme.colors.text },
+            ]}
+          />
+          <FigmaIcon name="searchNormal" size={24} />
+        </View>
       </View>
 
       {loading ? (
-        <View style={styles.loading}>
-          <ActivityIndicator color={theme.colors.primary} />
-        </View>
+        <FigmaSpinner fill />
       ) : (
         <ScrollView
           showsVerticalScrollIndicator={false}
@@ -237,7 +246,7 @@ export function SearchUsersScreen({ navigation }: Props) {
             directory.length === 0 ? (
               <EmptyState
                 fill
-                icon="search"
+                figmaIcon="searchNormal"
                 title={t('friends.search_title')}
                 description={t('friends.search_placeholder')}
               />
@@ -250,7 +259,7 @@ export function SearchUsersScreen({ navigation }: Props) {
           ) : results.length === 0 ? (
             <EmptyState
               fill
-              icon="search"
+              figmaIcon="searchNormal"
               title={t('friends.no_results_title')}
               description={t('friends.no_results_desc').replace(
                 '{query}',
@@ -267,10 +276,39 @@ export function SearchUsersScreen({ navigation }: Props) {
 }
 
 const styles = StyleSheet.create({
-  searchWrap: { paddingHorizontal: 20, paddingVertical: 8 },
-  content: { paddingHorizontal: 20, gap: 4 },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 10,
+    paddingBottom: 8,
+  },
+  headerTitle: {
+    flex: 1,
+    textAlign: 'center',
+  },
+  backIcon: {
+    transform: [{ rotate: '180deg' }],
+    width: 24,
+    height: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  searchWrap: { paddingHorizontal: 10, paddingVertical: 8 },
+  search: {
+    height: 46,
+    borderRadius: 15,
+    paddingHorizontal: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  searchInput: {
+    flex: 1,
+    padding: 0,
+  },
+  content: { paddingHorizontal: 10, gap: 4 },
   suggest: { gap: 8 },
-  loading: { flex: 1, alignItems: 'center', justifyContent: 'center' },
 });
 
 export default SearchUsersScreen;

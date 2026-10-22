@@ -72,6 +72,15 @@ export const premium = {
   ink: '#3A2A00',
   soft: 'rgba(245, 215, 110, 0.28)',
   softStrong: 'rgba(245, 215, 110, 0.45)',
+  tabIndicator: 'rgba(247, 165, 28, 0.25)',
+  /** Home Plus card from Meerk Figma. */
+  cta: '#FF9000',
+  /** Notifications highlight / people-icon wash (Figma #F39E15). */
+  plusSoft: 'rgba(243, 158, 21, 0.1)',
+  plusIconSoft: 'rgba(243, 158, 21, 0.15)',
+  cardStart: '#5D3B28',
+  cardEnd: '#311B11',
+  cardGradient: ['#5D3B28', '#311B11'] as [string, string],
 } as const;
 
 /** Soft, product-grade neutrals (Apple / Linear inspired). */
@@ -92,7 +101,7 @@ export const neutrals = {
     overlay: 'rgba(10, 10, 15, 0.72)',
     backdrop: 'rgba(0, 0, 0, 0.55)',
     skeleton: 'rgba(255, 255, 255, 0.06)',
-    tabBar: 'transparent',
+    tabBar: '#1C1D24',
   },
   light: {
     background: '#F5F5F7',
@@ -110,7 +119,7 @@ export const neutrals = {
     overlay: 'rgba(255, 255, 255, 0.78)',
     backdrop: 'rgba(0, 0, 0, 0.35)',
     skeleton: 'rgba(0, 0, 0, 0.05)',
-    tabBar: 'transparent',
+    tabBar: '#FFFFFF',
   },
 } as const;
 

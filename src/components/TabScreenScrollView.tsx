@@ -22,7 +22,7 @@ export const TabScreenScrollView = forwardRef<
   ScrollView,
   TabScreenScrollViewProps
 >(function TabScreenScrollView(
-  { bottomSpacing = 8, contentContainerStyle, children, ...props },
+  { bottomSpacing = 8, contentContainerStyle, style, children, ...props },
   forwardedRef,
 ) {
   const clearance = useTabBarClearance(16);
@@ -105,6 +105,7 @@ export const TabScreenScrollView = forwardRef<
       showsVerticalScrollIndicator={false}
       keyboardShouldPersistTaps="handled"
       {...props}
+      style={[{ flex: 1 }, style]}
       contentContainerStyle={[
         contentContainerStyle,
         { paddingBottom: bottomSpacing + clearance },

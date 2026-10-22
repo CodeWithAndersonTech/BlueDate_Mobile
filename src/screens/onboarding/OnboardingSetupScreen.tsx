@@ -1,6 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
-  ActivityIndicator,
   Alert,
   Image,
   KeyboardAvoidingView,
@@ -19,7 +18,7 @@ import {
   resolveMediaUrl,
   saveUserInterest,
 } from '../../api';
-import { Button, Screen, Typography } from '../../components';
+import { FigmaButton, FigmaSpinner, Screen, Typography } from '../../components';
 import { useKeyboardHeight } from '../../hooks';
 import { useLocale, userFacingError } from '../../i18n';
 import { useAuth } from '../../navigation/AuthContext';
@@ -181,7 +180,7 @@ export function OnboardingSetupScreen({ onCompleted }: Props) {
     return (
       <Screen edges={['top', 'bottom']}>
         <View style={styles.center}>
-          <ActivityIndicator color={theme.colors.primary} />
+          <FigmaSpinner color={theme.colors.plusCta} />
         </View>
       </Screen>
     );
@@ -225,10 +224,10 @@ export function OnboardingSetupScreen({ onCompleted }: Props) {
                       styles.tile,
                       {
                         backgroundColor: filled
-                          ? theme.colors.primarySoft
+                          ? theme.colors.plusSoft
                           : theme.colors.card,
                         borderColor: filled
-                          ? theme.colors.primary
+                          ? theme.colors.plusCta
                           : theme.colors.border,
                       },
                     ]}>
@@ -281,9 +280,9 @@ export function OnboardingSetupScreen({ onCompleted }: Props) {
                 <View
                   style={[
                     styles.photoPlaceholder,
-                    { backgroundColor: theme.colors.primarySoft },
+                    { backgroundColor: theme.colors.plusSoft },
                   ]}>
-                  <Typography variant="h2" tint={theme.colors.primary}>
+                  <Typography variant="h2" tint={theme.colors.plusCta}>
                     +
                   </Typography>
                   <Typography variant="caption" color="textMuted">
@@ -311,8 +310,10 @@ export function OnboardingSetupScreen({ onCompleted }: Props) {
               borderTopColor: theme.colors.border,
             },
           ]}>
-          <Button
+          <FigmaButton
             label={saving ? t('onboarding.saving') : t('onboarding.continue')}
+            size="md"
+            fullWidth
             onPress={() => {
               void onContinue();
             }}
@@ -377,7 +378,7 @@ export function OnboardingSetupScreen({ onCompleted }: Props) {
                 onPress={() => setSheetType(null)}
                 style={[styles.sheetBtn, styles.sheetGhost]}>
                 <Text
-                  style={[styles.sheetBtnLabel, { color: theme.colors.primary }]}>
+                  style={[styles.sheetBtnLabel, { color: theme.colors.plusCta }]}>
                   {t('settings.cancel')}
                 </Text>
               </Pressable>
@@ -385,7 +386,7 @@ export function OnboardingSetupScreen({ onCompleted }: Props) {
                 onPress={applySheet}
                 style={[
                   styles.sheetBtn,
-                  { backgroundColor: theme.colors.primary },
+                  { backgroundColor: theme.colors.plusCta },
                 ]}>
                 <Text
                   style={[

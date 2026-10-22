@@ -3,52 +3,53 @@ import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Alert,
-  Image,
   Pressable,
   RefreshControl,
   StatusBar,
   StyleSheet,
-  Text,
   View,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
 import {
   FootprintGroup,
   getFootprints,
+  getInterestTypes,
   getUserProfile,
+  isProfileReadyForNearby,
+  parseInterestTypes,
 } from '../../api';
 import { resolveMediaUrl } from '../../api/photos';
 import {
   BridgeNearbyItem,
   DirectNearbyItem,
 } from '../../api/proximity';
-import { images } from '../../assets';
 import {
   EmptyState,
-  Icon,
+  FigmaIcon,
   NearbyCard,
   NearbyUser,
   TabScreenScrollView,
   Typography,
+  useScreenTopPad,
 } from '../../components';
 import { useBlePresence } from '../../hooks/useBlePresence';
 import { useHideTabBar } from '../../navigation/useHideTabBar';
 import { getCurrentCoordinates } from '../../services/location/currentPosition';
 import { StoryViewer } from '../home/StoryViewer';
 import { FootprintsSection, FootprintsStatus } from './FootprintsSection';
-import { useLocale } from '../../i18n';
+import { useLocale, userFacingError } from '../../i18n';
 import { useAuth } from '../../navigation/AuthContext';
-import { NearbyStackParamList } from '../../navigation/types';
+import { MainTabParamList, NearbyStackParamList } from '../../navigation/types';
 import { useTheme } from '../../theme';
+import { afterUiSettled } from '../../utils/afterUiSettled';
+import { NearbyEmpty } from './NearbyEmpty';
 import { NearbyScanOverlay } from './NearbyScanOverlay';
-import { NearbySkeleton } from './NearbySkeleton';
 
 type Props = NativeStackScreenProps<NearbyStackParamList, 'NearbyMain'>;
 
 const H_PAD = 20;
 const LOAD_MS = 400;
 /** Keep the “searching” Meerk overlay up long enough to feel like a real scan. */
-const SEARCH_UI_MS = 15_000;
+const SEARCH_UI_MS = 6_000;
 /** Footprints are re-fetched on focus at most this often. */
 const FOOTPRINTS_STALE_MS = 60_000;
 
@@ -77,6 +78,7 @@ async function mapNearbyItem(
   return {
     id: String(item.UserId),
     name: item.FullName || 'User',
+    handle: item.Username || undefined,
     age: item.Age ?? 0,
     distanceKm: estimateDistanceKm(item),
     online: true,
@@ -92,6 +94,7 @@ async function mapNearbyItem(
 
 export function NearbyScreen({ navigation }: Props) {
   const theme = useTheme();
+  const topPad = useScreenTopPad();
   const { t, device } = useLocale();
   const { userId, accessToken, isSignedIn } = useAuth();
   const rootNav = useNavigation();
@@ -114,7 +117,7 @@ export function NearbyScreen({ navigation }: Props) {
   const [users, setUsers] = useState<NearbyUser[]>([]);
   const [loading, setLoading] = useState(true);
   const [verified, setVerified] = useState<boolean | null>(null);
-  const [scanTipOpen, setScanTipOpen] = useState(false);
+  const [profileLoadError, setProfileLoadError] = useState<string | null>(null);
   const [searchUiActive, setSearchUiActive] = useState(false);
   const mappingRef = useRef(0);
   const mappedSigRef = useRef('');
@@ -166,8 +169,6 @@ export function NearbyScreen({ navigation }: Props) {
     },
     [canOpenFootprintProfile, navigation, rootNav, t],
   );
-
-  const closeScanTip = () => setScanTipOpen(false);
 
   const endSearchUi = useCallback(() => {
     if (searchTimerRef.current) {
@@ -231,57 +232,79 @@ export function NearbyScreen({ navigation }: Props) {
     }
   }, [beginSearchUi, refresh, start, state.status]);
 
-  const goToProfileTab = useCallback(() => {
-    rootNav.getParent()?.navigate('Profile' as never);
-  }, [rootNav]);
+  const showList = !showScanOverlay && users.length > 0;
+  const showEmpty = !showScanOverlay && users.length === 0;
+
+  const goToCompleteProfile = useCallback(() => {
+    afterUiSettled(() => {
+      let nav:
+        | {
+            getState?: () => { routeNames?: string[] };
+            navigate: (name: string, params?: object) => void;
+            getParent?: () => unknown;
+          }
+        | undefined = navigation;
+      while (nav) {
+        const names = nav.getState?.()?.routeNames ?? [];
+        if (names.includes('Profile') && names.includes('Nearby')) {
+          // Stay on ProfileMain — pushing EditProfile during a tab
+          // change trips iOS 26 Material Top Tabs.
+          nav.navigate('Profile' as keyof MainTabParamList, {
+            screen: 'ProfileMain',
+          });
+          return;
+        }
+        nav = nav.getParent?.() as typeof nav;
+      }
+    });
+  }, [navigation]);
+
+  const checkVerified = useCallback(async () => {
+    if (!isSignedIn || !userId) {
+      setVerified(false);
+      setProfileLoadError(null);
+      return;
+    }
+
+    try {
+      const [me, typesRes] = await Promise.all([
+        getUserProfile(userId, accessToken),
+        getInterestTypes(accessToken).catch(() => null),
+      ]);
+          const types = parseInterestTypes(typesRes);
+      const ok = isProfileReadyForNearby(me, types);
+      setProfileLoadError(null);
+      setVerified(ok);
+      if (ok) {
+        beginSearchUi();
+        start();
+        void loadFootprints();
+      } else {
+        endSearchUi();
+        stop();
+      }
+    } catch (error) {
+      setVerified(null);
+      setProfileLoadError(userFacingError(error, t, 'nearby.profile_load_desc'));
+      endSearchUi();
+      stop();
+    }
+  }, [
+    isSignedIn,
+    userId,
+    accessToken,
+    start,
+    stop,
+    beginSearchUi,
+    endSearchUi,
+    loadFootprints,
+    t,
+  ]);
 
   useFocusEffect(
     useCallback(() => {
-      if (!isSignedIn || !userId) {
-        setVerified(false);
-        return undefined;
-      }
-
-      let cancelled = false;
-
-      (async () => {
-        try {
-          const me = await getUserProfile(userId, accessToken);
-          if (cancelled) return;
-          const ok = Boolean(me.IsVerified);
-          setVerified(ok);
-          if (ok) {
-            beginSearchUi();
-            start();
-            void loadFootprints();
-          } else {
-            endSearchUi();
-            stop();
-            // Unverified users cannot use Nearby — send them to Profile.
-            rootNav.getParent()?.navigate('Profile' as never);
-          }
-        } catch {
-          if (!cancelled) {
-            setVerified(false);
-            stop();
-          }
-        }
-      })();
-
-      return () => {
-        cancelled = true;
-      };
-    }, [
-      isSignedIn,
-      userId,
-      accessToken,
-      start,
-      stop,
-      rootNav,
-      beginSearchUi,
-      endSearchUi,
-      loadFootprints,
-    ]),
+      void checkVerified();
+    }, [checkVerified]),
   );
 
   useEffect(() => {
@@ -352,21 +375,33 @@ export function NearbyScreen({ navigation }: Props) {
         ? state.errorMessage || t('nearby.empty_desc')
         : t('nearby.empty_desc');
 
-  if (loading || verified === null) {
-    return (
-      <SafeAreaView
-        edges={['top']}
-        style={[styles.root, { backgroundColor: theme.colors.background }]}>
-        <NearbySkeleton />
-      </SafeAreaView>
-    );
-  }
+  const searching =
+    (((loading || verified === null) && !profileLoadError) || showScanOverlay);
+  const headerOnly = searching || (showEmpty && footprints.length === 0);
 
-  if (verified === false) {
+  const nearbyHeader = (
+    <View style={styles.header}>
+      <FigmaIcon name="location" size={24} />
+      <Typography variant="title" style={styles.headerTitle}>
+        {t('nearby.title')}
+      </Typography>
+      <Pressable
+        onPress={kickOffScan}
+        hitSlop={8}
+        accessibilityRole="button"
+        accessibilityLabel={t('nearby.scan_action')}>
+        <FigmaIcon name="rotateRight" size={24} />
+      </Pressable>
+    </View>
+  );
+
+  if (profileLoadError) {
     return (
-      <SafeAreaView
-        edges={['top']}
-        style={[styles.root, { backgroundColor: theme.colors.background }]}>
+      <View
+        style={[
+          styles.root,
+          { backgroundColor: theme.colors.background, paddingTop: topPad },
+        ]}>
         <StatusBar
           barStyle={theme.isDark ? 'light-content' : 'dark-content'}
           backgroundColor="transparent"
@@ -374,165 +409,120 @@ export function NearbyScreen({ navigation }: Props) {
         />
         <EmptyState
           fill
-          icon="shield"
+          figmaIcon="rotateRight"
+          title={t('nearby.profile_load_title')}
+          description={profileLoadError}
+          actionLabel={t('nearby.retry')}
+          onAction={() => {
+            void checkVerified();
+          }}
+        />
+      </View>
+    );
+  }
+
+  if (verified === false) {
+    return (
+      <View
+        style={[
+          styles.root,
+          { backgroundColor: theme.colors.background, paddingTop: topPad },
+        ]}>
+        <StatusBar
+          barStyle={theme.isDark ? 'light-content' : 'dark-content'}
+          backgroundColor="transparent"
+          translucent
+        />
+        <EmptyState
+          fill
+          figmaIcon="shield"
           title={t('nearby.verified_required_title')}
           description={t('nearby.verified_required_desc')}
           actionLabel={t('nearby.verified_required_action')}
-          onAction={goToProfileTab}
+          onAction={goToCompleteProfile}
         />
-      </SafeAreaView>
+      </View>
     );
   }
 
   return (
-    <SafeAreaView
-      edges={['top']}
-      style={[styles.root, { backgroundColor: theme.colors.background }]}>
+    <View
+      style={[
+        styles.root,
+        { backgroundColor: theme.colors.background, paddingTop: topPad },
+      ]}>
       <StatusBar
         barStyle={theme.isDark ? 'light-content' : 'dark-content'}
         backgroundColor="transparent"
         translucent
       />
 
-      <View style={styles.flex}>
-        <View style={styles.header}>
-          {scanTipOpen ? (
-            <Pressable
-              style={styles.scanTipDismiss}
-              onPress={closeScanTip}
-              accessibilityRole="button"
-              accessibilityLabel={t('common.close')}
-            />
-          ) : null}
+      {searching ? <NearbyScanOverlay /> : null}
 
-          <View
-            style={[
-              styles.pinChip,
-              { backgroundColor: theme.colors.premiumSoft },
-            ]}>
-            <Icon name="map-pin" size={18} color={theme.colors.premium} />
+      <View style={styles.flex} pointerEvents="box-none">
+        {nearbyHeader}
+        {!headerOnly ? (
+          <View style={styles.subtitleWrap}>
+            <Typography variant="caption">{t('nearby.subtitle')}</Typography>
           </View>
-          <View style={styles.headerText}>
-            <Text style={[styles.title, { color: theme.colors.text }]}>
-              {t('nearby.title')}
-            </Text>
-            <Text style={[styles.subtitle, { color: theme.colors.textMuted }]}>
-              {t('nearby.subtitle')}
-            </Text>
-          </View>
+        ) : null}
 
-          <View style={styles.scanBtnWrap}>
-            <Pressable
-              onPress={() => {
-                setScanTipOpen(false);
-                kickOffScan();
-              }}
-              onLongPress={() => setScanTipOpen(open => !open)}
-              hitSlop={8}
-              accessibilityRole="button"
-              accessibilityLabel={t('nearby.scan_action')}
-              accessibilityState={{ expanded: scanTipOpen }}
-              style={[
-                styles.scanBtn,
-                {
-                  backgroundColor: theme.colors.surfaceAlt,
-                  borderColor: theme.colors.border,
-                },
-              ]}>
-              <Image source={images.appLogo} style={styles.scanBtnLogo} />
-            </Pressable>
-
-            {scanTipOpen ? (
-              <View
-                style={[
-                  styles.scanTip,
-                  {
-                    backgroundColor: theme.colors.card,
-                    borderColor: theme.colors.border,
-                  },
-                  theme.shadows.sm,
-                ]}>
-                <View
-                  style={[
-                    styles.scanTipCaret,
-                    {
-                      backgroundColor: theme.colors.card,
-                      borderColor: theme.colors.border,
-                    },
-                  ]}
+        {searching ? null : showEmpty && footprints.length === 0 ? (
+          <NearbyEmpty description={emptyDesc} onRetry={kickOffScan} />
+        ) : (
+          <TabScreenScrollView
+            contentContainerStyle={styles.scroll}
+            refreshControl={
+              <RefreshControl
+                refreshing={state.refreshing}
+                onRefresh={onRefresh}
+                tintColor={theme.colors.premium}
+              />
+            }>
+            {footprints.length > 0 ? (
+              <View style={styles.section}>
+                <FootprintsSection
+                  items={footprints}
+                  status={footprintsStatus}
+                  windowHours={footprintsHours}
+                  onOpen={setViewerIndex}
                 />
-                <Text
-                  style={[styles.scanTipTitle, { color: theme.colors.text }]}>
-                  {t('nearby.scan_action')}
-                </Text>
-                <Text
-                  style={[
-                    styles.scanTipText,
-                    { color: theme.colors.textMuted },
-                  ]}>
-                  {t('nearby.scan_banner')}
-                </Text>
               </View>
             ) : null}
-          </View>
-        </View>
 
-        <TabScreenScrollView
-          contentContainerStyle={[styles.scroll, { gap: theme.space.xl }]}
-          onScrollBeginDrag={closeScanTip}
-          refreshControl={
-            <RefreshControl
-              refreshing={state.refreshing}
-              onRefresh={onRefresh}
-              tintColor={theme.colors.primary}
-            />
-          }>
-          {footprints.length > 0 ? (
-            <View style={styles.section}>
-              <FootprintsSection
-                items={footprints}
-                status={footprintsStatus}
-                windowHours={footprintsHours}
-                onOpen={setViewerIndex}
-              />
-            </View>
-          ) : null}
-
-          <View style={[styles.section, { gap: theme.space.sm }]}>
-            <View style={styles.liveHeader}>
-              <View style={[styles.liveDot, { backgroundColor: theme.colors.online }]} />
-              <Typography variant="title">{t('nearby.live_title')}</Typography>
-            </View>
-            {users.length === 0 ? (
-              <EmptyState
-                image={images.appLogo}
-                onImagePress={kickOffScan}
-                imageAccessibilityLabel={t('nearby.scan_action')}
-                title={t('nearby.empty_title')}
+            {showEmpty ? (
+              <NearbyEmpty
+                compact
                 description={emptyDesc}
+                onRetry={kickOffScan}
               />
             ) : (
-              <View style={styles.liveGrid}>
-                {users.map(user => (
-                  <NearbyCard
-                    key={user.id}
-                    user={user}
-                    variant="rail"
-                    onPress={() =>
-                      navigation.navigate('UserProfile', { userId: user.id })
-                    }
-                  />
-                ))}
+              <View style={styles.section}>
+                <View style={styles.liveHeader}>
+                  <FigmaIcon name="live" size={20} />
+                  <Typography variant="callout" weight="600">
+                    {t('nearby.live_title')}
+                  </Typography>
+                </View>
+                <View style={styles.liveGrid}>
+                  {users.map(user => (
+                    <NearbyCard
+                      key={user.id}
+                      user={user}
+                      variant="rail"
+                      onPress={() =>
+                        navigation.navigate('UserProfile', {
+                          userId: user.id,
+                        })
+                      }
+                    />
+                  ))}
+                </View>
               </View>
             )}
-          </View>
-        </TabScreenScrollView>
+          </TabScreenScrollView>
+        )}
       </View>
-
-      <NearbyScanOverlay
-        visible={showScanOverlay}
-        onCancel={endSearchUi}
-      />
 
       <StoryViewer
         visible={viewerIndex !== null}
@@ -542,7 +532,7 @@ export function NearbyScreen({ navigation }: Props) {
         onClose={() => setViewerIndex(null)}
         onOpenProfile={openFootprintProfile}
       />
-    </SafeAreaView>
+    </View>
   );
 }
 
@@ -550,97 +540,36 @@ const styles = StyleSheet.create({
   root: { flex: 1 },
   flex: { flex: 1 },
   header: {
-    position: 'relative',
-    paddingHorizontal: H_PAD,
-    paddingTop: 4,
-    paddingBottom: 10,
+    paddingHorizontal: 10,
+    paddingTop: 0,
+    paddingBottom: 2,
     flexDirection: 'row',
-    alignItems: 'flex-start',
+    alignItems: 'center',
     justifyContent: 'space-between',
-    gap: 12,
-    zIndex: 4,
-    overflow: 'visible',
-  },
-  pinChip: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginTop: 2,
-  },
-  headerText: { flex: 1, gap: 4, minWidth: 0 },
-  title: {
-    fontSize: 22,
-    fontWeight: '700',
-    letterSpacing: -0.4,
-  },
-  subtitle: {
-    fontSize: 13,
-    lineHeight: 18,
-    fontWeight: '500',
-  },
-  scanBtnWrap: {
-    position: 'relative',
-    zIndex: 5,
-  },
-  scanBtn: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    borderWidth: StyleSheet.hairlineWidth,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  scanBtnLogo: {
-    width: 28,
-    height: 28,
-    borderRadius: 8,
-  },
-  scanTipDismiss: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    zIndex: 1,
-  },
-  scanTip: {
-    position: 'absolute',
-    top: '100%',
-    right: 0,
-    marginTop: 10,
-    width: 220,
-    borderRadius: 14,
-    borderWidth: StyleSheet.hairlineWidth,
-    paddingHorizontal: 12,
-    paddingTop: 12,
-    paddingBottom: 12,
-    gap: 4,
-    zIndex: 6,
-    elevation: 12,
-  },
-  scanTipCaret: {
-    position: 'absolute',
-    top: -5,
-    right: 16,
-    width: 10,
-    height: 10,
-    borderLeftWidth: StyleSheet.hairlineWidth,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    transform: [{ rotate: '45deg' }],
     zIndex: 2,
   },
-  scanTipTitle: { fontSize: 13, fontWeight: '700' },
-  scanTipText: { fontSize: 12, lineHeight: 17, fontWeight: '500' },
-  scroll: { flexGrow: 1, paddingTop: 8 },
+  headerTitle: {
+    flex: 1,
+    textAlign: 'center',
+  },
+  subtitleWrap: {
+    paddingHorizontal: H_PAD,
+    paddingTop: 8,
+    paddingBottom: 8,
+    paddingRight: 40,
+  },
+  scroll: { flexGrow: 1, paddingBottom: 24 },
   section: { paddingHorizontal: H_PAD },
-  liveHeader: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  liveDot: { width: 8, height: 8, borderRadius: 4 },
+  liveHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingVertical: 10,
+  },
   liveGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 12,
+    gap: 10,
   },
 });
 
