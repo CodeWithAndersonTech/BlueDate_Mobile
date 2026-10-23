@@ -4,6 +4,7 @@ import { Alert, StyleSheet, View } from 'react-native';
 import { ScrollView } from 'react-native-gesture-handler';
 import { fetchFilterPrefs, saveFilterPrefs } from '../../api/filterPrefs';
 import {
+  BottomActionDock,
   Card,
   Chip,
   FigmaButton,
@@ -17,10 +18,6 @@ import {
 } from '../../components';
 import { useLocale, userFacingError } from '../../i18n';
 import { useAuth } from '../../navigation/AuthContext';
-import {
-  DOCK_ACTION_HEIGHT,
-  useStickyDockLayout,
-} from '../../navigation/tabBarLayout';
 import { useLockTabSwipe } from '../../navigation/useLockTabSwipe';
 import {
   chipSelected,
@@ -50,10 +47,6 @@ export function FilterScreen() {
   const theme = useTheme();
   const { t } = useLocale();
   const { userId, accessToken } = useAuth();
-  // Nested under Material Top Tabs — keep Apply above the floating pill.
-  const dock = useStickyDockLayout(DOCK_ACTION_HEIGHT, {
-    forceAboveTabBar: true,
-  });
 
   const [age, setAge] = useState({
     low: DEFAULT_FILTER_PREFS.ageLow,
@@ -195,7 +188,7 @@ export function FilterScreen() {
             keyboardShouldPersistTaps="handled"
             contentContainerStyle={[
               styles.content,
-              { paddingBottom: dock.scrollClearance },
+              { paddingBottom: 24 },
             ]}>
             <View style={styles.section}>
               <SectionHeader title={t('filter.age_section')} />
@@ -287,16 +280,7 @@ export function FilterScreen() {
             </View>
           </ScrollView>
 
-          <View
-            pointerEvents="box-none"
-            style={[
-              styles.stickyDock,
-              {
-                paddingBottom: dock.dockBottom + dock.dockPaddingBottom,
-                backgroundColor: theme.colors.background,
-                borderTopColor: theme.colors.border,
-              },
-            ]}>
+          <BottomActionDock forceAboveTabBar>
             <FigmaButton
               label={saving ? t('filter.saving') : t('filter.apply')}
               size="md"
@@ -307,7 +291,7 @@ export function FilterScreen() {
               onPress={onApply}
               style={styles.applyBtn}
             />
-          </View>
+          </BottomActionDock>
         </View>
       )}
     </Screen>

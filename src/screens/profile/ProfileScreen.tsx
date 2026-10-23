@@ -46,8 +46,11 @@ import {
   pickPhotoFromLibrary,
 } from '../../services/photos/pickImage';
 import {
-  loadProfilePhotos,
+  mergePhotoLists,
+  peekCachedAvatar,
+  photosFromProfile,
   pickAndSetAvatar,
+  preferDisplayAvatar,
   ProfilePhoto,
   rememberAvatar,
 } from '../../services/photos/photoStore';
@@ -65,6 +68,7 @@ import { ProfileSkeleton } from './ProfileSkeleton';
 
 type Props = NativeStackScreenProps<ProfileStackParamList, 'ProfileMain'>;
 
+const PROFILE_STALE_MS = 20_000;
 const COVER_RATIO = 478 / 393;
 const AVATAR_RATIO = 82 / 393;
 
@@ -139,7 +143,6 @@ export function ProfileScreen({ navigation }: Props) {
   const profileRef = useRef<UserProfileResponse | null>(null);
   profileRef.current = profile;
   const lastLoadAt = useRef(0);
-
   const closeVerifyTip = () => setVerifyTipOpen(false);
 
   const loadProfile = useCallback(
@@ -147,6 +150,14 @@ export function ProfileScreen({ navigation }: Props) {
       if (!userId) {
         setError(t('profile.session_missing'));
         setLoading(false);
+        return;
+      }
+      if (
+        !isRefresh &&
+        profileRef.current &&
+        lastLoadAt.current > 0 &&
+        Date.now() - lastLoadAt.current < PROFILE_STALE_MS
+      ) {
         return;
       }
       // Keep existing content on re-focus; skeleton only when we have nothing yet.
@@ -162,36 +173,39 @@ export function ProfileScreen({ navigation }: Props) {
         if (!Number(profileResponse?.Id)) {
           throw new Error('profile-empty');
         }
-        setProfile(profileResponse);
         setError(null);
-        lastLoadAt.current = Date.now();
 
         try {
-          const [interestTypesResponse, photoBundle] = await Promise.all([
+          const [interestTypesResponse, fromProfile] = await Promise.all([
             getInterestTypes(accessToken).catch(() => null),
-            loadProfilePhotos(userId, accessToken).catch(() => ({
-              gallery: [] as ProfilePhoto[],
-              avatarUri: undefined as string | undefined,
-            })),
+            photosFromProfile(profileResponse.Photos),
           ]);
           const profileAvatar = await resolveMediaUrl(
             profileResponse.ProfileImage,
           ).catch(() => undefined);
-          const nextAvatar = photoBundle.avatarUri ?? profileAvatar;
-          const gallery = photoBundle.gallery ?? [];
+          const nextAvatar = preferDisplayAvatar(
+            profileAvatar,
+            peekCachedAvatar(userId),
+          );
+          const gallery = mergePhotoLists(fromProfile);
+          setProfile(profileResponse);
           setInterestTypes(parseInterestTypes(interestTypesResponse));
           setPhotos(gallery);
           setAvatarUri(nextAvatar);
+          lastLoadAt.current = Date.now();
           if (userId && nextAvatar) {
             rememberAvatar(userId, nextAvatar);
           }
-          void prefetchMediaUris([nextAvatar, ...gallery.map(p => p.uri)]).catch(
-            () => undefined,
+          void prefetchMediaUris(
+            [nextAvatar, ...gallery.map(p => p.uri)],
+            2000,
           );
         } catch (extraErr) {
           if (__DEV__) {
             console.warn('[Profile] extras failed', extraErr);
           }
+          setProfile(profileResponse);
+          lastLoadAt.current = Date.now();
         }
       } catch (err) {
         if (__DEV__) {
@@ -210,12 +224,9 @@ export function ProfileScreen({ navigation }: Props) {
 
   useFocusEffect(
     useCallback(() => {
-      const recent =
-        lastLoadAt.current > 0 &&
-        Date.now() - lastLoadAt.current < 20_000 &&
-        profileRef.current != null;
-      if (recent) return;
-      void loadProfile();
+      return afterUiSettled(() => {
+        void loadProfile();
+      }, 50);
     }, [loadProfile]),
   );
 

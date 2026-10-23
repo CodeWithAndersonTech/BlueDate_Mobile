@@ -7,7 +7,8 @@ import {
   View,
   ViewStyle,
 } from 'react-native';
-import { Edge, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { Edge } from 'react-native-safe-area-context';
+import { useDeviceSafeInsets } from '../navigation/tabBarLayout';
 import { useTheme } from '../theme';
 
 /**
@@ -20,7 +21,7 @@ export function tightTopInset(top: number) {
 }
 
 export function useScreenTopPad() {
-  const insets = useSafeAreaInsets();
+  const insets = useDeviceSafeInsets();
   return tightTopInset(insets.top);
 }
 
@@ -55,7 +56,7 @@ export function Screen({
   backgroundColor,
 }: ScreenProps) {
   const theme = useTheme();
-  const insets = useSafeAreaInsets();
+  const insets = useDeviceSafeInsets();
   const bg = backgroundColor ?? theme.colors.background;
 
   const pad = theme.components.screen.paddingH;

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   NEARBY_POLL_INTERVAL_MS,
+  SIGHTING_FLUSH_DEBOUNCE_MS,
   SIGHTINGS_FLUSH_INTERVAL_MS,
   TOKEN_REFRESH_INTERVAL_MS,
 } from '../config/ble';
@@ -52,6 +53,8 @@ export function useBlePresence(session: BleSession | null) {
   const sessionRef = useRef(session);
   const timers = useRef<ReturnType<typeof setInterval>[]>([]);
   const startedRef = useRef(false);
+  const flushTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const advertisingRef = useRef(false);
 
   sessionRef.current = session;
 
@@ -66,6 +69,7 @@ export function useBlePresence(session: BleSession | null) {
     try {
       const token = await BleIdentityService.createToken(current, deviceId);
       const advertising = await BleAdvertiserService.start(token.token);
+      advertisingRef.current = advertising;
       patch({
         advertising,
         errorMessage: advertising
@@ -75,6 +79,7 @@ export function useBlePresence(session: BleSession | null) {
     } catch (e: unknown) {
       const message = e instanceof Error ? e.message : String(e);
       console.warn('[useBlePresence] token refresh', message);
+      advertisingRef.current = false;
       patch({
         advertising: false,
         errorMessage: `BLE token/API: ${message}`,
@@ -139,9 +144,28 @@ export function useBlePresence(session: BleSession | null) {
     }
   }, [flushSightings, patch, pollNearby]);
 
+  const scheduleFlush = useCallback(() => {
+    if (flushTimerRef.current) return;
+    flushTimerRef.current = setTimeout(() => {
+      flushTimerRef.current = null;
+      void (async () => {
+        await flushSightings();
+        await pollNearby();
+      })();
+    }, SIGHTING_FLUSH_DEBOUNCE_MS);
+  }, [flushSightings, pollNearby]);
+
   const start = useCallback(async () => {
     const current = sessionRef.current;
-    if (!current?.userId || startedRef.current) return;
+    if (!current?.userId) return;
+    if (startedRef.current) {
+      if (!advertisingRef.current) {
+        await refreshToken();
+      }
+      await flushSightings();
+      await pollNearby();
+      return;
+    }
     startedRef.current = true;
     patch({ status: 'starting', errorMessage: null });
 
@@ -158,6 +182,7 @@ export function useBlePresence(session: BleSession | null) {
       patch({ deviceId });
 
       const scanner = new BleScannerService();
+      scanner.setOnSighting(scheduleFlush);
       scannerRef.current = scanner;
       const powered = await scanner.waitUntilPoweredOn();
       if (!powered) {
@@ -179,17 +204,36 @@ export function useBlePresence(session: BleSession | null) {
       const message = e instanceof Error ? e.message : 'Unknown BLE error';
       patch({ status: 'error', errorMessage: message });
       startedRef.current = false;
+      try {
+        scannerRef.current?.destroy();
+      } catch {
+        // native BleManager can throw if already torn down
+      }
+      scannerRef.current = null;
     }
-  }, [flushSightings, patch, pollNearby, refreshToken]);
+  }, [flushSightings, patch, pollNearby, refreshToken, scheduleFlush]);
 
   const stop = useCallback(async () => {
     timers.current.forEach(clearInterval);
     timers.current = [];
-    await BleAdvertiserService.stop();
-    scannerRef.current?.destroy();
+    if (flushTimerRef.current) {
+      clearTimeout(flushTimerRef.current);
+      flushTimerRef.current = null;
+    }
+    try {
+      await BleAdvertiserService.stop();
+    } catch {
+      // ignore native advertiser failures
+    }
+    try {
+      scannerRef.current?.destroy();
+    } catch {
+      // ignore native scanner teardown
+    }
     scannerRef.current = null;
     deviceIdRef.current = null;
     startedRef.current = false;
+    advertisingRef.current = false;
     patch({ status: 'idle', advertising: false, deviceId: null });
   }, [patch]);
 

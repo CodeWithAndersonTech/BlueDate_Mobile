@@ -1,5 +1,5 @@
 import { API_PATHS } from '../config/api';
-import { apiRequest, ApiEnvelope } from './client';
+import { apiRequest, ApiEnvelope, ApiError } from './client';
 import { resolveMediaUrl } from './photos';
 
 export type SocialUser = {
@@ -53,10 +53,19 @@ export function normalizeSocialUser(raw: Partial<SocialUser> & {
 export function friendshipItems(
   res: { Items?: FriendshipListItem[]; items?: FriendshipListItem[] } | null | undefined,
 ): FriendshipListItem[] {
-  return (res?.Items ?? res?.items ?? []).map(item => ({
-    ...item,
-    User: normalizeSocialUser(item.User ?? (item as { user?: SocialUser }).user),
-  }));
+  return (res?.Items ?? res?.items ?? [])
+    .map(item => {
+      const raw = item as FriendshipListItem & {
+        friendshipId?: number;
+        user?: SocialUser;
+      };
+      return {
+        ...raw,
+        FriendshipId: Number(raw.FriendshipId ?? raw.friendshipId ?? 0),
+        User: normalizeSocialUser(raw.User ?? raw.user),
+      };
+    })
+    .filter(item => item.FriendshipId > 0 && item.User.UserId > 0);
 }
 
 /** Turn relative `/uploads/...` paths into absolute URLs for Avatar. */
@@ -174,6 +183,51 @@ export type SearchUsersResponse = ApiEnvelope & {
 export function displayName(user: SocialUser) {
   const name = `${user.FirstName ?? ''} ${user.LastName ?? ''}`.trim();
   return name || user.Username || '?';
+}
+
+export type FriendshipSnapshotResponse = ApiEnvelope & {
+  UserId: number;
+  Friends?: FriendshipListItem[];
+  friends?: FriendshipListItem[];
+  Incoming?: FriendshipListItem[];
+  incoming?: FriendshipListItem[];
+  Sent?: FriendshipListItem[];
+  sent?: FriendshipListItem[];
+};
+
+export async function getFriendshipSnapshot(
+  userId: number,
+  token?: string | null,
+): Promise<{
+  friends: FriendshipListItem[];
+  incoming: FriendshipListItem[];
+  sent: FriendshipListItem[];
+}> {
+  try {
+    const raw = await apiRequest<FriendshipSnapshotResponse>(
+      API_PATHS.friendshipSnapshot,
+      { query: { userId }, token },
+    );
+    return {
+      friends: friendshipItems({ Items: raw.Friends ?? raw.friends }),
+      incoming: friendshipItems({ Items: raw.Incoming ?? raw.incoming }),
+      sent: friendshipItems({ Items: raw.Sent ?? raw.sent }),
+    };
+  } catch (error) {
+    if (!(error instanceof ApiError) || error.status !== 404) {
+      throw error;
+    }
+    const [friendsRes, incomingRes, sentRes] = await Promise.all([
+      getFriends(userId, token).catch(() => null),
+      getIncomingFriendRequests(userId, token).catch(() => null),
+      getSentFriendRequests(userId, token).catch(() => null),
+    ]);
+    return {
+      friends: friendshipItems(friendsRes),
+      incoming: friendshipItems(incomingRes),
+      sent: friendshipItems(sentRes),
+    };
+  }
 }
 
 export function getFriends(userId: number, token?: string | null) {

@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Alert, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
+import { Alert, Pressable, StyleSheet, TextInput, View } from 'react-native';
 import type { Purchase } from 'react-native-iap';
 import {
   createTreat,
@@ -148,7 +148,7 @@ export function TreatSheet({
           </Typography>
         </View>
       ) : (
-        <ScrollView style={styles.list} contentContainerStyle={{ gap: theme.space.sm }}>
+        <View style={{ gap: theme.space.sm }}>
           {favorites.map(fav => {
             const selected = fav.Id === selectedId;
             return (
@@ -188,7 +188,7 @@ export function TreatSheet({
               </Pressable>
             );
           })}
-        </ScrollView>
+        </View>
       )}
 
       <View style={{ gap: theme.space.xs }}>
@@ -245,7 +245,6 @@ export function TreatSheet({
 
 const styles = StyleSheet.create({
   empty: { borderWidth: 1, borderStyle: 'dashed' },
-  list: { maxHeight: 280 },
   option: { flexDirection: 'row', alignItems: 'center', borderWidth: 1 },
   optionTexts: { flex: 1, minWidth: 0 },
   radio: {

@@ -1,40 +1,49 @@
 import React from 'react';
 import { StyleProp, StyleSheet, View, ViewStyle } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import {
+  DOCK_ACTION_HEIGHT,
+  DOCK_PAD_TOP,
+  useStickyDockLayout,
+} from '../navigation/tabBarLayout';
 import { useTheme } from '../theme';
 
-export const DOCK_PAD_TOP = 12;
-export const DOCK_MIN_BOTTOM = 12;
+export { DOCK_PAD_TOP };
 
 export interface BottomActionDockProps {
   children: React.ReactNode;
-  /** Extra space above the home-indicator inset. Default 0. */
-  extraBottom?: number;
+  /**
+   * Lift above the floating tab pill. Only for tab-root screens or when
+   * Material Top Tabs still paints the pill over a nested scene.
+   * Nested stacks (UserProfile, Chat) leave this false.
+   */
+  forceAboveTabBar?: boolean;
+  /** Friend profile = row. Save/apply with helper text = column. */
+  direction?: 'row' | 'column';
   style?: StyleProp<ViewStyle>;
-  /** Soft surface instead of page background. */
   elevated?: boolean;
 }
 
 /**
- * In-flow footer for nested screens (save / apply / message CTAs).
- * Owns safe-area bottom padding so docks stay flush with the screen edge
- * without magic +40 offsets.
+ * In-flow CTA footer. Sits in the flex column under the scroll view.
+ * Owns bottom inset math — screens must not add paddingBottom / +10 / +40.
  */
 export function BottomActionDock({
   children,
-  extraBottom = 0,
+  forceAboveTabBar = false,
+  direction = 'row',
   style,
   elevated = false,
 }: BottomActionDockProps) {
   const theme = useTheme();
-  const insets = useSafeAreaInsets();
+  const dock = useStickyDockLayout(DOCK_ACTION_HEIGHT, { forceAboveTabBar });
 
   return (
     <View
       style={[
         styles.dock,
+        direction === 'column' ? styles.column : null,
         {
-          paddingBottom: Math.max(insets.bottom, DOCK_MIN_BOTTOM) + extraBottom,
+          paddingBottom: dock.dockBottom + dock.dockPaddingBottom,
           backgroundColor: elevated
             ? theme.colors.surface
             : theme.colors.background,
@@ -50,10 +59,15 @@ export function BottomActionDock({
 const styles = StyleSheet.create({
   dock: {
     flexDirection: 'row',
+    alignItems: 'center',
     gap: 10,
     paddingHorizontal: 16,
     paddingTop: DOCK_PAD_TOP,
     borderTopWidth: StyleSheet.hairlineWidth,
+  },
+  column: {
+    flexDirection: 'column',
+    alignItems: 'stretch',
   },
 });
 

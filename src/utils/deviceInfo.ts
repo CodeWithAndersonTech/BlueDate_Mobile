@@ -41,6 +41,12 @@ function toCultureCode(language: string): string {
   if (primary === 'en') {
     return 'en-US';
   }
+  if (primary === 'ar') {
+    return 'ar-AE';
+  }
+  if (primary === 'ru') {
+    return 'ru-RU';
+  }
   return normalized;
 }
 

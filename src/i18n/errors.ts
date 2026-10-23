@@ -212,13 +212,39 @@ export function isAccountGoneError(error: unknown): boolean {
 }
 
 export function localizedCrashCopy(languageCode = getApiLanguageCode()) {
-  const tr = languageCode.toLowerCase().startsWith('tr');
+  const code = languageCode.toLowerCase().split(/[-_]/)[0];
+  if (code === 'tr') {
+    return {
+      title: 'Kısa bir bakımdayız',
+      message:
+        'Hesabın veya uygulama toparlanıyor. 1–2 dakikaya düzeltiliyor.',
+      retry: 'Tekrar dene',
+      leave: 'Girişe dön',
+    };
+  }
+  if (code === 'ar') {
+    return {
+      title: 'سنعود بعد لحظات',
+      message:
+        'يجري استعادة حسابك أو التطبيق. يُفترض أن يُصلح ذلك خلال دقيقة أو دقيقتين.',
+      retry: 'حاول مرة أخرى',
+      leave: 'العودة لتسجيل الدخول',
+    };
+  }
+  if (code === 'ru') {
+    return {
+      title: 'Скоро вернёмся',
+      message:
+        'Аккаунт или приложение восстанавливаются. Обычно это занимает 1–2 минуты.',
+      retry: 'Повторить',
+      leave: 'Вернуться ко входу',
+    };
+  }
   return {
-    title: tr ? 'Kısa bir bakımdayız' : 'We’ll be right back',
-    message: tr
-      ? 'Hesabın veya uygulama toparlanıyor. 1–2 dakikaya düzeltiliyor.'
-      : 'Your account or the app is being restored. This should be fixed in 1–2 minutes.',
-    retry: tr ? 'Tekrar dene' : 'Try again',
-    leave: tr ? 'Girişe dön' : 'Back to sign in',
+    title: 'We’ll be right back',
+    message:
+      'Your account or the app is being restored. This should be fixed in 1–2 minutes.',
+    retry: 'Try again',
+    leave: 'Back to sign in',
   };
 }

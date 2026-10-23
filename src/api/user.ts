@@ -1,4 +1,5 @@
 import { API_PATHS } from '../config/api';
+import { appStorage } from '../utils/appStorage';
 import { apiRequest, ApiEnvelope } from './client';
 
 export type UserProfileInterest = {
@@ -205,7 +206,11 @@ export async function getUserProfile(userId: number, token?: string | null) {
       ProfileImage: asText(raw?.ProfileImage ?? raw?.profileImage),
       Phone: asText(raw?.Phone ?? raw?.phone),
       BirthDate: asText(raw?.BirthDate ?? raw?.birthDate),
-      Gender: raw?.Gender ?? raw?.gender ?? null,
+      Gender: (() => {
+        const rawGender = raw?.Gender ?? raw?.gender;
+        const n = Number(rawGender);
+        return Number.isFinite(n) && n > 0 ? n : null;
+      })(),
       Age: typeof raw?.Age === 'number' ? raw.Age : raw?.age ?? null,
       IsEmailVerified: raw?.IsEmailVerified ?? raw?.isEmailVerified ?? false,
       IsVerified: raw?.IsVerified ?? raw?.isVerified ?? false,
@@ -319,10 +324,35 @@ export function updateUserStatus(
   });
 }
 
-export function getInterestTypes(token?: string | null) {
-  return apiRequest<InterestTypesResponse>(API_PATHS.interestTypes, {
+const INTEREST_CACHE_KEY = '@meerk/interest-types';
+const INTEREST_TTL_MS = 24 * 60 * 60 * 1000;
+let interestMemory: { at: number; data: InterestTypesResponse } | null = null;
+
+export async function getInterestTypes(token?: string | null) {
+  if (interestMemory && Date.now() - interestMemory.at < INTEREST_TTL_MS) {
+    return interestMemory.data;
+  }
+  try {
+    const raw = await appStorage.getItem(INTEREST_CACHE_KEY);
+    if (raw) {
+      const pack = JSON.parse(raw) as { at: number; data: InterestTypesResponse };
+      if (pack?.data && Date.now() - pack.at < INTEREST_TTL_MS) {
+        interestMemory = pack;
+        return pack.data;
+      }
+    }
+  } catch {
+    // ignore
+  }
+  const data = await apiRequest<InterestTypesResponse>(API_PATHS.interestTypes, {
     token,
   });
+  interestMemory = { at: Date.now(), data };
+  void appStorage.setItem(
+    INTEREST_CACHE_KEY,
+    JSON.stringify(interestMemory),
+  ).catch(() => undefined);
+  return data;
 }
 
 export function getUserInterestsByUser(userId: number, token?: string | null) {

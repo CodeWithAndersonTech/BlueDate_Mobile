@@ -17,6 +17,18 @@ import {
 import { getApiLanguageCode, hydrateApiLanguageCode, setApiLanguageCode } from '../api/languageHeader';
 import { getStoredPushToken } from '../services/push';
 import { getDeviceLaunchInfo } from '../utils/deviceInfo';
+import {
+  FALLBACK_LANGUAGES,
+  mergeLanguages,
+  primaryLanguageCode,
+} from './languages';
+import {
+  isLocalePackFresh,
+  readLocalePack,
+  writeLocalePack,
+} from './localeCache';
+import { localOverlay } from './packs';
+import { syncRtl } from './rtl';
 
 type LocaleStatus = 'loading' | 'ready' | 'error';
 
@@ -37,6 +49,7 @@ interface LocaleContextValue {
   languages: LanguageDto[];
   translations: Record<string, string>;
   device: DeviceState | null;
+  isRtl: boolean;
   t: (key: string, fallback?: string) => string;
   setLanguage: (code: string) => Promise<void>;
   bindUser: (userId: number) => Promise<void>;
@@ -44,25 +57,6 @@ interface LocaleContextValue {
 }
 
 const LocaleContext = createContext<LocaleContextValue | undefined>(undefined);
-
-const FALLBACK_LANGUAGES: LanguageDto[] = [
-  {
-    Id: 1,
-    Name: 'Türkçe',
-    Code: 'tr',
-    CultureCode: 'tr-TR',
-    IsDefault: 0,
-    IsActive: 1,
-  },
-  {
-    Id: 2,
-    Name: 'English',
-    Code: 'en',
-    CultureCode: 'en-US',
-    IsDefault: 1,
-    IsActive: 1,
-  },
-];
 
 const FALLBACK_TRANSLATIONS: Record<string, string> = {
   'splash.brand': 'Meerk',
@@ -720,9 +714,11 @@ const FALLBACK_TRANSLATIONS: Record<string, string> = {
   'nearby.footprints_loading': 'Looking for footprints…',
   'nearby.footprints_no_location': 'Turn on location to see footprints here.',
   'nearby.footprints_empty': 'No footprints in the last {hours} hours.',
-  'nearby.footprints_premium_title': 'Premium',
+  'nearby.footprints_premium_title': 'Premium only',
   'nearby.footprints_premium_body':
-    'You can watch this story. Opening the profile, sending a friend request or a treat is available with Premium.',
+    'Free accounts can watch this Footprints story. Opening the profile, sending a friend request or a treat is only for Premium Standard and Premium Plus — same features as if they were Live nearby.',
+  'nearby.footprints_premium_hint':
+    'Watch the story for free. Profile, friend request and treat require Premium.',
   'settings.ghost': 'Ghost Mode',
   'settings.ghost_desc': 'See others nearby without appearing on their radar.',
   'settings.ghost_plus_only': 'Available with Premium Plus.',
@@ -1415,9 +1411,11 @@ const LOCAL_TRANSLATIONS_TR: Record<string, string> = {
   'nearby.footprints_loading': 'Ayak izleri aranıyor…',
   'nearby.footprints_no_location': 'Ayak izlerini görmek için konumu aç.',
   'nearby.footprints_empty': 'Son {hours} saatte ayak izi yok.',
-  'nearby.footprints_premium_title': 'Premium',
+  'nearby.footprints_premium_title': 'Sadece Premium',
   'nearby.footprints_premium_body':
-    'Bu hikâyeyi izleyebilirsin. Profile girmek, arkadaşlık isteği veya ısmarlama göndermek Premium ile açılır.',
+    'Ücretsiz kullanıcı Ayak İzi hikâyesini izleyebilir; profile giremez, arkadaşlık isteği ve ısmarlama gönderemez. Premium Standart ve Premium Plus, hikâye sahibine Canlı’daki gibi ulaşır: profil, arkadaşlık isteği ve ısmarlama açık.',
+  'nearby.footprints_premium_hint':
+    'Hikâyeyi ücretsiz izleyebilirsin. Profil, arkadaşlık ve ısmarlama Premium ister.',
   'settings.ghost': 'Hayalet Modu',
   'settings.ghost_desc': 'Yakındakileri gör; radarda sen görünme.',
   'settings.ghost_plus_only': 'Premium Plus ile açılır.',
@@ -1488,8 +1486,13 @@ const LOCAL_TRANSLATIONS_TR: Record<string, string> = {
 };
 
 function localBaseFor(code: string): Record<string, string> {
-  return code.toLowerCase().startsWith('tr')
-    ? { ...FALLBACK_TRANSLATIONS, ...LOCAL_TRANSLATIONS_TR }
+  const primary = primaryLanguageCode(code);
+  if (primary === 'tr') {
+    return { ...FALLBACK_TRANSLATIONS, ...LOCAL_TRANSLATIONS_TR };
+  }
+  const overlay = localOverlay(primary);
+  return Object.keys(overlay).length
+    ? { ...FALLBACK_TRANSLATIONS, ...overlay }
     : FALLBACK_TRANSLATIONS;
 }
 
@@ -1503,18 +1506,40 @@ export function LocaleProvider({ children }: { children: React.ReactNode }) {
   );
   const [device, setDevice] = useState<DeviceState | null>(null);
 
-  const loadTranslations = useCallback(async (code: string) => {
-    setApiLanguageCode(code);
-    const response = await fetchTranslationsByCode(code);
+  const applyTranslationResponse = useCallback((code: string, response: {
+    LanguageCode?: string;
+    Translations?: Record<string, string>;
+  }) => {
     const nextCode = response.LanguageCode || code;
     setTranslations({
       ...localBaseFor(nextCode),
       ...(response.Translations ?? {}),
-      ...(nextCode.toLowerCase().startsWith('tr') ? LOCAL_TRANSLATIONS_TR : {}),
+      ...(primaryLanguageCode(nextCode) === 'tr' ? LOCAL_TRANSLATIONS_TR : {}),
+      ...localOverlay(nextCode),
     });
     setApiLanguageCode(nextCode);
     setLanguageCode(nextCode);
+    syncRtl(nextCode);
   }, []);
+
+  const loadTranslations = useCallback(async (code: string) => {
+    setApiLanguageCode(code);
+    const pack = await readLocalePack(code);
+    if (pack?.translations && isLocalePackFresh(pack)) {
+      applyTranslationResponse(code, pack.translations);
+      return;
+    }
+    if (pack?.translations) {
+      applyTranslationResponse(code, pack.translations);
+    }
+    const response = await fetchTranslationsByCode(code);
+    applyTranslationResponse(code, response);
+    void writeLocalePack({
+      code: response.LanguageCode || code,
+      translations: response,
+      languages: pack?.languages,
+    });
+  }, [applyTranslationResponse]);
 
   const bootstrap = useCallback(async () => {
     setError(null);
@@ -1529,6 +1554,7 @@ export function LocaleProvider({ children }: { children: React.ReactNode }) {
       const localCode = getApiLanguageCode();
       setLanguageCode(localCode);
       setTranslations(localBaseFor(localCode));
+      syncRtl(localCode);
     } catch (localErr) {
       console.warn('[Locale] local hydrate failed', localErr);
     }
@@ -1541,6 +1567,10 @@ export function LocaleProvider({ children }: { children: React.ReactNode }) {
         info.colorScheme === 'unspecified' ? 'light' : info.colorScheme;
 
       const pushToken = await getStoredPushToken();
+      const localePack = await readLocalePack(info.language);
+      if (localePack?.languages?.length) {
+        setLanguages(mergeLanguages(localePack.languages));
+      }
       const [deviceResponse, languagesResponse] = await Promise.all([
         bootstrapDevice({
           DeviceUniqueId: info.uniqueId,
@@ -1551,7 +1581,11 @@ export function LocaleProvider({ children }: { children: React.ReactNode }) {
           Theme: theme,
           PushToken: pushToken,
         }),
-        fetchLanguages(),
+        localePack?.languages?.length && isLocalePackFresh(localePack)
+          ? Promise.resolve({
+              GetAllLanguagesQueryCommonObject: localePack.languages,
+            })
+          : fetchLanguages(),
       ]);
 
       const nextDevice: DeviceState = {
@@ -1565,12 +1599,15 @@ export function LocaleProvider({ children }: { children: React.ReactNode }) {
       };
 
       setDevice(nextDevice);
-      setLanguages(
-        languagesResponse.GetAllLanguagesQueryCommonObject?.length
-          ? languagesResponse.GetAllLanguagesQueryCommonObject
-          : FALLBACK_LANGUAGES,
+      const nextLanguages = mergeLanguages(
+        languagesResponse.GetAllLanguagesQueryCommonObject,
       );
+      setLanguages(nextLanguages);
       await loadTranslations(nextDevice.languageCode);
+      void writeLocalePack({
+        code: nextDevice.languageCode,
+        languages: nextLanguages,
+      });
     } catch (err) {
       const message =
         err instanceof Error ? err.message : 'Failed to bootstrap locale';
@@ -1588,6 +1625,8 @@ export function LocaleProvider({ children }: { children: React.ReactNode }) {
     async (code: string) => {
       setApiLanguageCode(code);
       setLanguageCode(code);
+      setTranslations(localBaseFor(code));
+      syncRtl(code);
 
       try {
         if (device?.uniqueId) {
@@ -1672,6 +1711,8 @@ export function LocaleProvider({ children }: { children: React.ReactNode }) {
     [translations],
   );
 
+  const isRtl = primaryLanguageCode(languageCode) === 'ar';
+
   const value = useMemo<LocaleContextValue>(
     () => ({
       status,
@@ -1680,6 +1721,7 @@ export function LocaleProvider({ children }: { children: React.ReactNode }) {
       languages,
       translations,
       device,
+      isRtl,
       t,
       setLanguage,
       bindUser,
@@ -1692,6 +1734,7 @@ export function LocaleProvider({ children }: { children: React.ReactNode }) {
       languages,
       translations,
       device,
+      isRtl,
       t,
       setLanguage,
       bindUser,

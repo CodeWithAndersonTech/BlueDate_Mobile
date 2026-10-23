@@ -37,6 +37,7 @@ import {
   InterestTypeItem,
   parseInterestTypes,
   deleteUserInterest,
+  resolveMediaUrl,
   saveUserInterest,
   updateUserBasics,
   updateUserBio,
@@ -46,6 +47,7 @@ import {
   Chip,
   FigmaButton,
   FigmaIcon,
+  BottomActionDock,
   FigmaSpinner,
   Icon,
   SheetModal,
@@ -55,7 +57,6 @@ import {
 import { useKeyboardHeight } from '../../hooks';
 import { useLocale, userFacingError } from '../../i18n';
 import { useAuth } from '../../navigation/AuthContext';
-import { useStickyDockLayout } from '../../navigation/tabBarLayout';
 import { useLockTabSwipe } from '../../navigation/useLockTabSwipe';
 import { ProfileStackParamList } from '../../navigation/types';
 import {
@@ -66,6 +67,9 @@ import {
   MAX_GALLERY_PHOTOS,
   PhotoLimitError,
   loadProfilePhotos,
+  mergeAvatarIntoDisplayPhotos,
+  mergePhotoLists,
+  photosFromProfile,
   pickAndAddGalleryPhoto,
   ProfilePhoto,
   removeGalleryPhoto,
@@ -84,7 +88,6 @@ import { PhotoViewerModal } from './PhotoViewerModal';
 
 type Props = NativeStackScreenProps<ProfileStackParamList, 'EditProfile'>;
 
-const SAVE_BTN_HEIGHT = 54;
 const PHOTO_TILE_W = 149;
 const PHOTO_TILE_H = 173;
 const PHOTO_GAP = 5;
@@ -146,8 +149,6 @@ export function EditProfileScreen({ navigation, route }: Props) {
   const topPad = useScreenTopPad();
   const { userId, accessToken } = useAuth();
   const { t } = useLocale();
-  // Nested under Material Top Tabs — pill can still overlay; keep CTAs above it.
-  const dock = useStickyDockLayout(SAVE_BTN_HEIGHT, { forceAboveTabBar: true });
   const focusTarget = route.params?.focus;
   const focusInterestTypeId = route.params?.interestTypeId;
 
@@ -408,8 +409,9 @@ export function EditProfileScreen({ navigation, route }: Props) {
       const nextBirth = dateKey(profile.BirthDate);
       setBirthParts(partsFromIso(profile.BirthDate));
       setInitialBirthDate(nextBirth);
-      setGender(profile.Gender ?? null);
-      setInitialGender(profile.Gender ?? null);
+      const nextGender = isValidGender(profile.Gender) ? profile.Gender : null;
+      setGender(nextGender);
+      setInitialGender(nextGender);
       setSaveError(null);
 
       let types = parseInterestTypes(typesResponse);
@@ -449,10 +451,22 @@ export function EditProfileScreen({ navigation, route }: Props) {
       setInterestIds(nextIds);
 
       try {
-        const bundle = await loadProfilePhotos(userId, accessToken);
-        setPhotos(bundle.gallery);
+        const [bundle, fromProfile] = await Promise.all([
+          loadProfilePhotos(userId, accessToken),
+          photosFromProfile(profile.Photos),
+        ]);
+        const profileAvatar = await resolveMediaUrl(profile.ProfileImage).catch(
+          () => undefined,
+        );
+        setPhotos(
+          mergeAvatarIntoDisplayPhotos({
+            avatarUri: bundle.avatarUri ?? profileAvatar,
+            gallery: mergePhotoLists(fromProfile, bundle.gallery),
+          }),
+        );
       } catch {
-        setPhotos([]);
+        const fromProfile = await photosFromProfile(profile.Photos).catch(() => []);
+        setPhotos(fromProfile);
       }
       hasLoadedRef.current = true;
       setLoadFailed(false);
@@ -863,7 +877,7 @@ export function EditProfileScreen({ navigation, route }: Props) {
             keyboardDismissMode="on-drag"
             contentContainerStyle={[
               styles.content,
-              { paddingBottom: dock.scrollClearance },
+              { paddingBottom: 24 },
             ]}>
             <View
               style={[styles.card, { backgroundColor: theme.colors.card }]}>
@@ -1126,42 +1140,31 @@ export function EditProfileScreen({ navigation, route }: Props) {
               )}
             </View>
           </ScrollView>
+          {sheetType == null && !photoEditorOpen ? (
+            <BottomActionDock forceAboveTabBar elevated direction="column">
+              {saveError ? (
+                <Typography variant="caption" tint={theme.colors.danger}>
+                  {saveError}
+                </Typography>
+              ) : null}
+              <FigmaButton
+                label={
+                  saving
+                    ? t('edit.saving')
+                    : justSaved
+                      ? t('edit.saved')
+                      : t('edit.save_changes')
+                }
+                size="md"
+                fullWidth
+                tone={justSaved || dirty ? 'solid' : 'soft'}
+                loading={saving}
+                onPress={dirty && !justSaved ? onSave : undefined}
+              />
+            </BottomActionDock>
+          ) : null}
         </Animated.View>
       )}
-
-      {!loading && !loadFailed && sheetType == null && !photoEditorOpen ? (
-        <View
-          pointerEvents="box-none"
-          style={[
-            styles.stickyDock,
-            {
-              bottom: 0,
-              paddingBottom: dock.dockBottom + dock.dockPaddingBottom,
-              backgroundColor: theme.colors.surface,
-              borderTopColor: theme.colors.border,
-            },
-          ]}>
-          {saveError ? (
-            <Typography variant="caption" tint={theme.colors.danger}>
-              {saveError}
-            </Typography>
-          ) : null}
-          <FigmaButton
-            label={
-              saving
-                ? t('edit.saving')
-                : justSaved
-                  ? t('edit.saved')
-                  : t('edit.save_changes')
-            }
-            size="md"
-            fullWidth
-            tone={justSaved || dirty ? 'solid' : 'soft'}
-            loading={saving}
-            onPress={dirty && !justSaved ? onSave : undefined}
-          />
-        </View>
-      ) : null}
 
       {saving ? (
         <View

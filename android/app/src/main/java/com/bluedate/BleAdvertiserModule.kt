@@ -64,7 +64,10 @@ class BleAdvertiserModule(reactContext: ReactApplicationContext) :
             }
             advertiser = adv
 
-            val parcelUuid = ParcelUuid.fromString(serviceUuid)
+            // 16-bit Bluetooth-base UUID so the legacy 31-byte packet still
+            // has room for the ~16-char token. A 128-bit UUID + token overflows
+            // and falls back to extended advertising, which iOS does not see.
+            val parcelUuid = ParcelUuid.fromString("0000B1E5-0000-1000-8000-00805F9B34FB")
             val tokenBytes = token.toByteArray(Charsets.UTF_8)
 
             val data = AdvertiseData.Builder()

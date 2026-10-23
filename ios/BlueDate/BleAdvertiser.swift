@@ -3,51 +3,41 @@ import CoreBluetooth
 import React
 
 /**
- BLE Advertiser - iOS (CoreBluetooth CBPeripheralManager).
+ iOS advertiser: 16-bit service UUID + GATT token characteristic.
 
- ONEMLI iOS KISITLARI:
- - iOS, foreground'da service UUID + (sinirli) local name yayinlayabilir.
- - CBAdvertisementDataServiceDataKey foreground'da YOK SAYILIR; iOS yalnizca
-   CBAdvertisementDataServiceUUIDsKey ve CBAdvertisementDataLocalNameKey'i destekler.
- - Bu nedenle ham token'i iOS reklam paketine gomemeyiz; pratikte iOS<->iOS ve
-   Android->iOS keşfi icin GATT karakteristigi okunarak token alinmasi gerekir.
- - Arka planda service UUID "overflow" alanina dusurulur; yalnizca baska iOS
-   cihazlar bunu cozebilir. Bu yuzden tasarim foreground-first'tur.
-
- Bu modul MVP icin token'i local name olarak yayinlamayi dener (kisa token gerekir).
- Daha saglam cozum: bir GATT server acip token'i okunabilir karakteristik yapmaktir.
-
- KURULUM: Bu dosyayi ve BleAdvertiser.m kopru dosyasini Xcode target'ina ekleyin
- (Xcode > target > Build Phases > Compile Sources). Bridging header gerekirse
- React/RCTBridgeModule.h import edilmelidir.
+ iOS ignores service-data in advertisements. A 128-bit UUID also eats the
+ 31-byte legacy packet so localName (the token) is truncated and peers
+ submit garbage hashes. GATT is the reliable iOS path.
  */
 @objc(BleAdvertiser)
 class BleAdvertiser: NSObject, CBPeripheralManagerDelegate {
 
+  private static let serviceShort = CBUUID(string: "B1E5")
+  private static let tokenCharShort = CBUUID(string: "B1E6")
+
   private var peripheralManager: CBPeripheralManager?
-  private var pendingServiceUuid: String?
   private var pendingToken: String?
   private var startResolve: RCTPromiseResolveBlock?
   private var startReject: RCTPromiseRejectBlock?
+  private var addedService = false
 
   @objc static func requiresMainQueueSetup() -> Bool { return false }
 
   @objc(isSupported:rejecter:)
   func isSupported(_ resolve: @escaping RCTPromiseResolveBlock,
                    rejecter reject: @escaping RCTPromiseRejectBlock) {
-    // CBPeripheralManager iOS'ta mevcut; gercek destek state ile anlasilir.
     resolve(true)
   }
 
   @objc(startAdvertising:token:resolver:rejecter:)
-  func startAdvertising(_ serviceUuid: String,
+  func startAdvertising(_ _serviceUuid: String,
                         token: String,
                         resolver resolve: @escaping RCTPromiseResolveBlock,
                         rejecter reject: @escaping RCTPromiseRejectBlock) {
-    pendingServiceUuid = serviceUuid
     pendingToken = token
     startResolve = resolve
     startReject = reject
+    addedService = false
 
     if peripheralManager == nil {
       peripheralManager = CBPeripheralManager(delegate: self, queue: nil)
@@ -60,23 +50,71 @@ class BleAdvertiser: NSObject, CBPeripheralManagerDelegate {
   func stopAdvertising(_ resolve: @escaping RCTPromiseResolveBlock,
                        rejecter reject: @escaping RCTPromiseRejectBlock) {
     peripheralManager?.stopAdvertising()
+    if let mgr = peripheralManager {
+      mgr.removeAllServices()
+    }
+    addedService = false
     resolve(true)
   }
 
   private func beginAdvertising() {
-    guard let uuid = pendingServiceUuid, let token = pendingToken else { return }
-    let serviceCBUUID = CBUUID(string: uuid)
+    guard let mgr = peripheralManager, mgr.state == .poweredOn else { return }
+    mgr.stopAdvertising()
+    mgr.removeAllServices()
+    addedService = false
 
-    // iOS service-data'yi yok saydigi icin token'i local name olarak veriyoruz.
-    // (Token kisa degilse kesilebilir; production'da GATT karakteristigi onerilir.)
-    let advData: [String: Any] = [
-      CBAdvertisementDataServiceUUIDsKey: [serviceCBUUID],
-      CBAdvertisementDataLocalNameKey: token
-    ]
-    peripheralManager?.startAdvertising(advData)
+    let characteristic = CBMutableCharacteristic(
+      type: BleAdvertiser.tokenCharShort,
+      properties: [.read],
+      value: nil,
+      permissions: [.readable]
+    )
+    let service = CBMutableService(type: BleAdvertiser.serviceShort, primary: true)
+    service.characteristics = [characteristic]
+    mgr.add(service)
+  }
+
+  func peripheralManager(_ peripheral: CBPeripheralManager,
+                         didAdd service: CBService,
+                         error: Error?) {
+    if let error = error {
+      startReject?("ADV_SERVICE", error.localizedDescription, error)
+      startReject = nil
+      startResolve = nil
+      return
+    }
+    addedService = true
+    peripheral.startAdvertising([
+      CBAdvertisementDataServiceUUIDsKey: [BleAdvertiser.serviceShort],
+    ])
     startResolve?(true)
     startResolve = nil
     startReject = nil
+  }
+
+  func peripheralManagerDidStartAdvertising(_ peripheral: CBPeripheralManager,
+                                            error: Error?) {
+    if let error = error {
+      startReject?("ADV_FAILED", error.localizedDescription, error)
+      startReject = nil
+      startResolve = nil
+    }
+  }
+
+  func peripheralManager(_ peripheral: CBPeripheralManager,
+                         didReceiveRead request: CBATTRequest) {
+    guard request.characteristic.uuid == BleAdvertiser.tokenCharShort,
+          let token = pendingToken,
+          let data = token.data(using: .utf8) else {
+      peripheral.respond(to: request, withResult: .attributeNotFound)
+      return
+    }
+    if request.offset > data.count {
+      peripheral.respond(to: request, withResult: .invalidOffset)
+      return
+    }
+    request.value = data.subdata(in: request.offset..<data.count)
+    peripheral.respond(to: request, withResult: .success)
   }
 
   func peripheralManagerDidUpdateState(_ peripheral: CBPeripheralManager) {

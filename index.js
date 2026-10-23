@@ -12,8 +12,10 @@ import App from './App';
 import { name as appName } from './app.json';
 import { registerBackgroundMessageHandler } from './src/services/push/backgroundHandler';
 import { installCrashLogging } from './src/utils/crashLog';
+import { installSafeAlert } from './src/utils/safeAlert';
 
 installCrashLogging();
+installSafeAlert();
 registerBackgroundMessageHandler();
 
 AppRegistry.registerComponent(appName, () => App);

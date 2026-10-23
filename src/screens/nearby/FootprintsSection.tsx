@@ -12,6 +12,7 @@ type Props = {
   items: FootprintGroup[];
   status: FootprintsStatus;
   windowHours: number;
+  hint?: string;
   onOpen: (index: number) => void;
   onSeeAll?: () => void;
 };
@@ -67,6 +68,7 @@ export function FootprintsSection({
   items,
   status,
   windowHours,
+  hint,
   onOpen,
 }: Props) {
   const theme = useTheme();
@@ -93,6 +95,11 @@ export function FootprintsSection({
           </Pressable>
         ) : null}
       </View>
+      {hint ? (
+        <Typography variant="caption" color="textMuted" style={styles.hint}>
+          {hint}
+        </Typography>
+      ) : null}
 
       {status === 'ready' && items.length > 0 ? (
         <ScrollView
@@ -173,6 +180,7 @@ const styles = StyleSheet.create({
   fill: { width: '100%', height: '100%' },
   fallback: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   bubbleName: { maxWidth: OUTER },
+  hint: { paddingBottom: 6 },
   allList: { maxHeight: 420 },
   allGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 14 },
 });

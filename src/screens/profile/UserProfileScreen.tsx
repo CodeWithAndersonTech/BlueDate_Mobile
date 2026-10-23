@@ -3,7 +3,6 @@ import { useFocusEffect } from '@react-navigation/native';
 import React, { useCallback, useMemo, useRef, useState } from 'react';
 import {
   Alert,
-  Image,
   Pressable,
   ScrollView,
   StatusBar,
@@ -11,7 +10,15 @@ import {
   Text,
   View,
 } from 'react-native';
-import { EmptyState, FigmaButton, Header, Typography, useScreenTopPad } from '../../components';
+import {
+  BottomActionDock,
+  EmptyState,
+  FigmaButton,
+  Header,
+  StoryAvatar,
+  Typography,
+  useScreenTopPad,
+} from '../../components';
 import {
   acceptFriendRequest,
   FriendshipRelation,
@@ -30,20 +37,12 @@ import {
 import { isAccountGoneError, useLocale, userFacingError } from '../../i18n';
 import { useAuth } from '../../navigation/AuthContext';
 import { useChat } from '../../navigation/ChatContext';
-import {
-  DOCK_ACTION_HEIGHT,
-  DOCK_PAD_TOP,
-  useScreenBottomPad,
-  useStickyDockLayout,
-} from '../../navigation/tabBarLayout';
+import { useScreenBottomPad } from '../../navigation/tabBarLayout';
 import { useLockTabSwipe } from '../../navigation/useLockTabSwipe';
+import { useStorySeen } from '../../hooks/useStorySeen';
 import { ProfilePhoto } from '../../services/photos/photoStore';
 import { zodiacSymbolFromBirthDate } from '../../utils/zodiac';
 import { useTheme } from '../../theme';
-import {
-  getMockUserProfile,
-  isMockProfileUserId,
-} from '../../utils/mockData';
 import {
   getCurrentCoordinates,
   peekLastCoordinates,
@@ -56,12 +55,12 @@ import {
   patchVisit,
   peekVisit,
   prefetchUserProfile,
-  VISIT_STALE_MS,
   writeVisit,
 } from '../../services/profile/visitCache';
 import { StoryViewer } from '../home/StoryViewer';
 import { TreatSheet } from '../treat/TreatSheet';
 import { BlockSheet } from './BlockSheet';
+import { PhotoViewerModal } from './PhotoViewerModal';
 import { ProfilePhotoGrid } from './ProfilePhotoGrid';
 import { ProfileSkeleton } from './ProfileSkeleton';
 
@@ -107,12 +106,8 @@ export function UserProfileScreen({ navigation, route }: Props) {
   const { t } = useLocale();
   const topPad = useScreenTopPad();
   const screenBottomPad = useScreenBottomPad(20);
-  // Friend profile sits inside Material Top Tabs — keep CTAs above the pill
-  // even when the tab bar hide heuristic flickers.
-  const dock = useStickyDockLayout(DOCK_ACTION_HEIGHT, {
-    forceAboveTabBar: true,
-  });
   const { userId: meId, accessToken } = useAuth();
+  const { isGroupSeen } = useStorySeen(meId);
   const targetId = Number(route.params.userId);
   const seeded = Number.isFinite(targetId) ? peekVisit(targetId) : undefined;
 
@@ -140,9 +135,10 @@ export function UserProfileScreen({ navigation, route }: Props) {
     seeded?.stories ?? null,
   );
   const [storyOpen, setStoryOpen] = useState(false);
+  const [photoIndex, setPhotoIndex] = useState<number | null>(null);
   const [treatOpen, setTreatOpen] = useState(false);
   const [blockOpen, setBlockOpen] = useState(false);
-  useHideTabBar(storyOpen);
+  useHideTabBar(true);
   const loadedProfileIdRef = useRef<number | null>(seeded?.profile.Id ?? null);
 
   const applyVisit = useCallback((cached: CachedVisit) => {
@@ -168,7 +164,6 @@ export function UserProfileScreen({ navigation, route }: Props) {
 
     const isSwitch = loadedProfileIdRef.current !== targetId;
     const cached = peekVisit(targetId);
-    const cacheFresh = Boolean(cached && Date.now() - cached.at < VISIT_STALE_MS);
 
     if (isSwitch) {
       if (cached) {
@@ -178,55 +173,6 @@ export function UserProfileScreen({ navigation, route }: Props) {
         loadedProfileIdRef.current = null;
         setNotFound(false);
       }
-    }
-
-    if (isMockProfileUserId(targetId)) {
-      const mock = getMockUserProfile(targetId);
-      if (!mock) {
-        setProfile(null);
-        setNotFound(true);
-        setLoading(false);
-        return;
-      }
-
-      setProfile({
-        IsSuccess: true,
-        Id: mock.userId,
-        FirstName: mock.firstName,
-        LastName: mock.lastName,
-        Username: mock.username,
-        Email: '',
-        Bio: mock.bio,
-        ProfileImage: mock.profileImage ?? null,
-        Age: mock.age ?? null,
-        IsEmailVerified: true,
-        IsVerified: mock.isVerified,
-        Interests: mock.interests.map(item => ({
-          Id: item.id,
-          Value: item.value,
-          InterestTypeCode: item.code,
-          InterestTypeName: item.name,
-        })),
-      });
-      setPhotos(
-        mock.photoUris.map((uri, index) => ({
-          id: `mock-photo-${mock.userId}-${index}`,
-          uri,
-          sortOrder: index,
-        })),
-      );
-      const mockAvatar = mock.profileImage ?? mock.photoUris[0];
-      setAvatarUri(mockAvatar);
-      setRelation(mock.relation);
-      setFriendshipId(mock.friendshipId);
-      setDisplayAge(mock.age ?? null);
-      loadedProfileIdRef.current = mock.userId;
-      setLoading(false);
-      return;
-    }
-
-    if (cacheFresh && !isSwitch) {
-      return;
     }
 
     try {
@@ -249,28 +195,35 @@ export function UserProfileScreen({ navigation, route }: Props) {
         setLoading(false);
         return;
       }
-      applyVisit(warmed);
-      void prefetchMediaUris([warmed.avatarUri, warmed.photos[0]?.uri], 600);
 
       const [statusRes, blockRes, storyGroup] = await extrasPromise;
-      if (loadedProfileIdRef.current !== warmed.profile.Id) return;
-
-      if (statusRes) {
-        setRelation(statusRes.Relation);
-        setFriendshipId(statusRes.FriendshipId);
+      if (loadedProfileIdRef.current && loadedProfileIdRef.current !== warmed.profile.Id) {
+        return;
       }
-      const blocked = isBlockedByMe(blockRes);
-      setBlockedByMe(blocked);
-      setStories(storyGroup);
 
-      writeVisit(warmed.profile.Id, {
+      const blocked = isBlockedByMe(blockRes);
+      const nextVisit = {
         ...warmed,
         at: Date.now(),
         relation: statusRes?.Relation ?? warmed.relation,
         friendshipId: statusRes?.FriendshipId ?? warmed.friendshipId,
         blockedByMe: blocked,
-        stories: storyGroup,
-      });
+        stories: storyGroup ?? warmed.stories,
+      };
+      applyVisit(nextVisit);
+      writeVisit(warmed.profile.Id, nextVisit);
+      void prefetchMediaUris(
+        [
+          warmed.avatarUri,
+          ...warmed.photos.map(photo => photo.uri),
+          storyGroup?.User.ProfileImage,
+          ...(storyGroup?.Stories ?? [])
+            .filter(s => s.MediaType === 'photo')
+            .slice(0, 1)
+            .map(s => s.MediaUrl),
+        ],
+        2000,
+      );
 
       if (other && !storyGroup) {
         void getCurrentCoordinates(1500).then(fresh => {
@@ -297,7 +250,9 @@ export function UserProfileScreen({ navigation, route }: Props) {
 
   useFocusEffect(
     useCallback(() => {
-      load();
+      return afterUiSettled(() => {
+        load();
+      }, 50);
     }, [load]),
   );
 
@@ -341,6 +296,26 @@ export function UserProfileScreen({ navigation, route }: Props) {
     [profile],
   );
 
+  const hasStory = (stories?.Stories.length ?? 0) > 0;
+  const storySeen = hasStory && isGroupSeen(stories);
+  const viewerPhotos = useMemo(() => {
+    const list = [...photos];
+    if (avatarUri && !list.some(photo => photo.uri === avatarUri)) {
+      list.unshift({ id: 'avatar', uri: avatarUri, sortOrder: -1 });
+    }
+    return list;
+  }, [photos, avatarUri]);
+
+  const onAvatarPress = () => {
+    if (hasStory) {
+      setStoryOpen(true);
+      return;
+    }
+    if (viewerPhotos.length > 0) {
+      setPhotoIndex(0);
+    }
+  };
+
   const friendLabel = (() => {
     if (relation === FriendshipRelation.Friends) return t('user_profile.friends');
     if (relation === FriendshipRelation.PendingOutgoing) {
@@ -354,21 +329,6 @@ export function UserProfileScreen({ navigation, route }: Props) {
 
   const onFriendAction = async () => {
     if (!profile || busy) return;
-    // Mock profiles: update local UI only.
-    if (isMockProfileUserId(targetId)) {
-      if (relation === FriendshipRelation.PendingIncoming) {
-        setRelation(FriendshipRelation.Friends);
-      } else if (
-        relation === FriendshipRelation.None ||
-        relation === FriendshipRelation.Rejected ||
-        relation === FriendshipRelation.Cancelled
-      ) {
-        setRelation(FriendshipRelation.PendingOutgoing);
-        setFriendshipId(-(targetId));
-      }
-      return;
-    }
-
     if (!meId) return;
     setBusy(true);
     try {
@@ -413,11 +373,6 @@ export function UserProfileScreen({ navigation, route }: Props) {
           style: 'destructive',
           onPress: () => {
             void (async () => {
-              if (isMockProfileUserId(targetId)) {
-                setRelation(FriendshipRelation.None);
-                setFriendshipId(null);
-                return;
-              }
               if (!meId) return;
               setBusy(true);
               try {
@@ -484,10 +439,6 @@ export function UserProfileScreen({ navigation, route }: Props) {
   };
 
   const onUnblock = () => {
-    if (isMockProfileUserId(targetId)) {
-      setBlockedByMe(false);
-      return;
-    }
     void (async () => {
       setBusy(true);
       try {
@@ -505,10 +456,6 @@ export function UserProfileScreen({ navigation, route }: Props) {
   };
 
   const openBlock = () => {
-    if (isMockProfileUserId(targetId)) {
-      onBlocked();
-      return;
-    }
     setBlockOpen(true);
   };
 
@@ -529,7 +476,6 @@ export function UserProfileScreen({ navigation, route }: Props) {
   };
 
   const openTreat = () => {
-    if (isMockProfileUserId(targetId)) return;
     setTreatOpen(true);
   };
 
@@ -605,7 +551,7 @@ export function UserProfileScreen({ navigation, route }: Props) {
   const hasBio = (profile.Bio ?? '').trim().length > 0;
   const isSelf = meId === targetId;
   const areFriends = relation === FriendshipRelation.Friends;
-  const scrollBottomPad = isSelf ? screenBottomPad : dock.scrollClearance;
+  const scrollBottomPad = isSelf ? screenBottomPad : 24;
 
   return (
     <View
@@ -663,40 +609,20 @@ export function UserProfileScreen({ navigation, route }: Props) {
           <View style={styles.header}>
             <View style={styles.headerTop}>
               <Pressable
-                style={[
-                  styles.avatarRing,
-                  stories && {
-                    borderColor: theme.colors.plusCta,
-                    borderWidth: 2.5,
-                    borderRadius: (AVATAR_SIZE + 8) / 2,
-                    padding: 2,
-                  },
-                ]}
-                disabled={!stories}
-                onPress={() => setStoryOpen(true)}
+                style={styles.avatarRing}
+                onPress={onAvatarPress}
+                disabled={!hasStory && viewerPhotos.length === 0}
                 accessibilityRole="button"
-                accessibilityLabel={t('stories.view')}>
-                {avatarUri ? (
-                  <Image
-                    source={{ uri: avatarUri }}
-                    fadeDuration={0}
-                    style={[styles.avatar, { borderColor: theme.colors.border }]}
-                  />
-                ) : (
-                  <View
-                    style={[
-                      styles.avatar,
-                      styles.avatarFallback,
-                      {
-                        backgroundColor: theme.colors.plusSoft,
-                        borderColor: theme.colors.border,
-                      },
-                    ]}>
-                    <Typography variant="title" tint={theme.colors.plusCta}>
-                      {initialsFromName(name)}
-                    </Typography>
-                  </View>
-                )}
+                accessibilityLabel={
+                  hasStory ? t('stories.view') : t('profile.view_avatar')
+                }>
+                <StoryAvatar
+                  uri={avatarUri}
+                  size={AVATAR_SIZE}
+                  hasStory={hasStory}
+                  seen={storySeen}
+                  fallback={initialsFromName(name)}
+                />
               </Pressable>
 
               <View style={styles.nameBlock}>
@@ -773,80 +699,67 @@ export function UserProfileScreen({ navigation, route }: Props) {
             ) : null}
           </View>
         </ScrollView>
-      </View>
 
-      {!isSelf ? (
-        <View
-          pointerEvents="box-none"
-          style={[
-            styles.stickyDock,
-            {
-              // Flush to the physical bottom so scroll content cannot peek
-              // through the gap under the CTAs; pad lifts the buttons above
-              // the floating tab pill.
-              bottom: 0,
-              paddingBottom: dock.dockBottom + dock.dockPaddingBottom,
-              backgroundColor: theme.colors.background,
-              borderTopColor: theme.colors.border,
-            },
-          ]}>
-          {blockedByMe ? (
-            <FigmaButton
-              label={t('safety.unblock')}
-              tone="ghost"
-              size="md"
-              fullWidth
-              disabled={busy}
-              onPress={onUnblock}
-            />
-          ) : areFriends ? (
-            <>
+        {!isSelf ? (
+          <BottomActionDock>
+            {blockedByMe ? (
               <FigmaButton
-                label={t('user_profile.message')}
+                label={t('safety.unblock')}
+                tone="ghost"
                 size="md"
+                fullWidth
                 disabled={busy}
-                onPress={onMessagePress}
-                style={styles.dockBtn}
+                onPress={onUnblock}
               />
-              <FigmaButton
-                label={t('treat.cta')}
-                tone="soft"
-                size="md"
-                disabled={busy}
-                onPress={openTreat}
-                style={styles.dockBtn}
-              />
-            </>
-          ) : (
-            <>
-              <FigmaButton
-                label={friendLabel}
-                size="md"
-                tone={
-                  relation === FriendshipRelation.PendingOutgoing
-                    ? 'soft'
-                    : 'solid'
-                }
-                disabled={
-                  busy ||
-                  isSelf ||
-                  relation === FriendshipRelation.PendingOutgoing
-                }
-                onPress={onFriendAction}
-                style={styles.dockBtn}
-              />
-              <FigmaButton
-                label={t('treat.cta')}
-                tone="soft"
-                size="md"
-                disabled={busy}
-                onPress={openTreat}
-                style={styles.dockBtn}
-              />
-            </>
-          )}
-        </View>
-      ) : null}
+            ) : areFriends ? (
+              <>
+                <FigmaButton
+                  label={t('user_profile.message')}
+                  size="md"
+                  disabled={busy}
+                  onPress={onMessagePress}
+                  style={styles.dockBtn}
+                />
+                <FigmaButton
+                  label={t('treat.cta')}
+                  tone="soft"
+                  size="md"
+                  disabled={busy}
+                  onPress={openTreat}
+                  style={styles.dockBtn}
+                />
+              </>
+            ) : (
+              <>
+                <FigmaButton
+                  label={friendLabel}
+                  size="md"
+                  tone={
+                    relation === FriendshipRelation.PendingOutgoing
+                      ? 'soft'
+                      : 'solid'
+                  }
+                  disabled={
+                    busy ||
+                    isSelf ||
+                    relation === FriendshipRelation.PendingOutgoing
+                  }
+                  onPress={onFriendAction}
+                  style={styles.dockBtn}
+                />
+                <FigmaButton
+                  label={t('treat.cta')}
+                  tone="soft"
+                  size="md"
+                  disabled={busy}
+                  onPress={openTreat}
+                  style={styles.dockBtn}
+                />
+              </>
+            )}
+          </BottomActionDock>
+        ) : null}
+      </View>
 
       {!isSelf ? (
         <>
@@ -884,6 +797,15 @@ export function UserProfileScreen({ navigation, route }: Props) {
           onOpenProfile={() => setStoryOpen(false)}
         />
       ) : null}
+
+      {photoIndex != null && viewerPhotos.length > 0 ? (
+        <PhotoViewerModal
+          photos={viewerPhotos}
+          index={photoIndex}
+          onClose={() => setPhotoIndex(null)}
+          onIndexChange={setPhotoIndex}
+        />
+      ) : null}
     </View>
   );
 }
@@ -905,18 +827,6 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     borderWidth: StyleSheet.hairlineWidth,
   },
-  stickyDock: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    zIndex: 40,
-    elevation: 40,
-    flexDirection: 'row',
-    gap: 10,
-    paddingHorizontal: 16,
-    paddingTop: DOCK_PAD_TOP,
-    borderTopWidth: StyleSheet.hairlineWidth,
-  },
   loading: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   header: {
     paddingHorizontal: 16,
@@ -935,17 +845,9 @@ const styles = StyleSheet.create({
   avatarRing: {
     width: AVATAR_SIZE,
     height: AVATAR_SIZE,
-    position: 'relative',
-    overflow: 'visible',
-    zIndex: 5,
-  },
-  avatar: {
-    width: AVATAR_SIZE,
-    height: AVATAR_SIZE,
+    overflow: 'hidden',
     borderRadius: AVATAR_SIZE / 2,
-    borderWidth: 1.5,
   },
-  avatarFallback: { alignItems: 'center', justifyContent: 'center' },
   statusChip: {
     alignSelf: 'flex-start',
     marginTop: 4,

@@ -1,0 +1,32 @@
+---
+description: Meerk dock/CTA layout + request speed — her ekran değişikliğinde uy.
+alwaysApply: true
+---
+
+# Meerk — dock, inset, hız
+
+## Alt butonlar (kırılma sebebi)
+
+Native stack `safeAreaInsets: { top: 0, bottom: 0 }` — ada çift pad olmasın diye. `useSafeAreaInsets()` bu yüzden 0 dönebilir. **Asla** o 0’ı dock padding sanma.
+
+- Cihaz inset: sadece `useDeviceSafeInsets()` (`tabBarLayout.ts`).
+- CTA şeridi: sadece `BottomActionDock`. Flex kolonunda ScrollView’un **kardeşi**. `position: 'absolute'` + `paddingBottom: x + 10` yasak.
+- Nested ekran (UserProfile, Chat, Notifications): tab pill gizli → dock home indicator’da. `useHideTabBar(true)` bu ekranlarda.
+- Tab-root veya pill hâlâ boyuyorsa: `forceAboveTabBar`. Hayalet pill boşluğu için nested’te force açma.
+- `+10`, `+40`, hardcoded `bottom: 34` yok. Math `useStickyDockLayout` içinde.
+
+Yanlış: viewport’a `useScreenBottomPad` + absolute dock + ekstra 10.  
+Doğru: Header + Scroll (flex) + `BottomActionDock`.
+
+## İstek hızı
+
+- First paint: bir snapshot (`/Home/snapshot`, `/Friendship/snapshot`). N+1 / ikinci foto / ikinci feed yok.
+- Statik katalog (dil, çeviri, interest types): IHotCache + cihaz 24s. Kullanıcı sırrını process memory’ye koyma.
+- Sekme dönüşü: 12–25s stale, spinner yok. `lastLoadAt` yalnız başarıda.
+- Aynı veri provider’da varsa ekranda tekrar fetch yok (notif, premium, inbox unread).
+
+## UI
+
+- Figma’da yoksa ekran uydurma. Login/register Figma’da yok.
+- `NavigationContainer`’ı flex View ile sarma. RN 0.86: `StyleSheet.absoluteFill`.
+- Hex / fontSize ekranda yazılmaz; `useTheme()`.

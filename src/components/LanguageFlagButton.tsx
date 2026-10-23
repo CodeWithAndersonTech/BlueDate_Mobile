@@ -1,28 +1,12 @@
 import React, { useMemo, useState } from 'react';
 import { Modal, Pressable, StyleSheet, View } from 'react-native';
 import { LanguageDto } from '../api';
+import { FALLBACK_LANGUAGES } from '../i18n/languages';
 import { useTheme } from '../theme';
 import { CountryFlag } from './CountryFlag';
 import { Typography } from './Typography';
 
-export const FALLBACK_LANGUAGES: LanguageDto[] = [
-  {
-    Id: 1,
-    Name: 'Türkçe',
-    Code: 'tr',
-    CultureCode: 'tr-TR',
-    IsDefault: 0,
-    IsActive: 1,
-  },
-  {
-    Id: 2,
-    Name: 'English',
-    Code: 'en',
-    CultureCode: 'en-US',
-    IsDefault: 1,
-    IsActive: 1,
-  },
-];
+export { FALLBACK_LANGUAGES };
 
 type Props = {
   languages?: LanguageDto[];

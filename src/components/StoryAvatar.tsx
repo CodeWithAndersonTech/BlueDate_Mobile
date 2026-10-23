@@ -8,14 +8,16 @@ type Props = {
   uri?: string;
   size: number;
   hasStory: boolean;
+  /** Instagram: viewed stories use a muted ring instead of the RGB ring. */
+  seen?: boolean;
   fallback?: string;
 };
 
 /**
  * Circular avatar. When `hasStory`, an RGB ring wraps the photo.
- * Gradient is clipped to a circle so corners never leak behind the face.
+ * Seen stories keep a ring, but it turns gray.
  */
-export function StoryAvatar({ uri, size, hasStory, fallback }: Props) {
+export function StoryAvatar({ uri, size, hasStory, seen, fallback }: Props) {
   const theme = useTheme();
   const [stickyUri, setStickyUri] = useState(uri);
   useEffect(() => {
@@ -40,12 +42,21 @@ export function StoryAvatar({ uri, size, hasStory, fallback }: Props) {
         },
       ]}>
       {hasStory ? (
-        <LinearGradient
-          colors={theme.gradients.storyRing}
-          start={{ x: 0, y: 1 }}
-          end={{ x: 1, y: 0 }}
-          style={StyleSheet.absoluteFill}
-        />
+        seen ? (
+          <View
+            style={[
+              StyleSheet.absoluteFill,
+              { backgroundColor: theme.colors.borderStrong },
+            ]}
+          />
+        ) : (
+          <LinearGradient
+            colors={theme.gradients.storyRing}
+            start={{ x: 0, y: 1 }}
+            end={{ x: 1, y: 0 }}
+            style={StyleSheet.absoluteFill}
+          />
+        )
       ) : null}
       <View
         style={[

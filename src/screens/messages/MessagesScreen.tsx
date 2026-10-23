@@ -19,7 +19,8 @@ import {
   Typography,
   useScreenTopPad,
 } from '../../components';
-import { ChatConversationUi, getStoryFeed } from '../../api';
+import { ChatConversationUi, getStoryFeed, StoryUserGroup } from '../../api';
+import { useStorySeen } from '../../hooks/useStorySeen';
 import { useAuth } from '../../navigation/AuthContext';
 import { useLocale } from '../../i18n';
 import { useChat } from '../../navigation/ChatContext';
@@ -38,10 +39,12 @@ function handleOf(item: ChatConversationUi): string {
 function FaceRail({
   items,
   storyUserIds,
+  seenUserIds,
   onOpen,
 }: {
   items: ChatConversationUi[];
   storyUserIds: Set<number>;
+  seenUserIds: Set<number>;
   onOpen: (item: ChatConversationUi) => void;
 }) {
   if (items.length === 0) return null;
@@ -67,6 +70,7 @@ function FaceRail({
               uri={item.avatar}
               size={RAIL_OUTER}
               hasStory={hasStory}
+              seen={hasStory && seenUserIds.has(Number(item.userId))}
               fallback={label.charAt(0).toLocaleUpperCase('tr-TR')}
             />
             <Typography
@@ -95,23 +99,38 @@ export function MessagesScreen() {
   const { userId, accessToken } = useAuth();
   const [query, setQuery] = useState('');
   const [refreshing, setRefreshing] = useState(false);
-  const [storyUserIds, setStoryUserIds] = useState<Set<number>>(new Set());
+  const [storyGroups, setStoryGroups] = useState<StoryUserGroup[]>([]);
+  const { isGroupSeen } = useStorySeen(userId);
   const lastStoryAt = useRef(0);
+  const storyUserIds = useMemo(
+    () =>
+      new Set(
+        storyGroups
+          .filter(g => (g.Stories?.length ?? 0) > 0)
+          .map(g => g.User.UserId),
+      ),
+    [storyGroups],
+  );
+  const seenUserIds = useMemo(
+    () =>
+      new Set(
+        storyGroups
+          .filter(g => isGroupSeen(g))
+          .map(g => g.User.UserId),
+      ),
+    [storyGroups, isGroupSeen],
+  );
 
   const loadStoryIds = useCallback(async () => {
     if (!userId) return;
-    if (lastStoryAt.current > 0 && Date.now() - lastStoryAt.current < 20_000) {
+    if (lastStoryAt.current > 0 && Date.now() - lastStoryAt.current < 15_000) {
       return;
     }
     lastStoryAt.current = Date.now();
     try {
       const feed = await getStoryFeed(userId, accessToken);
-      setStoryUserIds(
-        new Set(
-          (feed.Items ?? [])
-            .filter(g => (g.Stories?.length ?? 0) > 0)
-            .map(g => g.User.UserId),
-        ),
+      setStoryGroups(
+        (feed.Items ?? []).filter(g => (g.Stories?.length ?? 0) > 0),
       );
     } catch {
       /* keep last rings */
@@ -120,7 +139,7 @@ export function MessagesScreen() {
 
   useFocusEffect(
     useCallback(() => {
-      void refreshInbox({ force: true });
+      void refreshInbox();
       void loadStoryIds();
     }, [refreshInbox, loadStoryIds]),
   );
@@ -143,7 +162,7 @@ export function MessagesScreen() {
   const onRefresh = async () => {
     setRefreshing(true);
     try {
-      await refreshInbox();
+      await refreshInbox({ force: true });
     } finally {
       setRefreshing(false);
     }
@@ -173,6 +192,7 @@ export function MessagesScreen() {
           <FaceRail
             items={conversations}
             storyUserIds={storyUserIds}
+            seenUserIds={seenUserIds}
             onOpen={openThread}
           />
 
@@ -261,6 +281,10 @@ export function MessagesScreen() {
                     uri={item.avatar}
                     size={LIST_FACE}
                     hasStory={storyUserIds.has(Number(item.userId))}
+                    seen={
+                      storyUserIds.has(Number(item.userId)) &&
+                      seenUserIds.has(Number(item.userId))
+                    }
                     fallback={item.name.charAt(0).toLocaleUpperCase('tr-TR')}
                   />
                   <View style={styles.texts}>

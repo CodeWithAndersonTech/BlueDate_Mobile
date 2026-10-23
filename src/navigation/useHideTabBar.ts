@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { afterUiSettled } from '../utils/afterUiSettled';
 
 type Listener = () => void;
 
@@ -29,11 +30,21 @@ export function useHideTabBar(hidden: boolean) {
     if (!hidden) {
       return;
     }
-    hideCount += 1;
-    notify();
-    return () => {
-      hideCount = Math.max(0, hideCount - 1);
+    let applied = false;
+    const cancel = afterUiSettled(() => {
+      if (applied) {
+        return;
+      }
+      applied = true;
+      hideCount += 1;
       notify();
+    }, 80);
+    return () => {
+      cancel();
+      if (applied) {
+        hideCount = Math.max(0, hideCount - 1);
+        notify();
+      }
     };
   }, [hidden]);
 }

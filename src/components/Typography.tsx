@@ -1,5 +1,6 @@
 import React from 'react';
 import { StyleProp, Text, TextProps, TextStyle } from 'react-native';
+import { getCurrentRtl } from '../i18n/rtl';
 import { TextVariant, fontFamilyForWeight, useTheme } from '../theme';
 import { ThemeColors } from '../theme/themes';
 
@@ -33,13 +34,17 @@ export function Typography({
 }: TypographyProps) {
   const theme = useTheme();
   const variantStyle = theme.typography.variants[variant];
+  const rtl = getCurrentRtl();
 
   return (
     <Text
       allowFontScaling
       style={[
         variantStyle,
-        { color: tint ?? theme.colors[color] },
+        {
+          color: tint ?? theme.colors[color],
+          writingDirection: rtl ? 'rtl' : 'ltr',
+        },
         align ? { textAlign: align } : null,
         weight
           ? { fontWeight: weight, fontFamily: fontFamilyForWeight(weight) }

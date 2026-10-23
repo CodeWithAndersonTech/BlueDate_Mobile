@@ -2,6 +2,7 @@ import React from 'react';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { StoryAvatar, Typography } from '../../components';
 import { isStoryGroupForUser, StoryUserGroup } from '../../api';
+import { useStorySeen } from '../../hooks/useStorySeen';
 import { useLocale } from '../../i18n';
 import { useTheme } from '../../theme';
 
@@ -34,6 +35,7 @@ function StoryBubble({
   fallback,
   label,
   hasStory,
+  seen,
   onPress,
   onLongPress,
   accessibilityLabel,
@@ -42,6 +44,7 @@ function StoryBubble({
   fallback?: string;
   label: string;
   hasStory: boolean;
+  seen?: boolean;
   onPress: () => void;
   onLongPress?: () => void;
   accessibilityLabel: string;
@@ -57,6 +60,7 @@ function StoryBubble({
         uri={uri}
         size={OUTER}
         hasStory={hasStory}
+        seen={seen}
         fallback={fallback}
       />
       <Typography
@@ -82,6 +86,7 @@ export function StoryRail({
 }: Props) {
   const { t } = useLocale();
   const theme = useTheme();
+  const { isGroupSeen } = useStorySeen(ownUserId);
 
   const ownGroup = groups.find(g => isStoryGroupForUser(g, ownUserId));
   const ownHasStory = (ownGroup?.Stories.length ?? 0) > 0;
@@ -103,6 +108,7 @@ export function StoryRail({
             fallback={initialsFromName(ownName)}
             label={t('stories.your_story')}
             hasStory={ownHasStory}
+            seen={ownHasStory && isGroupSeen(ownGroup)}
             onPress={ownHasStory ? () => onOpenUser(ownUserId) : onAddStory}
             onLongPress={onAddFromGallery}
             accessibilityLabel={t('stories.your_story')}
@@ -136,6 +142,7 @@ export function StoryRail({
             uri={group.User.ProfileImage ?? undefined}
             label={displayLabel(group)}
             hasStory
+            seen={isGroupSeen(group)}
             onPress={() => onOpenUser(group.User.UserId)}
             accessibilityLabel={displayLabel(group)}
           />

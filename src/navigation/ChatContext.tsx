@@ -90,7 +90,7 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
     if (
       !opts?.force &&
       inboxHydrated.current &&
-      Date.now() - lastInboxAt.current < 12_000
+      Date.now() - lastInboxAt.current < 15_000
     ) {
       return;
     }
@@ -176,7 +176,6 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
 
       await connectChatHub(token);
       if (cancelled) return;
-      await refreshUnread();
       await refreshInbox();
     })();
 

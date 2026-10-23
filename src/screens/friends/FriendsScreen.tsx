@@ -23,11 +23,8 @@ import {
   displayName,
   FriendshipListItem,
   FriendshipRelation,
-  friendshipItems,
-  getFriends,
-  getIncomingFriendRequests,
+  getFriendshipSnapshot,
   getOrCreateDirectConversation,
-  getSentFriendRequests,
   rejectFriendRequest,
   resolveFriendshipAvatars,
   unfriend,
@@ -37,11 +34,14 @@ import { useAuth } from '../../navigation/AuthContext';
 import { useChat } from '../../navigation/ChatContext';
 import { FriendsStackParamList } from '../../navigation/types';
 import { useTheme } from '../../theme';
+import { prefetchMediaUris } from '../../services/photos/prefetchMedia';
 import { openFriendProfile } from '../../services/profile/visitCache';
 
 type Props = NativeStackScreenProps<FriendsStackParamList, 'FriendsMain'>;
 
 type Tab = 'friends' | 'incoming' | 'sent';
+
+const FRIENDS_STALE_MS = 20_000;
 
 function Face({ uri, name }: { uri?: string | null; name: string }) {
   const theme = useTheme();
@@ -70,68 +70,98 @@ export function FriendsScreen({ navigation }: Props) {
   const { refreshInbox } = useChat();
   const [tab, setTab] = useState<Tab>('friends');
   const [loading, setLoading] = useState(true);
+  const [ready, setReady] = useState(false);
   const [friends, setFriends] = useState<FriendshipListItem[]>([]);
   const [incomingRequests, setIncomingRequests] = useState<
     FriendshipListItem[]
   >([]);
   const [sentRequests, setSentRequests] = useState<FriendshipListItem[]>([]);
   const [busyId, setBusyId] = useState<number | null>(null);
+  const inflight = useRef<Promise<void> | null>(null);
   const lastLoadAt = useRef(0);
+  const readyRef = useRef(false);
+  const friendsRef = useRef(friends);
+  const incomingRef = useRef(incomingRequests);
+  const sentRef = useRef(sentRequests);
+  const tabRef = useRef(tab);
+  friendsRef.current = friends;
+  incomingRef.current = incomingRequests;
+  sentRef.current = sentRequests;
+  tabRef.current = tab;
 
   const load = useCallback(
-    async (opts?: { silent?: boolean }) => {
+    async (opts?: { tab?: Tab }) => {
       if (!userId) {
         setFriends([]);
         setIncomingRequests([]);
         setSentRequests([]);
         setLoading(false);
+        readyRef.current = true;
+        setReady(true);
         return;
       }
-      if (!opts?.silent) {
+      if (inflight.current) {
+        return inflight.current;
+      }
+      const which = opts?.tab ?? tabRef.current;
+      const existing =
+        which === 'friends'
+          ? friendsRef.current
+          : which === 'incoming'
+            ? incomingRef.current
+            : sentRef.current;
+      const firstPaint = !readyRef.current;
+      const silent = !firstPaint && existing.length > 0;
+      if (!silent) {
         setLoading(true);
       }
-      try {
-        const [friendsRes, incomingRes, sentRes] = await Promise.all([
-          getFriends(userId, accessToken),
-          getIncomingFriendRequests(userId, accessToken),
-          getSentFriendRequests(userId, accessToken),
-        ]);
-        const [nextFriends, nextIncoming, nextSent] = await Promise.all([
-          resolveFriendshipAvatars(friendshipItems(friendsRes)),
-          resolveFriendshipAvatars(friendshipItems(incomingRes)),
-          resolveFriendshipAvatars(friendshipItems(sentRes)),
-        ]);
-        setFriends(nextFriends);
-        setIncomingRequests(nextIncoming);
-        setSentRequests(nextSent);
-        nextFriends.slice(0, 6).forEach(item => {
-          openFriendProfile(item.User, accessToken, FriendshipRelation.Friends);
-        });
-      } catch (error) {
-        if (!opts?.silent) {
-          setFriends([]);
-          setIncomingRequests([]);
-          setSentRequests([]);
-          Alert.alert(
-            t('friends.title'),
-            userFacingError(error, t, 'user_profile.action_error'),
-          );
+      const task = (async () => {
+        try {
+          const snap = await getFriendshipSnapshot(userId, accessToken);
+          const [nextFriends, nextIncoming, nextSent] = await Promise.all([
+            resolveFriendshipAvatars(snap.friends).catch(() => []),
+            resolveFriendshipAvatars(snap.incoming).catch(() => []),
+            resolveFriendshipAvatars(snap.sent).catch(() => []),
+          ]);
+          const faces = [
+            ...nextFriends.map(item => item.User.ProfileImage),
+            ...nextIncoming.map(item => item.User.ProfileImage),
+            ...nextSent.map(item => item.User.ProfileImage),
+          ];
+          setFriends(nextFriends);
+          setIncomingRequests(nextIncoming);
+          setSentRequests(nextSent);
+          nextFriends.slice(0, 6).forEach(item => {
+            openFriendProfile(item.User, accessToken, FriendshipRelation.Friends);
+          });
+          void prefetchMediaUris(faces, 2000);
+          lastLoadAt.current = Date.now();
+          readyRef.current = true;
+          setReady(true);
+        } catch {
+          readyRef.current = true;
+          setReady(true);
+        } finally {
+          setLoading(false);
+          inflight.current = null;
         }
-      } finally {
-        setLoading(false);
-      }
+      })();
+      inflight.current = task;
+      return task;
     },
     [userId, accessToken, t],
   );
 
   useFocusEffect(
     useCallback(() => {
-      const recent =
-        lastLoadAt.current > 0 && Date.now() - lastLoadAt.current < 20_000;
-      if (recent) return;
-      const silent = lastLoadAt.current > 0;
-      lastLoadAt.current = Date.now();
-      void load({ silent });
+      if (
+        readyRef.current &&
+        lastLoadAt.current > 0 &&
+        Date.now() - lastLoadAt.current < FRIENDS_STALE_MS
+      ) {
+        return;
+      }
+      void load();
     }, [load]),
   );
 
@@ -179,7 +209,7 @@ export function FriendsScreen({ navigation }: Props) {
     setBusyId(item.FriendshipId);
     try {
       await acceptFriendRequest(userId, item.FriendshipId, accessToken);
-      await load({ silent: true });
+      await load();
       setTab('friends');
     } catch (error) {
       Alert.alert(
@@ -196,7 +226,7 @@ export function FriendsScreen({ navigation }: Props) {
     setBusyId(item.FriendshipId);
     try {
       await rejectFriendRequest(userId, item.FriendshipId, accessToken);
-      await load({ silent: true });
+      await load();
     } catch (error) {
       Alert.alert(
         t('friends.reject'),
@@ -212,7 +242,7 @@ export function FriendsScreen({ navigation }: Props) {
     setBusyId(item.FriendshipId);
     try {
       await cancelFriendRequest(userId, item.FriendshipId, accessToken);
-      await load({ silent: true });
+      await load();
     } catch (error) {
       Alert.alert(
         t('friends.cancel'),
@@ -235,7 +265,7 @@ export function FriendsScreen({ navigation }: Props) {
             setBusyId(item.FriendshipId);
             try {
               await unfriend(userId, item.User.UserId, accessToken);
-              await load({ silent: true });
+              await load();
             } catch (error) {
               Alert.alert(
                 t('friends.remove'),
@@ -270,7 +300,15 @@ export function FriendsScreen({ navigation }: Props) {
         ? t('friends.incoming_empty_desc')
         : t('friends.sent_empty_desc');
 
-  const showSpinner = loading && rows.length === 0;
+  const showSpinner = !ready || (loading && rows.length === 0);
+
+  if (!ready) {
+    return (
+      <Screen edges={['top']}>
+        <FigmaSpinner fill />
+      </Screen>
+    );
+  }
 
   return (
     <Screen edges={['top']}>
@@ -294,7 +332,10 @@ export function FriendsScreen({ navigation }: Props) {
           return (
             <Pressable
               key={seg.key}
-              onPress={() => setTab(seg.key)}
+              onPress={() => {
+                setTab(seg.key);
+                void load({ tab: seg.key });
+              }}
               accessibilityRole="tab"
               accessibilityState={{ selected: active }}
               style={styles.tab}>

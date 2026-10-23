@@ -11,6 +11,7 @@ import { useTheme } from '../theme';
 import { breadcrumb } from '../utils/crashLog';
 import { AppStack } from './AppStack';
 import { AuthStack } from './AuthStack';
+import { BlePresenceProvider } from './BlePresenceContext';
 import { useAuth } from './AuthContext';
 import { toNavigationTheme } from './navigationTheme';
 
@@ -68,7 +69,9 @@ export function RootNavigator() {
       ) : needsOnboarding ? (
         <OnboardingSetupScreen onCompleted={onOnboardingCompleted} />
       ) : (
-        <AppStack />
+        <BlePresenceProvider>
+          <AppStack />
+        </BlePresenceProvider>
       )}
     </NavigationContainer>
   );

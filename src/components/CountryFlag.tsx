@@ -43,6 +43,27 @@ function TurkeyFlag() {
   );
 }
 
+function UaeFlag() {
+  return (
+    <Svg width="100%" height="100%" viewBox="0 0 60 40">
+      <Rect width="60" height="40" fill="#FFFFFF" />
+      <Rect y="0" width="60" height="13.34" fill="#00732F" />
+      <Rect y="26.66" width="60" height="13.34" fill="#000000" />
+      <Rect width="15" height="40" fill="#FF0000" />
+    </Svg>
+  );
+}
+
+function RussiaFlag() {
+  return (
+    <Svg width="100%" height="100%" viewBox="0 0 60 40">
+      <Rect width="60" height="13.34" fill="#FFFFFF" />
+      <Rect y="13.33" width="60" height="13.34" fill="#0039A6" />
+      <Rect y="26.66" width="60" height="13.34" fill="#D52B1E" />
+    </Svg>
+  );
+}
+
 function UnionJackFlag() {
   return (
     <Svg width="100%" height="100%" viewBox="0 0 60 40">
@@ -69,6 +90,9 @@ const FLAG_BY_CODE: Record<string, () => React.ReactElement> = {
   tr: TurkeyFlag,
   en: UnionJackFlag,
   gb: UnionJackFlag,
+  ar: UaeFlag,
+  ae: UaeFlag,
+  ru: RussiaFlag,
 };
 
 export function CountryFlag({ code, size = 30 }: Props) {

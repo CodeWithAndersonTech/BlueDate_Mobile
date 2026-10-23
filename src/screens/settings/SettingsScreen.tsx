@@ -1,6 +1,6 @@
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useRef, useState } from 'react';
 import {
   Alert,
   Pressable,
@@ -74,6 +74,7 @@ export function SettingsScreen() {
     marketing: false,
   });
   const [lastCrash, setLastCrash] = useState<CrashEntry | null>(null);
+  const lastPrefAt = useRef(0);
   const setNotifKey = (key: keyof typeof notif) => (value: boolean) => {
     setNotif(prev => ({ ...prev, [key]: value }));
     void patchNotificationPref(key, value);
@@ -95,6 +96,10 @@ export function SettingsScreen() {
     useCallback(() => {
       void getLastCrash().then(setLastCrash);
       void getNotificationPrefs().then(setNotif);
+      if (Date.now() - lastPrefAt.current < 30_000) {
+        return;
+      }
+      lastPrefAt.current = Date.now();
       getUserPreference()
         .then(setPref)
         .catch(() => undefined);

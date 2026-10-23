@@ -96,16 +96,22 @@ export function seedVisitPreview(
 export function prefetchUserProfile(
   userId: number,
   token?: string | null,
+  options?: { force?: boolean },
 ): Promise<CachedVisit | null> {
   if (!Number.isFinite(userId) || userId <= 0) {
     return Promise.resolve(null);
   }
-  const existing = cache.get(userId);
-  if (existing && existing.at > 0 && Date.now() - existing.at < VISIT_STALE_MS) {
-    return Promise.resolve(existing);
-  }
   const running = inflight.get(userId);
   if (running) return running;
+  const existing = cache.get(userId);
+  if (
+    !options?.force &&
+    existing &&
+    existing.at > 0 &&
+    Date.now() - existing.at < VISIT_STALE_MS
+  ) {
+    return Promise.resolve(existing);
+  }
 
   const task = (async () => {
     const profile = await getUserProfile(userId, token);

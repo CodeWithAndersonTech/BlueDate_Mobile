@@ -91,6 +91,7 @@ export function NotificationsProvider({ children }: { children: React.ReactNode 
   const [loaded, setLoaded] = useState(false);
   const [toast, setToast] = useState<AppNotification | null>(null);
   const inFlight = useRef<Promise<void> | null>(null);
+  const lastAt = useRef(0);
   const knownIds = useRef(new Set<number>());
 
   const applyList = useCallback((next: NotificationList, announceNew: boolean) => {
@@ -106,12 +107,14 @@ export function NotificationsProvider({ children }: { children: React.ReactNode 
 
   const refresh = useCallback(async () => {
     if (!isSignedIn || !userId) return;
+    if (lastAt.current > 0 && Date.now() - lastAt.current < 15_000) return;
     if (inFlight.current) return inFlight.current;
     inFlight.current = (async () => {
       try {
         const next = await fetchNotifications();
         const announce = knownIds.current.size > 0;
         applyList(next, announce);
+        lastAt.current = Date.now();
         setLoaded(true);
       } catch (e) {
         console.warn('[Notifications] load failed', e);
@@ -124,6 +127,7 @@ export function NotificationsProvider({ children }: { children: React.ReactNode 
 
   useEffect(() => {
     if (!isSignedIn || !userId) {
+      lastAt.current = 0;
       setData(EMPTY);
       setLoaded(false);
       setToast(null);

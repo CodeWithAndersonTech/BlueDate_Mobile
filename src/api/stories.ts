@@ -2,6 +2,7 @@ import { API_PATHS, getApiBaseUrl } from '../config/api';
 import { apiRequest, ApiEnvelope, ApiError, genericErrorMessage } from './client';
 import { getApiLanguageCode } from './languageHeader';
 import { resolveMediaUrlWithBase } from './photos';
+import { getUserProfile } from './user';
 
 export type StoryMediaType = 'photo' | 'video';
 
@@ -130,6 +131,74 @@ export function isStoryGroupForUser(
   );
 }
 
+export type HomeSnapshot = StoryFeedResponse & {
+  FirstName: string;
+  LastName: string;
+  Username: string;
+  ProfileImage?: string | null;
+};
+
+export async function getHomeSnapshot(
+  userId: number,
+  token?: string | null,
+): Promise<HomeSnapshot> {
+  try {
+    const raw = await apiRequest<
+      ApiEnvelope & {
+        UserId?: number;
+        userId?: number;
+        FirstName?: string;
+        firstName?: string;
+        LastName?: string;
+        lastName?: string;
+        Username?: string;
+        username?: string;
+        ProfileImage?: string | null;
+        profileImage?: string | null;
+        Items?: RawGroup[];
+        items?: RawGroup[];
+        isSuccess?: boolean;
+      }
+    >(API_PATHS.homeSnapshot, {
+      query: { userId },
+      token,
+    });
+
+    const items = (raw.Items ?? raw.items ?? [])
+      .map(normalizeGroup)
+      .filter(g => g.User.UserId > 0 && g.Stories.length > 0);
+
+    return {
+      IsSuccess: raw.IsSuccess ?? raw.isSuccess ?? true,
+      ErrorMessage: raw.ErrorMessage,
+      SuccessMessage: raw.SuccessMessage,
+      UserId: Number(raw.UserId ?? raw.userId ?? userId),
+      FirstName: String(raw.FirstName ?? raw.firstName ?? ''),
+      LastName: String(raw.LastName ?? raw.lastName ?? ''),
+      Username: String(raw.Username ?? raw.username ?? ''),
+      ProfileImage: raw.ProfileImage ?? raw.profileImage ?? null,
+      Items: items,
+    };
+  } catch (error) {
+    if (!(error instanceof ApiError) || error.status !== 404) {
+      throw error;
+    }
+    const [profile, feed] = await Promise.all([
+      getUserProfile(userId, token),
+      getStoryFeed(userId, token),
+    ]);
+    return {
+      IsSuccess: true,
+      UserId: userId,
+      FirstName: profile.FirstName ?? '',
+      LastName: profile.LastName ?? '',
+      Username: profile.Username ?? '',
+      ProfileImage: profile.ProfileImage ?? null,
+      Items: feed.Items,
+    };
+  }
+}
+
 export async function getStoryFeed(
   userId: number,
   token?: string | null,
@@ -198,7 +267,9 @@ export async function getFootprints(
     ApiEnvelope & {
       items?: (RawGroup & { lastSharedAt?: string })[];
       canOpenProfile?: boolean;
+      CanOpenProfile?: boolean;
       windowHours?: number;
+      WindowHours?: number;
     }
   >(API_PATHS.storyFootprints, { query: { latitude, longitude } });
 
@@ -208,8 +279,8 @@ export async function getFootprints(
   const resolved = await resolveStoryMediaUrls(groups);
   return {
     items: resolved.map((g, i) => ({ ...g, LastSharedAt: groups[i].LastSharedAt })),
-    canOpenProfile: raw.canOpenProfile ?? false,
-    windowHours: raw.windowHours ?? 6,
+    canOpenProfile: Boolean(raw.canOpenProfile ?? raw.CanOpenProfile),
+    windowHours: raw.windowHours ?? raw.WindowHours ?? 6,
   };
 }
 

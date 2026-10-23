@@ -1,6 +1,9 @@
 import { useRoute } from '@react-navigation/native';
 import { useWindowDimensions } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import {
+  initialWindowMetrics,
+  useSafeAreaInsets,
+} from 'react-native-safe-area-context';
 
 /** Figma tab bar is drawn on a 393pt frame. */
 const FIGMA_SCREEN_W = 393;
@@ -78,19 +81,35 @@ export const TAB_ROOT_SCREENS = new Set([
   'Messages',
 ]);
 
-/** Default CTA row height inside a sticky dock (button only). */
-export const DOCK_ACTION_HEIGHT = 48;
+/** Default CTA row height — matches FigmaButton size="md". */
+export const DOCK_ACTION_HEIGHT = 54;
 /** Top padding inside a sticky dock. */
 export const DOCK_PAD_TOP = 12;
+
+/**
+ * Real device insets. Native stacks set safeAreaInsets { top:0, bottom:0 }
+ * so the island is not padded twice; the hook then reports 0 and docks
+ * fall into the home indicator. Always take the max with window metrics.
+ */
+export function useDeviceSafeInsets() {
+  const live = useSafeAreaInsets();
+  const win = initialWindowMetrics?.insets;
+  return {
+    top: Math.max(live.top, win?.top ?? 0),
+    bottom: Math.max(live.bottom, win?.bottom ?? 0, MIN_BOTTOM_INSET),
+    left: Math.max(live.left, win?.left ?? 0),
+    right: Math.max(live.right, win?.right ?? 0),
+  };
+}
 
 /**
  * Bottom padding so scroll content clears the floating pill tab bar.
  * Only for tab-root screens — nested stack screens hide the tab bar.
  */
 export function useTabBarClearance(extra = 16) {
-  const insets = useSafeAreaInsets();
+  const insets = useDeviceSafeInsets();
   const { pillHeight } = useTabBarMetrics();
-  return pillHeight + Math.max(insets.bottom, MIN_BOTTOM_INSET) + extra;
+  return pillHeight + insets.bottom + extra;
 }
 
 /**
@@ -98,9 +117,9 @@ export function useTabBarClearance(extra = 16) {
  * just above the floating tab pill.
  */
 export function useFloatingTabOffset(gap = 12) {
-  const insets = useSafeAreaInsets();
+  const insets = useDeviceSafeInsets();
   const { pillHeight } = useTabBarMetrics();
-  return pillHeight + Math.max(insets.bottom, MIN_BOTTOM_INSET) + gap;
+  return pillHeight + insets.bottom + gap;
 }
 
 /**
@@ -108,8 +127,8 @@ export function useFloatingTabOffset(gap = 12) {
  * Use on ScrollView/FlatList contentContainerStyle.
  */
 export function useScreenBottomPad(extra = 24) {
-  const insets = useSafeAreaInsets();
-  return Math.max(insets.bottom, MIN_BOTTOM_INSET) + extra;
+  const insets = useDeviceSafeInsets();
+  return insets.bottom + extra;
 }
 
 /** True when the focused route is a tab root (pill tab bar is visible). */
@@ -158,11 +177,11 @@ export function useStickyDockLayout(
   actionHeight = DOCK_ACTION_HEIGHT,
   options?: { forceAboveTabBar?: boolean },
 ): StickyDockLayout {
-  const insets = useSafeAreaInsets();
+  const insets = useDeviceSafeInsets();
   const { height: windowHeight } = useWindowDimensions();
   const isTabRoot = useIsTabRootScreen();
   const tabBarVisible = options?.forceAboveTabBar ? true : isTabRoot;
-  const bottomSafe = Math.max(insets.bottom, MIN_BOTTOM_INSET);
+  const bottomSafe = insets.bottom;
   const topSafe = insets.top;
 
   const { pillHeight } = useTabBarMetrics();

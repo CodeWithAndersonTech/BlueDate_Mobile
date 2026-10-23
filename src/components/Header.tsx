@@ -53,10 +53,11 @@ export function Header({
             <Pressable
               key={`${a.icon}-${i}`}
               onPress={a.onPress}
-              hitSlop={8}
+              hitSlop={6}
+              style={styles.actionBtn}
               accessibilityRole="button"
               accessibilityLabel={a.accessibilityLabel}>
-              <Icon name={a.icon} size={24} color={a.color ?? theme.colors.text} />
+              <Icon name={a.icon} size={22} color={a.color ?? theme.colors.text} />
             </Pressable>
           ))}
         </View>
@@ -94,17 +95,27 @@ export function Header({
         )}
       </View>
       <View style={[styles.side, styles.right]}>
-        {actions.length === 0 ? <View style={styles.sideSlot} /> : null}
-        {actions.map((a, i) => (
-          <Pressable
-            key={`${a.icon}-${i}`}
-            onPress={a.onPress}
-            hitSlop={8}
-            accessibilityRole="button"
-            accessibilityLabel={a.accessibilityLabel}>
-            <Icon name={a.icon} size={24} color={a.color ?? theme.colors.text} />
-          </Pressable>
-        ))}
+        {actions.length === 0 ? (
+          <View style={styles.sideSlot} />
+        ) : (
+          <View style={styles.actions}>
+            {actions.map((a, i) => (
+              <Pressable
+                key={`${a.icon}-${i}`}
+                onPress={a.onPress}
+                hitSlop={6}
+                style={styles.actionBtn}
+                accessibilityRole="button"
+                accessibilityLabel={a.accessibilityLabel}>
+                <Icon
+                  name={a.icon}
+                  size={22}
+                  color={a.color ?? theme.colors.text}
+                />
+              </Pressable>
+            ))}
+          </View>
+        )}
       </View>
     </View>
   );
@@ -141,7 +152,13 @@ const styles = StyleSheet.create({
     paddingBottom: 12,
   },
   largeText: { flex: 1, gap: 2 },
-  actions: { flexDirection: 'row', gap: 8 },
+  actions: { flexDirection: 'row', alignItems: 'center', gap: 14 },
+  actionBtn: {
+    width: 36,
+    height: 36,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
 });
 
 export default Header;

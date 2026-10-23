@@ -1,10 +1,12 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import type { UserProfilePhoto } from '../../api/user';
 import {
   deleteUserPhoto,
   getUserPhotos,
   resolveMediaUrl,
   uploadAvatarPhoto,
   uploadGalleryPhoto,
+  UserPhotoItem,
   UserPhotoKind,
 } from '../../api/photos';
 
@@ -64,22 +66,19 @@ export async function loadProfilePhotos(
   let remoteAvatar: string | undefined;
 
   try {
-    const [galleryRes, avatarRes] = await Promise.all([
-      getUserPhotos(userId, UserPhotoKind.Gallery, token),
-      getUserPhotos(userId, UserPhotoKind.Avatar, token),
-    ]);
+    const allRes = await getUserPhotos(userId, undefined, token);
+    const items = allRes.Items ?? [];
+    const galleryItems = items.filter(item => item.Kind !== UserPhotoKind.Avatar);
+    const avatarItem =
+      items.find(item => item.Kind === UserPhotoKind.Avatar) ??
+      (galleryItems.length === 0 ? items[0] : undefined);
 
     remoteGallery = await Promise.all(
-      (galleryRes.Items ?? []).map(async (item, index) => ({
-        id: `remote-${item.Id}`,
-        remoteId: item.Id,
-        uri: (await resolveMediaUrl(item.Url)) ?? item.Url,
-        sortOrder: item.SortOrder ?? index,
-        localOnly: false,
-      })),
+      (galleryItems.length > 0 ? galleryItems : items).map(item =>
+        mapRemotePhoto(item),
+      ),
     );
 
-    const avatarItem = avatarRes.Items?.[0];
     if (avatarItem) {
       remoteAvatar = (await resolveMediaUrl(avatarItem.Url)) ?? avatarItem.Url;
     }
@@ -139,6 +138,39 @@ export function rememberAvatar(userId: number, uri?: string | null) {
  * Photos shown on a profile: avatar (if any) + gallery, de-duplicated by URL.
  * Used for friend/other profile grids and the photo count stat.
  */
+async function mapRemotePhoto(
+  item: Pick<UserPhotoItem, 'Id' | 'Url' | 'SortOrder'>,
+  index = 0,
+): Promise<ProfilePhoto> {
+  return {
+    id: `remote-${item.Id}`,
+    remoteId: item.Id,
+    uri: (await resolveMediaUrl(item.Url)) ?? item.Url,
+    sortOrder: item.SortOrder ?? index,
+    localOnly: false,
+  };
+}
+
+export async function photosFromProfile(
+  photos: UserProfilePhoto[] | null | undefined,
+): Promise<ProfilePhoto[]> {
+  const list = (photos ?? []).filter(item => Number(item.Id) > 0 && item.Url);
+  return Promise.all(list.map((item, index) => mapRemotePhoto(item, index)));
+}
+
+export function mergePhotoLists(...lists: ProfilePhoto[][]): ProfilePhoto[] {
+  const byKey = new Map<string, ProfilePhoto>();
+  lists.flat().forEach(photo => {
+    const key = photo.remoteId
+      ? `id:${photo.remoteId}`
+      : `uri:${(photo.uri ?? '').replace(/\/+$/, '')}`;
+    if (!key.endsWith(':') && !byKey.has(key)) {
+      byKey.set(key, photo);
+    }
+  });
+  return [...byKey.values()].sort((a, b) => a.sortOrder - b.sortOrder);
+}
+
 export function mergeAvatarIntoDisplayPhotos(bundle: {
   avatarUri?: string;
   gallery: ProfilePhoto[];

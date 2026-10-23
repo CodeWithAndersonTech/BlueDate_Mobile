@@ -196,7 +196,12 @@ export function installCrashLogging() {
       void logCrash(isFatal ? 'js_fatal' : 'js_error', error, {
         isFatal: String(Boolean(isFatal)),
       });
-      previous?.(error, isFatal);
+      if (__DEV__) {
+        previous?.(error, isFatal);
+        return;
+      }
+      // Release: keep the JS runtime alive. Native SIGKILL still wins,
+      // but a JS exception must not quit the process.
     });
   }
 

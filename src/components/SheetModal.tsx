@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useCallback, useEffect } from 'react';
 import {
   KeyboardAvoidingView,
   Platform,
@@ -6,9 +6,22 @@ import {
   StyleSheet,
   View,
 } from 'react-native';
+import {
+  Gesture,
+  GestureDetector,
+  GestureHandlerRootView,
+} from 'react-native-gesture-handler';
+import Animated, {
+  runOnJS,
+  useAnimatedStyle,
+  useSharedValue,
+  withSpring,
+  withTiming,
+} from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLocale } from '../i18n';
 import { useTheme } from '../theme';
+import { afterUiSettled } from '../utils/afterUiSettled';
 import { FigmaIcon } from './FigmaIcon';
 import { SafeOverlay } from './SafeOverlay';
 import { Typography } from './Typography';
@@ -27,12 +40,44 @@ export function SheetModal({ visible, title, onClose, dismissable = true, childr
   const theme = useTheme();
   const { t } = useLocale();
   const insets = useSafeAreaInsets();
-  const close = () => {
-    if (dismissable) onClose();
-  };
+  const close = useCallback(() => {
+    if (!dismissable) return;
+    afterUiSettled(onClose, 16);
+  }, [dismissable, onClose]);
+
+  const translateY = useSharedValue(0);
+  useEffect(() => {
+    if (visible) {
+      translateY.value = 0;
+    }
+  }, [visible, translateY]);
+
+  const pan = Gesture.Pan()
+    .enabled(dismissable)
+    .activeOffsetY(12)
+    .failOffsetX([-28, 28])
+    .onUpdate(e => {
+      translateY.value = Math.max(0, e.translationY);
+    })
+    .onEnd(e => {
+      if (e.translationY > 72 || e.velocityY > 850) {
+        translateY.value = withTiming(520, { duration: 180 }, finished => {
+          if (finished) {
+            runOnJS(close)();
+          }
+        });
+        return;
+      }
+      translateY.value = withSpring(0, { damping: 18, stiffness: 220 });
+    });
+
+  const sheetStyle = useAnimatedStyle(() => ({
+    transform: [{ translateY: translateY.value }],
+  }));
 
   return (
     <SafeOverlay visible={visible} onRequestClose={close}>
+      <GestureHandlerRootView style={styles.flex}>
       <KeyboardAvoidingView
         style={styles.flex}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
@@ -43,7 +88,8 @@ export function SheetModal({ visible, title, onClose, dismissable = true, childr
             accessibilityRole="button"
             accessibilityLabel={t('common.close')}
           />
-          <View
+          <GestureDetector gesture={pan}>
+          <Animated.View
             style={[
               styles.sheet,
               {
@@ -55,8 +101,11 @@ export function SheetModal({ visible, title, onClose, dismissable = true, childr
                 paddingBottom: Math.max(insets.bottom, theme.space.lg) + theme.space.sm,
                 gap: theme.space.md,
               },
+              sheetStyle,
             ]}>
+            <View style={styles.handle} hitSlop={12}>
             <View style={[styles.grabber, { backgroundColor: theme.colors.borderStrong }]} />
+            </View>
             {title ? (
               <View style={styles.titleRow}>
                 <Typography variant="title" style={styles.title}>
@@ -76,9 +125,11 @@ export function SheetModal({ visible, title, onClose, dismissable = true, childr
               </View>
             ) : null}
             {children}
-          </View>
+          </Animated.View>
+          </GestureDetector>
         </View>
       </KeyboardAvoidingView>
+      </GestureHandlerRootView>
     </SafeOverlay>
   );
 }
@@ -87,7 +138,8 @@ const styles = StyleSheet.create({
   flex: { flex: 1 },
   backdrop: { flex: 1, justifyContent: 'flex-end' },
   sheet: { borderWidth: StyleSheet.hairlineWidth, borderBottomWidth: 0 },
-  grabber: { alignSelf: 'center', width: 40, height: 4, borderRadius: 2, marginTop: -8 },
+  handle: { alignItems: 'center', paddingTop: 4, paddingBottom: 10 },
+  grabber: { width: 40, height: 4, borderRadius: 2 },
   titleRow: { flexDirection: 'row', alignItems: 'center' },
   title: { flex: 1 },
 });

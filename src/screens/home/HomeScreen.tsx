@@ -21,9 +21,9 @@ import {
 import {
   createStory,
   deleteStory,
+  getHomeSnapshot,
   getStoriesByUser,
   getStoryFeed,
-  getUserProfile,
   isStoryGroupForUser,
   resolveMediaUrl,
   resolveStoryMediaUrls,
@@ -37,7 +37,6 @@ import { useNotifications } from '../../navigation/NotificationsContext';
 import { useHideTabBar } from '../../navigation/useHideTabBar';
 import { HomeStackParamList } from '../../navigation/types';
 import {
-  loadProfilePhotos,
   peekCachedAvatar,
   preferDisplayAvatar,
   rememberAvatar,
@@ -61,8 +60,8 @@ import { StoryViewer } from './StoryViewer';
 
 type Props = NativeStackScreenProps<HomeStackParamList, 'HomeFeed'>;
 
-const HOME_STALE_MS = 25_000;
-const STORY_POLL_MS = 7_000;
+const STORY_POLL_MS = 15_000;
+const HOME_STALE_MS = 12_000;
 
 export function HomeScreen({ navigation }: Props) {
   const theme = useTheme();
@@ -77,7 +76,6 @@ export function HomeScreen({ navigation }: Props) {
   const {
     items: notifications,
     unreadCount: unreadNotifications,
-    refresh: refreshNotifications,
   } = useNotifications();
   const openNotification = useOpenNotification();
   const activityFeed = notifications.filter(
@@ -85,7 +83,7 @@ export function HomeScreen({ navigation }: Props) {
   );
   const recentActivity = activityFeed.slice(0, 3);
   const hasMoreActivity = activityFeed.length > 3;
-  const { isPremium, refresh: refreshPremium } = usePremium();
+  const { isPremium } = usePremium();
   const [firstName, setFirstName] = useState('');
   const [fullName, setFullName] = useState('');
   const [avatarUri, setAvatarUri] = useState<string | undefined>(() =>
@@ -107,22 +105,14 @@ export function HomeScreen({ navigation }: Props) {
     (tab: string) => navigation.getParent()?.navigate(tab as never),
     [navigation],
   );
-  const lastHomeFetchAt = useRef(0);
   const readyRef = useRef(false);
+  const lastLoadAt = useRef(0);
   const storyGroupsRef = useRef(storyGroups);
   storyGroupsRef.current = storyGroups;
 
   const applyStories = useCallback((next: StoryUserGroup[] | null) => {
     if (!next) return;
     setStoryGroups(next);
-    void prefetchMediaUris(
-      next.flatMap(g =>
-        g.Stories.filter(s => s.MediaType === 'photo')
-          .slice(0, 1)
-          .map(s => s.MediaUrl),
-      ),
-      1200,
-    );
   }, []);
 
   const refreshStories = useCallback(async () => {
@@ -143,88 +133,82 @@ export function HomeScreen({ navigation }: Props) {
         return;
       }
       let cancelled = false;
-      const firstPaint = !readyRef.current;
-      const fresh =
-        lastHomeFetchAt.current > 0 &&
-        Date.now() - lastHomeFetchAt.current < HOME_STALE_MS;
-
+      let poll: ReturnType<typeof setInterval> | undefined;
       const pullStories = () => {
         void refreshStories().then(next => {
-          if (!cancelled) applyStories(next);
+          if (!next || cancelled) return;
+          applyStories(next);
+          void prefetchMediaUris(
+            next.map(g => g.User.ProfileImage),
+            2000,
+          );
         });
       };
 
-      if (!fresh || firstPaint) {
-        void (async () => {
-          lastHomeFetchAt.current = Date.now();
-          void refreshNotifications();
-          void refreshPremium();
-          try {
-            const [profile, photoBundle, stories] = await Promise.all([
-              getUserProfile(userId, accessToken),
-              loadProfilePhotos(userId, accessToken).catch(() => ({
-                gallery: [],
-                avatarUri: undefined as string | undefined,
-              })),
-              refreshStories(),
-            ]);
-            if (cancelled) return;
+      void (async () => {
+        const fresh =
+          lastLoadAt.current > 0 &&
+          Date.now() - lastLoadAt.current < HOME_STALE_MS &&
+          readyRef.current;
+        if (fresh) {
+          poll = setInterval(pullStories, STORY_POLL_MS);
+          return;
+        }
+        try {
+          const snap = await getHomeSnapshot(userId, accessToken);
+          if (cancelled) return;
+          const stories = await resolveStoryMediaUrls(snap.Items);
+          if (cancelled) return;
 
-            const profileAvatar = await resolveMediaUrl(
-              profile.ProfileImage,
-            ).catch(() => undefined);
-            const nextAvatar = preferDisplayAvatar(
-              photoBundle.avatarUri,
-              profileAvatar,
-              peekCachedAvatar(userId),
-              avatarUriRef.current,
-            );
-            if (nextAvatar) {
-              rememberAvatar(userId, nextAvatar);
-              setAvatarUri(nextAvatar);
-            }
-            const nextStories = stories ?? storyGroupsRef.current;
-            if (firstPaint) {
-              void prefetchMediaUris([
-                nextAvatar,
-                ...nextStories.map(g => g.User.ProfileImage),
-                ...nextStories.flatMap(g =>
-                  g.Stories.filter(s => s.MediaType === 'photo')
-                    .slice(0, 1)
-                    .map(s => s.MediaUrl),
-                ),
-              ]);
-            }
-            if (cancelled) return;
+          const profileAvatar = await resolveMediaUrl(snap.ProfileImage).catch(
+            () => undefined,
+          );
+          const nextAvatar = preferDisplayAvatar(
+            profileAvatar,
+            peekCachedAvatar(userId),
+            avatarUriRef.current,
+          );
+          const nextStories = stories.length ? stories : storyGroupsRef.current;
+          const faces = [
+            nextAvatar,
+            ...nextStories.map(g => g.User.ProfileImage),
+            ...nextStories.flatMap(g =>
+              g.Stories.filter(s => s.MediaType === 'photo')
+                .slice(0, 1)
+                .map(s => s.MediaUrl),
+            ),
+          ];
+          if (nextAvatar) {
+            rememberAvatar(userId, nextAvatar);
+            setAvatarUri(nextAvatar);
+          }
+          const name = `${snap.FirstName} ${snap.LastName}`.trim();
+          setFirstName(snap.FirstName?.trim() || snap.Username || '');
+          setFullName(name || snap.Username || '');
+          applyStories(stories);
 
-            const name = `${profile.FirstName} ${profile.LastName}`.trim();
-            setFirstName(profile.FirstName?.trim() || profile.Username || '');
-            setFullName(name || profile.Username || '');
-            applyStories(stories);
+          lastLoadAt.current = Date.now();
+          readyRef.current = true;
+          setReady(true);
+          void prefetchMediaUris(faces, 2000);
+          if (!cancelled) {
+            poll = setInterval(pullStories, STORY_POLL_MS);
+          }
+        } catch {
+          if (!cancelled) {
             readyRef.current = true;
             setReady(true);
-          } catch {
-            if (!cancelled) {
-              readyRef.current = true;
-              setReady(true);
-            }
           }
-        })();
-      } else {
-        pullStories();
-      }
-
-      const poll = setInterval(pullStories, STORY_POLL_MS);
+        }
+      })();
 
       return () => {
         cancelled = true;
-        clearInterval(poll);
+        if (poll) clearInterval(poll);
       };
     }, [
       userId,
       accessToken,
-      refreshNotifications,
-      refreshPremium,
       refreshStories,
       applyStories,
     ]),

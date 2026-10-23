@@ -3,7 +3,6 @@ import {
   Dimensions,
   Image,
   Pressable,
-  ScrollView,
   StatusBar,
   StyleSheet,
   View,
@@ -36,6 +35,7 @@ import {
   Typography,
 } from '../../components';
 import { StoryItem, StoryUserGroup } from '../../api';
+import { useStorySeen } from '../../hooks/useStorySeen';
 import { useLocale } from '../../i18n';
 
 const PHOTO_MS = 5000;
@@ -108,6 +108,7 @@ export function StoryViewer({
   const [progress, setProgress] = useState(0);
   const [paused, setPaused] = useState(false);
   const [readyForId, setReadyForId] = useState<number | null>(null);
+  const { markSeen } = useStorySeen(viewerUserId);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const translateY = useSharedValue(0);
   const backdrop = useSharedValue(1);
@@ -121,9 +122,11 @@ export function StoryViewer({
   const story = group?.Stories[storyIndex];
   const mediaReady = story != null && readyForId === story.Id;
   const isOwner = Number(story?.UserId) === Number(viewerUserId);
-  const otherGroups = activeGroups.filter(
-    g => g.User.UserId !== group?.User.UserId,
-  );
+
+  useEffect(() => {
+    if (!visible || !mediaReady || !story?.Id) return;
+    markSeen([story.Id]);
+  }, [visible, mediaReady, story?.Id, markSeen]);
 
   const dismiss = useCallback(() => {
     onClose();
@@ -264,11 +267,6 @@ export function StoryViewer({
       setStoryIndex(i => i + 1);
       return;
     }
-    if (groupIndex < activeGroups.length - 1) {
-      setGroupIndex(i => i + 1);
-      setStoryIndex(0);
-      return;
-    }
     onClose();
   }
 
@@ -277,20 +275,6 @@ export function StoryViewer({
       setStoryIndex(i => i - 1);
       return;
     }
-    if (groupIndex > 0) {
-      const prev = activeGroups[groupIndex - 1];
-      setGroupIndex(i => i - 1);
-      setStoryIndex(Math.max(0, (prev?.Stories.length ?? 1) - 1));
-      return;
-    }
-    setProgress(0);
-  }
-
-  function openGroupStories(userId: number) {
-    const idx = activeGroups.findIndex(g => g.User.UserId === userId);
-    if (idx < 0) return;
-    setGroupIndex(idx);
-    setStoryIndex(0);
     setProgress(0);
   }
 
@@ -397,31 +381,6 @@ export function StoryViewer({
                       {userLabel(group)}
                     </Typography>
                   </Pressable>
-
-                  {otherGroups.length > 0 ? (
-                    <ScrollView
-                      horizontal
-                      showsHorizontalScrollIndicator={false}
-                      contentContainerStyle={styles.friendsRow}
-                      keyboardShouldPersistTaps="handled">
-                      {otherGroups.map(g => (
-                        <Pressable
-                          key={g.User.UserId}
-                          onPress={() => onOpenProfile?.(g.User.UserId)}
-                          onLongPress={() => openGroupStories(g.User.UserId)}
-                          style={styles.friendAvatar}
-                          accessibilityLabel={userLabel(g)}>
-                          <View style={styles.friendRing}>
-                            <Avatar
-                              uri={g.User.ProfileImage ?? undefined}
-                              name={userLabel(g)}
-                              size="xs"
-                            />
-                          </View>
-                        </Pressable>
-                      ))}
-                    </ScrollView>
-                  ) : null}
                 </View>
 
                 <View style={styles.headerActions}>
@@ -517,21 +476,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 8,
     maxWidth: '55%',
-  },
-  friendsRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    paddingRight: 4,
-  },
-  friendAvatar: {
-    borderRadius: 999,
-  },
-  friendRing: {
-    padding: 1.5,
-    borderRadius: 999,
-    borderWidth: 1.5,
-    borderColor: 'rgba(255,255,255,0.85)',
   },
   headerActions: {
     flexDirection: 'row',

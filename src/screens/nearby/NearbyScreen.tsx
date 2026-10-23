@@ -2,7 +2,6 @@ import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  Alert,
   Pressable,
   RefreshControl,
   StatusBar,
@@ -24,21 +23,25 @@ import {
 } from '../../api/proximity';
 import {
   EmptyState,
+  FigmaButton,
   FigmaIcon,
   NearbyCard,
   NearbyUser,
+  SheetModal,
   TabScreenScrollView,
   Typography,
   useScreenTopPad,
 } from '../../components';
-import { useBlePresence } from '../../hooks/useBlePresence';
+import { useBlePresenceContext } from '../../navigation/BlePresenceContext';
 import { useHideTabBar } from '../../navigation/useHideTabBar';
 import { getCurrentCoordinates } from '../../services/location/currentPosition';
 import { StoryViewer } from '../home/StoryViewer';
 import { FootprintsSection, FootprintsStatus } from './FootprintsSection';
 import { useLocale, userFacingError } from '../../i18n';
 import { useAuth } from '../../navigation/AuthContext';
+import { usePremium } from '../../hooks/usePremium';
 import { MainTabParamList, NearbyStackParamList } from '../../navigation/types';
+import { FOOTPRINTS_ENABLED } from '../../config/nearby';
 import { useTheme } from '../../theme';
 import { afterUiSettled } from '../../utils/afterUiSettled';
 import { NearbyEmpty } from './NearbyEmpty';
@@ -52,6 +55,7 @@ const LOAD_MS = 400;
 const SEARCH_UI_MS = 6_000;
 /** Footprints are re-fetched on focus at most this often. */
 const FOOTPRINTS_STALE_MS = 60_000;
+const VERIFY_STALE_MS = 25_000;
 
 function estimateDistanceKm(
   item: DirectNearbyItem | BridgeNearbyItem,
@@ -95,28 +99,18 @@ async function mapNearbyItem(
 export function NearbyScreen({ navigation }: Props) {
   const theme = useTheme();
   const topPad = useScreenTopPad();
-  const { t, device } = useLocale();
+  const { t } = useLocale();
   const { userId, accessToken, isSignedIn } = useAuth();
   const rootNav = useNavigation();
-
-  const session = useMemo(
-    () =>
-      userId
-        ? {
-            userId,
-            accessToken,
-            knownDeviceId: device?.id ?? null,
-            knownUniqueId: device?.uniqueId ?? null,
-          }
-        : null,
-    [userId, accessToken, device?.id, device?.uniqueId],
-  );
-
-  const { state, start, stop, refresh, pollNearby } = useBlePresence(session);
+  const { state, start, refresh, pollNearby } = useBlePresenceContext();
+  const { isPremium } = usePremium();
 
   const [users, setUsers] = useState<NearbyUser[]>([]);
   const [loading, setLoading] = useState(true);
   const [verified, setVerified] = useState<boolean | null>(null);
+  const verifiedRef = useRef<boolean | null>(null);
+  verifiedRef.current = verified;
+  const lastVerifyAt = useRef(0);
   const [profileLoadError, setProfileLoadError] = useState<string | null>(null);
   const [searchUiActive, setSearchUiActive] = useState(false);
   const mappingRef = useRef(0);
@@ -128,10 +122,13 @@ export function NearbyScreen({ navigation }: Props) {
   const [footprintsHours, setFootprintsHours] = useState(6);
   const [canOpenFootprintProfile, setCanOpenFootprintProfile] = useState(false);
   const [viewerIndex, setViewerIndex] = useState<number | null>(null);
+  const [premiumGateOpen, setPremiumGateOpen] = useState(false);
   const footprintsFetchedAt = useRef(0);
+  const canOpenFootprint = canOpenFootprintProfile || isPremium;
   useHideTabBar(viewerIndex !== null);
 
   const loadFootprints = useCallback(async (force = false) => {
+    if (!FOOTPRINTS_ENABLED) return;
     if (!force && Date.now() - footprintsFetchedAt.current < FOOTPRINTS_STALE_MS) return;
     footprintsFetchedAt.current = Date.now();
     const coords = await getCurrentCoordinates();
@@ -155,19 +152,13 @@ export function NearbyScreen({ navigation }: Props) {
   const openFootprintProfile = useCallback(
     (targetUserId: number) => {
       setViewerIndex(null);
-      if (canOpenFootprintProfile) {
+      if (canOpenFootprint) {
         navigation.navigate('UserProfile', { userId: String(targetUserId) });
         return;
       }
-      Alert.alert(t('nearby.footprints_premium_title'), t('nearby.footprints_premium_body'), [
-        { text: t('settings.cancel'), style: 'cancel' },
-        {
-          text: t('notif.upgrade_cta'),
-          onPress: () => rootNav.navigate('Premium' as never),
-        },
-      ]);
+      afterUiSettled(() => setPremiumGateOpen(true), 40);
     },
-    [canOpenFootprintProfile, navigation, rootNav, t],
+    [canOpenFootprint, navigation],
   );
 
   const endSearchUi = useCallback(() => {
@@ -266,6 +257,15 @@ export function NearbyScreen({ navigation }: Props) {
       return;
     }
 
+    if (
+      verifiedRef.current === true &&
+      lastVerifyAt.current > 0 &&
+      Date.now() - lastVerifyAt.current < VERIFY_STALE_MS
+    ) {
+      void start();
+      return;
+    }
+
     try {
       const [me, typesRes] = await Promise.all([
         getUserProfile(userId, accessToken),
@@ -275,27 +275,25 @@ export function NearbyScreen({ navigation }: Props) {
       const ok = isProfileReadyForNearby(me, types);
       setProfileLoadError(null);
       setVerified(ok);
+      lastVerifyAt.current = Date.now();
       if (ok) {
-        beginSearchUi();
-        start();
+        void start();
+        void refresh();
         void loadFootprints();
       } else {
         endSearchUi();
-        stop();
       }
     } catch (error) {
       setVerified(null);
       setProfileLoadError(userFacingError(error, t, 'nearby.profile_load_desc'));
       endSearchUi();
-      stop();
     }
   }, [
     isSignedIn,
     userId,
     accessToken,
     start,
-    stop,
-    beginSearchUi,
+    refresh,
     endSearchUi,
     loadFootprints,
     t,
@@ -304,14 +302,14 @@ export function NearbyScreen({ navigation }: Props) {
   useFocusEffect(
     useCallback(() => {
       void checkVerified();
-    }, [checkVerified]),
+      if (verified !== true) {
+        return undefined;
+      }
+      void start();
+      void pollNearby();
+      return undefined;
+    }, [checkVerified, verified, start, pollNearby]),
   );
-
-  useEffect(() => {
-    if (!isSignedIn) {
-      stop();
-    }
-  }, [isSignedIn, stop]);
 
   useEffect(() => {
     const boot = setTimeout(() => setLoading(false), LOAD_MS);
@@ -342,6 +340,27 @@ export function NearbyScreen({ navigation }: Props) {
     })();
   }, [state.direct, state.bridge, verified]);
 
+  const liveUserIds = useMemo(() => {
+    const ids = new Set<number>();
+    for (const item of state.direct) ids.add(item.UserId);
+    for (const item of state.bridge) ids.add(item.UserId);
+    return ids;
+  }, [state.direct, state.bridge]);
+
+  const liveFootprintKey = [...liveUserIds].sort((a, b) => a - b).join(',');
+  useEffect(() => {
+    if (!FOOTPRINTS_ENABLED || !liveFootprintKey) return;
+    void loadFootprints(true);
+  }, [liveFootprintKey, loadFootprints]);
+
+  const visibleFootprints = useMemo(
+    () =>
+      FOOTPRINTS_ENABLED
+        ? footprints.filter(g => !liveUserIds.has(g.User.UserId))
+        : [],
+    [footprints, liveUserIds],
+  );
+
   useEffect(() => {
     const parent = rootNav.getParent();
     if (!parent) return;
@@ -365,7 +384,9 @@ export function NearbyScreen({ navigation }: Props) {
       beginSearchUi();
     }
     void refresh();
-    void loadFootprints(true);
+    if (FOOTPRINTS_ENABLED) {
+      void loadFootprints(true);
+    }
   };
 
   const emptyDesc =
@@ -377,7 +398,10 @@ export function NearbyScreen({ navigation }: Props) {
 
   const searching =
     (((loading || verified === null) && !profileLoadError) || showScanOverlay);
-  const headerOnly = searching || (showEmpty && footprints.length === 0);
+  const headerOnly =
+    searching ||
+    showEmpty ||
+    (FOOTPRINTS_ENABLED && visibleFootprints.length === 0 && users.length === 0);
 
   const nearbyHeader = (
     <View style={styles.header}>
@@ -467,7 +491,7 @@ export function NearbyScreen({ navigation }: Props) {
           </View>
         ) : null}
 
-        {searching ? null : showEmpty && footprints.length === 0 ? (
+        {searching ? null : showEmpty ? (
           <NearbyEmpty description={emptyDesc} onRetry={kickOffScan} />
         ) : (
           <TabScreenScrollView
@@ -479,59 +503,81 @@ export function NearbyScreen({ navigation }: Props) {
                 tintColor={theme.colors.premium}
               />
             }>
-            {footprints.length > 0 ? (
+            {FOOTPRINTS_ENABLED && visibleFootprints.length > 0 ? (
               <View style={styles.section}>
                 <FootprintsSection
-                  items={footprints}
+                  items={visibleFootprints}
                   status={footprintsStatus}
                   windowHours={footprintsHours}
+                  hint={
+                    canOpenFootprint
+                      ? undefined
+                      : t('nearby.footprints_premium_hint')
+                  }
                   onOpen={setViewerIndex}
                 />
               </View>
             ) : null}
 
-            {showEmpty ? (
-              <NearbyEmpty
-                compact
-                description={emptyDesc}
-                onRetry={kickOffScan}
-              />
-            ) : (
-              <View style={styles.section}>
-                <View style={styles.liveHeader}>
-                  <FigmaIcon name="live" size={20} />
-                  <Typography variant="callout" weight="600">
-                    {t('nearby.live_title')}
-                  </Typography>
-                </View>
-                <View style={styles.liveGrid}>
-                  {users.map(user => (
-                    <NearbyCard
-                      key={user.id}
-                      user={user}
-                      variant="rail"
-                      onPress={() =>
-                        navigation.navigate('UserProfile', {
-                          userId: user.id,
-                        })
-                      }
-                    />
-                  ))}
-                </View>
+            <View style={styles.section}>
+              <View style={styles.liveHeader}>
+                <FigmaIcon name="live" size={20} />
+                <Typography variant="callout" weight="600">
+                  {t('nearby.live_title')}
+                </Typography>
               </View>
-            )}
+              <View style={styles.liveGrid}>
+                {users.map(user => (
+                  <NearbyCard
+                    key={user.id}
+                    user={user}
+                    variant="rail"
+                    onPress={() =>
+                      navigation.navigate('UserProfile', {
+                        userId: user.id,
+                      })
+                    }
+                  />
+                ))}
+              </View>
+            </View>
           </TabScreenScrollView>
         )}
       </View>
 
-      <StoryViewer
-        visible={viewerIndex !== null}
-        groups={footprints}
-        startGroupIndex={viewerIndex ?? 0}
-        viewerUserId={userId ?? 0}
-        onClose={() => setViewerIndex(null)}
-        onOpenProfile={openFootprintProfile}
-      />
+      {FOOTPRINTS_ENABLED ? (
+        <>
+          <StoryViewer
+            visible={viewerIndex !== null}
+            groups={visibleFootprints}
+            startGroupIndex={viewerIndex ?? 0}
+            viewerUserId={userId ?? 0}
+            onClose={() => setViewerIndex(null)}
+            onOpenProfile={openFootprintProfile}
+          />
+
+          <SheetModal
+            visible={premiumGateOpen}
+            title={t('nearby.footprints_premium_title')}
+            onClose={() => setPremiumGateOpen(false)}>
+            <Typography variant="callout" color="textMuted">
+              {t('nearby.footprints_premium_body')}
+            </Typography>
+            <FigmaButton
+              label={t('notif.upgrade_cta')}
+              onPress={() => {
+                setPremiumGateOpen(false);
+                afterUiSettled(() => rootNav.navigate('Premium' as never), 40);
+              }}
+            />
+            <FigmaButton
+              label={t('settings.cancel')}
+              tone="ghost"
+              onPress={() => setPremiumGateOpen(false)}
+            />
+          </SheetModal>
+        </>
+      ) : null}
     </View>
   );
 }
