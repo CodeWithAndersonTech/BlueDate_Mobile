@@ -9,71 +9,57 @@ Mobil: bu repo. Backend: `~/RiderProjects/AD_BlueDateApp`. Ürün adı Meerk.
 
 Ayrıntı yedek (kapatınca kaybolmasın): kullanıcı store `bluedate-session-2026-10-20.md`.
 
-## Son durak (23 Eki 2026) — buradan devam
+## Son durak (23 Eki 2026 öğleden sonra) — buradan devam
 
 - Fiziksel iPhone: 16 Pro Max, UDID `00008140-000A61513C28801C`, team `XSRRXVWD3X`, bundle `com.andersontech.bluedate`. Android `applicationId` `com.bluedate`.
-- `USE_PRODUCTION = true` — cihaz prod API/DB. Metro açık olabilir; kapalıysa: `npx react-native start` sonra `npx react-native run-ios --udid 00008140-000A61513C28801C`.
-- **Backend 1.1.9 VPS’te (23 Eki).** Home/Friendship snapshot + IHotCache + LocalizationService AR/RU fallback. **Prod DB: `ar` / `ru` + 710 çeviri.** Push yok. Production json dokunulmadı (Jwt 10y).
-- iOS **1.0.8 (21)** App Store yüklemesi bu tur. Android **1.0.8 (9)** — Play AAB yok. **Manage** kullanıcı işi.
+- `USE_PRODUCTION = true` — cihaz prod API/DB. Metro kapalı olabilir; tekrar: `npx react-native start` sonra `npx react-native run-ios --udid 00008140-000A61513C28801C`.
+- **Backend 1.1.9 VPS’te.** Health `1.1.9+45a49c4…`. Yeni backend kodu yok; yeniden publish etme. Production json dokunulmadı (Jwt 10y).
+- **iOS 1.0.8 (21)** App Store Connect’e yüklendi (23 Eki 12:05). **Manage** kullanıcı işi.
+- **Android 1.0.8 (9)** — Play AAB yok. **Manage** kullanıcı işi.
+- Mobil commit **`048537d`** (temiz). Remote’a push yok (`main` origin’den ahead). Backend commit `39ef1c0`. Backend dirty yalnız: `appsettings*.json`, `.DS_Store`, local `wwwroot/uploads` — **commit etme**.
 - SSH Windows OpenSSH 8.1: `IPQoS=none` + `Ciphers=aes128-ctr` + `MACs=hmac-sha2-256`; SERVICE_ACCEPT reset olursa 20s+ bekle.
-- Mobil commit `23777a6`. Login/register Figma’da yok, dokunma.
-- Secret / Production json / google-services / plist / SMTP şifreli `appsettings` git’e ve sohbete koyma. Backend dirty kalan: `appsettings*.json`, `.DS_Store`.
-- Prod hesap: tüm user + upload tekrar silindi (23 Eki). **id=1 `system`** (audit FK, login yok). Test hesap yok. Eski JWT → Login.
+- Login/register Figma’da hâlâ yok (MCP kota / doğrulanmadı), uydurma. Secret / Production json / google-services / plist / SMTP git’e ve sohbete koyma.
+- Prod: `id=1 system` (login yok). Yavuz `ckm.yvz` id=10. Seed arkadaş **Leyla Demir** `leyla.demir` id=11 (dolu profil + 2 foto, accepted friendship).
 - Index: `ix_story_user_live`, `ix_notification_user_read`, `ix_user_photo_user_kind`, `ix_language_translations_lang_live`.
-- Figma fileKey `4aA12PtSRUwMdCPiKWOX4J`. Sıralı restyle sürüyor. Overlay ekranlar `NavigationContainer`’ı View ile sarmasın (safe area yer). Nearby empty CTA `useTabBarClearance`. Hermes’te native `ActivityIndicator` yok; RN 0.86 `StyleSheet.absoluteFill`.
-- Dock kuralı: tab-root `BottomActionDock` + `useDeviceSafeInsets`. **UserProfile kilit (23 Eki, bozma):** yerel footer, `paddingBottom: pillHeight + deviceInsets.bottom`; `overflow: hidden` yok; gizli tab `translateY: 240`. Ayrıntı `meerk-layout-and-speed.mdc`.
-- RTL: `I18nManager.forceRTL` kapalı (`src/i18n/rtl.ts`). Native satır ayna olmasın; yazı yönü Typography.
+- Figma fileKey `4aA12PtSRUwMdCPiKWOX4J`. Overlay ekranlar `NavigationContainer`’ı View ile sarmasın. Hermes native `ActivityIndicator` yok; RN 0.86 `StyleSheet.absoluteFill`.
 
-## Bu oturumda kapanan iş (mobil diskte, commit yok)
+## KİLİT — arkadaş profili (sakın bozma)
 
-- Chat: REST-first gönderim; boş SignalR POST `Content-Length: 0` (IIS 411). Friends-only mesaj backend’de gevşetildi.
-- Uygulama içi bildirim: DB + `GET /api/Notification` + banner (`AppStack` overlay) + AsyncStorage cache + 20s poll.
-- Notifications sayfası Settings gibi Header + topPad (ada altına kaçmasın).
-- Nearby empty buton clip / ortalama; tarama overlay **6s**.
-- Kendi profil: kapak max 280 / %30 yükseklik, Hakkımda kayar.
-- Başka profil: Instagram sayı grid kalktı → Figma favori kart + Hakkımda.
-- Tab değişince Home/Profil/Arkadaşlar/Mesajlar 12–25s stale, spinner yok.
-- Nearby “verification required”: fetch hatasını onay yok sanıp Profile’a otomatik atma kalktı (iOS tab crash / Something went wrong). CTA `afterUiSettled` + tab `ProfileMain`. Onay = API flag veya tüm interest + foto. Profil yükleme hatası retry; `lastLoadAt` sadece başarıda.
-- Expired/geçersiz token ve silinmiş hesap: hydrate + AppState + 401 refresh fail → Login. JWT ≥10 yıl.
-- Hız (23 Eki): Home snapshot; Friends snapshot; interest types cache; Profil foto API yok; Nearby/Profil/Arkadaşlar/Mesajlar/Bildirim/Settings stale; inbox unread ayrı gitmiyor.
-- Dil (23 Eki): Arapça (`ar-AE`, MSA, RTL yazı) + Rusça (`ru-RU`). Prod `GET /api/Languages` 4 dil; `by-code` 710 çeviri. Mobil paket `src/i18n/packs/{ar,ru}.json`. Seed `deploy/sql/seed_ar_ru_localizations.sql`. Locale cache `@meerk/i18n-pack-v2`.
+UserProfile’da tab yok. Mesaj / İkram tab’in yerinde.
 
-## Firebase — kullanıcı işi bekleniyor (Android + iOS)
+- Yerel `styles.footer`. `paddingBottom: pillHeight + useDeviceSafeInsets().bottom`.
+- Header + `bodySlot` (flex) + footer. Viewport’ta `overflow: 'hidden'` yok. **BottomActionDock kullanma.**
+- CustomTabBar gizli: `opacity: 0` + `translateY: 240`. Göstermek için `afterUiSettled` (iOS 26 crash).
+- Dil değişince tab’e basmak: `afterUiSettled` + `I18nManager.forceRTL` yok (`rtl.ts` yalnız `currentRtl`). Ayrıntı `meerk-layout-and-speed.mdc`.
 
-Kod hazır, kapalı: `@react-native-firebase/app` + `messaging` 26.4.0. `src/services/push`, `src/config/firebase.ts`. Config yokken autolink kapalı (`react-native.config.js`), JS no-op.
+## Bu turda kapanan (1.0.8 içinde)
 
-Kullanıcı getirecek (git’e koyma, sohbete yapıştırma; dosyayı klasöre koy veya ver):
-1. Console proje → Android `com.bluedate` + iOS `com.andersontech.bluedate`
-2. `android/app/google-services.json` ve `ios/BlueDate/GoogleService-Info.plist` (`.example` var)
-3. Apple APNs `.p8` → Firebase Cloud Messaging (Team `XSRRXVWD3X`)
-4. Backend send için Firebase Admin service account JSON (VPS’te kalır). Token `Device.PushToken` / bootstrap’ta toplanır; **FCM send backend’de yok.**
+- Kayıt: eksik alan SheetModal (`auth.missing_title` + ilk boş alan). CTA şartlar kapalıyken de basılır.
+- Arkadaş profili alt buton kilit (yukarıda).
+- Dil değiştir → Profil: iOS 26 appearance crash. Settings `setLanguage` ve tab `navigate` `afterUiSettled`.
+- RTL native ayna kapalı; Arapça yalnız Typography `writingDirection`.
+- `DeviceInsetsGate` kök SafeAreaProvider’da (`App.tsx`).
 
-Dosyalar gelince: native link, iOS Push capability, `pod install`, her iki platform rebuild. SHA-1 istenirse `cd android && ./gradlew signingReport`.
+## Firebase — kullanıcı işi
+
+Kod hazır, kapalı. Config yok. Kullanıcı getirecek (git’e/sohbete yapıştırma): Android `com.bluedate` + iOS `com.andersontech.bluedate` json/plist, APNs `.p8`, VPS’te Admin JSON. FCM send backend’de yok.
 
 ## Canlı
 
-- API: `https://api.meerk.com.tr` (`src/config/api.ts`)
-- VPS: `185.22.185.73` (Natro XCloud, Windows + Plesk + IIS `BlueDateApi`, path `C:\inetpub\bluedate-api`)
-- SSH: `Administrator@185.22.185.73` key `~/.ssh/id_ed25519` (banner/OpenSSH Windows). **MySQL’i internete açma.**
-- MySQL80: sunucuda `127.0.0.1:3307` DB `bluedate` (3306 = Plesk MariaDB, karıştırma). Mac’ten: `ssh -N -L 3307:127.0.0.1:3307 Administrator@185.22.185.73` sonra `/opt/homebrew/opt/mysql/bin/mysql --defaults-extra-file=/tmp/bd-prod.cnf`. CS: `/tmp/bd-prod-cs.env` (git’e/sohbete koyma). Production json sunucuda.
-- Domain Webim’de; NS Natro (`ns1/ns2.natrohost.com`). A: `@` / `www` / `api` → `185.22.185.73`
-- Mail: `info@meerk.com.tr` — SMTP `mail.kurumsaleposta.com:465` SSL. Kayıt + şifre sıfırlama 6 haneli **e-posta** OTP (SMS yok). MX yoksa gelen kutu boş kalabilir.
+- API: `https://api.meerk.com.tr`
+- VPS: `185.22.185.73` IIS `BlueDateApi` `C:\inetpub\bluedate-api`
+- SSH: `Administrator@185.22.185.73` key `~/.ssh/id_ed25519`. **MySQL’i internete açma.**
+- MySQL80: `127.0.0.1:3307` DB `bluedate`. Tunnel + `/tmp/bd-prod.cnf` — sohbete koyma.
+- Mail: `info@meerk.com.tr` — SMTP `mail.kurumsaleposta.com:465`. E-posta OTP (SMS yok).
 
-## Müşteri / sahip duran istekler
+## Duran (kullanıcı)
 
-- Sayfalar **akıcı**: sekme değişince spinner/full refetch yok; stale-while-revalidate.
-- Liste/grid: N+1 yok; Image `fadeDuration={0}`; kartlar `React.memo`.
-- UI kopyası i18n `t()`; generic “Something went wrong” gizleme.
-- Hata dili: backend `MessageKeys` + `ILocalizationService.T()` (X-Language-Code). Mobil `userFacingError()`.
-- Secret sohbet/git’e yeni ekleme; Production json sunucuda kalsın.
-- App Store / Play **Manage** kullanıcı işi.
-- **Cloudflare (kullanıcı birazdan):** ücretsiz hesap → `meerk.com.tr` zone. `api` A `185.22.185.73` turuncu; SSL Full (strict); WebSockets on; `/uploads` cache, `/api`+`/hubs` bypass. Token sohbete koyma. Script: `~/RiderProjects/AD_BlueDateApp/deploy/cloudflare/apply-api-proxy.sh`. Ayrıntı: kullanıcı store `bluedate-session-2026-10-20.md`.
-- **Commit sadece istenince.** Mobil hâlâ uncommitted.
+- App Store / Play **Manage**.
+- Cloudflare turuncu: zone hazır deyince `deploy/cloudflare/apply-api-proxy.sh`. Token sohbete koyma.
+- Firebase dosyaları.
+- Git remote push yok.
+- Commit yalnız istenince.
 
-## Mimari (mobil)
+## Mimari
 
-`src/api` → `src/screens` + `src/navigation`. Auth JWT `sessionStore`. Nearby = BLE + `/api/Proximity`. Chat = SignalR. i18n `LocaleContext` (backend çeviri + TR override).
-
-Tasarım tek kaynak: `src/theme` (`palette`, `tokens`, `typography`, `components`). Ekranlar `useTheme()` / `Typography`; `theme.components.*`. Hex/fontSize ekranda yazılmaz. Accent `plusCta` altın; `theme.colors.primary` mor hâlâ auth (`Button`) — login Figma’da yok.
-
-GPS: `src/services/location/currentPosition.ts` — `peekLastCoordinates()`, profile’da 8s blok yok. RN 0.86: `StyleSheet.absoluteFill` (`absoluteFillObject` yok).
+`src/api` → `src/screens` + `src/navigation`. Auth JWT `sessionStore`. Nearby = BLE + `/api/Proximity`. Chat = SignalR. i18n `LocaleContext`. Tema `useTheme()`. Accent `plusCta`.
