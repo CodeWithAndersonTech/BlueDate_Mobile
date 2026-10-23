@@ -14,9 +14,9 @@ Ayrıntı yedek (kapatınca kaybolmasın): kullanıcı store `bluedate-session-2
 - Fiziksel iPhone: 16 Pro Max, UDID `00008140-000A61513C28801C`, team `XSRRXVWD3X`, bundle `com.andersontech.bluedate`. Android `applicationId` `com.bluedate`.
 - `USE_PRODUCTION = true` — cihaz prod API/DB. Metro açık olabilir; kapalıysa: `npx react-native start` sonra `npx react-native run-ios --udid 00008140-000A61513C28801C`.
 - **Backend 1.1.9 VPS’te (23 Eki).** Home/Friendship snapshot + IHotCache + LocalizationService AR/RU fallback. **Prod DB: `ar` / `ru` + 710 çeviri.** Push yok. Production json dokunulmadı (Jwt 10y).
-- iOS **1.0.6 (19)** App Store Connect’e yüklendi (22 Eki). Android **1.0.6 (7)** — Play AAB yok. **Manage** kullanıcı işi.
+- iOS **1.0.7 (20)** App Store yüklemesi bu tur. Android **1.0.7 (8)** — Play AAB yok. **Manage** kullanıcı işi.
 - SSH Windows OpenSSH 8.1: `IPQoS=none` + `Ciphers=aes128-ctr` + `MACs=hmac-sha2-256`; SERVICE_ACCEPT reset olursa 20s+ bekle.
-- Mobil commit `283cba5` (push yok). Login/register Figma’da yok, dokunma.
+- Mobil commit `23777a6`. Login/register Figma’da yok, dokunma.
 - Secret / Production json / google-services / plist / SMTP şifreli `appsettings` git’e ve sohbete koyma. Backend dirty kalan: `appsettings*.json`, `.DS_Store`.
 - Prod hesap: tüm user + upload tekrar silindi (23 Eki). **id=1 `system`** (audit FK, login yok). Test hesap yok. Eski JWT → Login.
 - Index: `ix_story_user_live`, `ix_notification_user_read`, `ix_user_photo_user_kind`, `ix_language_translations_lang_live`.
