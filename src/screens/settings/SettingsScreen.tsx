@@ -28,6 +28,7 @@ import { useScreenBottomPad } from '../../navigation/tabBarLayout';
 import { getUserPreference, updateUserPreference, UserPreference } from '../../api';
 import { usePremium } from '../../hooks/usePremium';
 import { useLocale, userFacingError } from '../../i18n';
+import { afterUiSettled } from '../../utils/afterUiSettled';
 import { useAuth } from '../../navigation/AuthContext';
 import { useLockTabSwipe } from '../../navigation/useLockTabSwipe';
 import { ProfileStackParamList } from '../../navigation/types';
@@ -386,7 +387,9 @@ export function SettingsScreen() {
                   <Pressable
                     key={lang.Code}
                     onPress={() => {
-                      void setLanguage(lang.Code);
+                      afterUiSettled(() => {
+                        void setLanguage(lang.Code);
+                      });
                     }}
                     accessibilityRole="button"
                     accessibilityState={{ selected }}

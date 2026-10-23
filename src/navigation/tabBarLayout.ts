@@ -1,9 +1,60 @@
 import { useRoute } from '@react-navigation/native';
-import { useWindowDimensions } from 'react-native';
+import { useEffect, useState } from 'react';
+import { Platform, useWindowDimensions } from 'react-native';
 import {
   initialWindowMetrics,
   useSafeAreaInsets,
 } from 'react-native-safe-area-context';
+
+type DeviceInsets = {
+  top: number;
+  bottom: number;
+  left: number;
+  right: number;
+};
+
+const winStart = initialWindowMetrics?.insets;
+let capturedInsets: DeviceInsets = {
+  top: winStart?.top ?? 0,
+  bottom: winStart?.bottom ?? 0,
+  left: winStart?.left ?? 0,
+  right: winStart?.right ?? 0,
+};
+const insetListeners = new Set<() => void>();
+
+function rememberDeviceInsets(next: DeviceInsets) {
+  if (
+    capturedInsets.top === next.top &&
+    capturedInsets.bottom === next.bottom &&
+    capturedInsets.left === next.left &&
+    capturedInsets.right === next.right
+  ) {
+    return;
+  }
+  capturedInsets = next;
+  insetListeners.forEach(listener => listener());
+}
+
+/** Mount under the root SafeAreaProvider, outside native stacks. */
+export function DeviceInsetsGate() {
+  const live = useSafeAreaInsets();
+  useEffect(() => {
+    rememberDeviceInsets(live);
+  }, [live.top, live.bottom, live.left, live.right]);
+  return null;
+}
+
+function useCapturedInsets(): DeviceInsets {
+  const [value, setValue] = useState(capturedInsets);
+  useEffect(() => {
+    const onChange = () => setValue(capturedInsets);
+    insetListeners.add(onChange);
+    return () => {
+      insetListeners.delete(onChange);
+    };
+  }, []);
+  return value;
+}
 
 /** Figma tab bar is drawn on a 393pt frame. */
 const FIGMA_SCREEN_W = 393;
@@ -68,6 +119,9 @@ export const TAB_INDICATOR_RADIUS = 20;
 
 /** The pill keeps at least this much distance from the physical bottom edge. */
 export const MIN_BOTTOM_INSET = 12;
+/** iPhone X+ home indicator. Used only when the stack zeros safe-area. */
+const IOS_HOME_INDICATOR = 34;
+const IPHONE_X_MIN_HEIGHT = 812;
 
 /**
  * Root screens of each tab stack — floating tab bar stays visible only here.
@@ -93,12 +147,26 @@ export const DOCK_PAD_TOP = 12;
  */
 export function useDeviceSafeInsets() {
   const live = useSafeAreaInsets();
+  const root = useCapturedInsets();
   const win = initialWindowMetrics?.insets;
+  const { height } = useWindowDimensions();
+  const reportedBottom = Math.max(
+    live.bottom,
+    root.bottom,
+    win?.bottom ?? 0,
+    MIN_BOTTOM_INSET,
+  );
+  const bottom =
+    reportedBottom > MIN_BOTTOM_INSET
+      ? reportedBottom
+      : Platform.OS === 'ios' && height >= IPHONE_X_MIN_HEIGHT
+        ? IOS_HOME_INDICATOR
+        : reportedBottom;
   return {
-    top: Math.max(live.top, win?.top ?? 0),
-    bottom: Math.max(live.bottom, win?.bottom ?? 0, MIN_BOTTOM_INSET),
-    left: Math.max(live.left, win?.left ?? 0),
-    right: Math.max(live.right, win?.right ?? 0),
+    top: Math.max(live.top, root.top, win?.top ?? 0),
+    bottom,
+    left: Math.max(live.left, root.left, win?.left ?? 0),
+    right: Math.max(live.right, root.right, win?.right ?? 0),
   };
 }
 

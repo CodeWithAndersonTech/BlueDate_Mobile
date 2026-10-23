@@ -219,7 +219,7 @@ export function ProfileScreen({ navigation }: Props) {
         setRefreshing(false);
       }
     },
-    [userId, accessToken, t],
+    [userId, accessToken],
   );
 
   useFocusEffect(

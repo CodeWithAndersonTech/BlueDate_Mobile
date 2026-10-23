@@ -11,12 +11,11 @@ export function getCurrentRtl(): boolean {
   return currentRtl;
 }
 
-/** Applies immediately for text direction. Native row flip needs an app restart. */
+/**
+ * Text direction only (Typography writingDirection).
+ * Do not I18nManager.forceRTL — that mirrors the whole app (rows, tab, dock)
+ * on the next native launch and is why LTR chrome flipped after a reload.
+ */
 export function syncRtl(code: string): void {
-  const rtl = isRtlLanguage(code);
-  currentRtl = rtl;
-  I18nManager.allowRTL(true);
-  if (I18nManager.isRTL !== rtl) {
-    I18nManager.forceRTL(rtl);
-  }
+  currentRtl = isRtlLanguage(code);
 }

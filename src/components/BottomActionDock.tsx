@@ -60,6 +60,7 @@ const styles = StyleSheet.create({
   dock: {
     flexDirection: 'row',
     alignItems: 'center',
+    flexShrink: 0,
     gap: 10,
     paddingHorizontal: 16,
     paddingTop: DOCK_PAD_TOP,

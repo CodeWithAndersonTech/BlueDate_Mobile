@@ -1,6 +1,6 @@
 import type { MaterialTopTabBarProps } from '@react-navigation/material-top-tabs';
 import { getFocusedRouteNameFromRoute } from '@react-navigation/native';
-import React, { useEffect, useMemo } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   Animated as RNAnimated,
   Pressable,
@@ -13,12 +13,16 @@ import Animated, {
   useSharedValue,
   withSpring,
 } from 'react-native-reanimated';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { FigmaIcon, FigmaSvgName, Typography } from '../components';
 import { useLocale } from '../i18n';
 import { useTheme } from '../theme';
 import { useChat } from './ChatContext';
-import { TAB_ROOT_SCREENS, useTabBarMetrics } from './tabBarLayout';
+import {
+  TAB_ROOT_SCREENS,
+  useDeviceSafeInsets,
+  useTabBarMetrics,
+} from './tabBarLayout';
+import { afterUiSettled } from '../utils/afterUiSettled';
 import { useTabBarForceHidden } from './useHideTabBar';
 
 // Layout hooks live in ./tabBarLayout (single source of truth for clearance
@@ -96,13 +100,25 @@ export function CustomTabBar({
   const theme = useTheme();
   const { t } = useLocale();
   const { unreadCount: unreadMessages } = useChat();
-  const insets = useSafeAreaInsets();
+  const insets = useDeviceSafeInsets();
   const { width: windowWidth } = useWindowDimensions();
   const metrics = useTabBarMetrics();
   const forceHidden = useTabBarForceHidden();
   const hide = shouldHideTabBar(state) || forceHidden;
+  const [paintHidden, setPaintHidden] = useState(hide);
 
-  const bottomInset = Math.max(insets.bottom, 12);
+  useEffect(() => {
+    if (hide) {
+      setPaintHidden(true);
+      return;
+    }
+    // iOS 26: showing the pill while a stack pop / tab appearance is in
+    // flight crashes (_associatedViewControllerForwardsAppearanceCallbacks).
+    const cancel = afterUiSettled(() => setPaintHidden(false), 80);
+    return cancel;
+  }, [hide]);
+
+  const bottomInset = insets.bottom;
   const totalHeight = metrics.pillHeight + bottomInset;
   const barWidth = layout.width || windowWidth;
   const pillWidth = Math.min(metrics.pillWidth, barWidth - metrics.side * 2);
@@ -140,10 +156,10 @@ export function CustomTabBar({
   // (_associatedViewControllerForwardsAppearanceCallbacks).
   return (
     <View
-      style={[styles.wrapper, hide && styles.wrapperHidden]}
-      pointerEvents={hide ? 'none' : 'box-none'}
-      accessibilityElementsHidden={hide}
-      importantForAccessibility={hide ? 'no-hide-descendants' : 'auto'}>
+      style={[styles.wrapper, paintHidden && styles.wrapperHidden]}
+      pointerEvents={paintHidden ? 'none' : 'box-none'}
+      accessibilityElementsHidden={paintHidden}
+      importantForAccessibility={paintHidden ? 'no-hide-descendants' : 'auto'}>
       <View
         style={[
           styles.bar,
@@ -192,9 +208,11 @@ export function CustomTabBar({
                   return;
                 }
                 // Always navigate — even when already focused — so nested
-                // stacks pop to their root, and tab screens receive the
-                // re-tap (scroll-to-top via TabScreenScrollView).
-                navigation.navigate(route.name as never);
+                // stacks pop to their root. Wait out the current appearance
+                // pass (language remount / stack pop) or iOS 26 kills the app.
+                afterUiSettled(() => {
+                  navigation.navigate(route.name as never);
+                });
               };
 
               return (
@@ -297,6 +315,7 @@ const styles = StyleSheet.create({
   },
   wrapperHidden: {
     opacity: 0,
+    transform: [{ translateY: 240 }],
   },
   bar: {
     backgroundColor: 'transparent',

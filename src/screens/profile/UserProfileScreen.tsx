@@ -11,7 +11,6 @@ import {
   View,
 } from 'react-native';
 import {
-  BottomActionDock,
   EmptyState,
   FigmaButton,
   Header,
@@ -37,7 +36,11 @@ import {
 import { isAccountGoneError, useLocale, userFacingError } from '../../i18n';
 import { useAuth } from '../../navigation/AuthContext';
 import { useChat } from '../../navigation/ChatContext';
-import { useScreenBottomPad } from '../../navigation/tabBarLayout';
+import {
+  useDeviceSafeInsets,
+  useScreenBottomPad,
+  useTabBarMetrics,
+} from '../../navigation/tabBarLayout';
 import { useLockTabSwipe } from '../../navigation/useLockTabSwipe';
 import { useStorySeen } from '../../hooks/useStorySeen';
 import { ProfilePhoto } from '../../services/photos/photoStore';
@@ -106,6 +109,9 @@ export function UserProfileScreen({ navigation, route }: Props) {
   const { t } = useLocale();
   const topPad = useScreenTopPad();
   const screenBottomPad = useScreenBottomPad(20);
+  const deviceInsets = useDeviceSafeInsets();
+  const { pillHeight } = useTabBarMetrics();
+  const footerPad = pillHeight + deviceInsets.bottom;
   const { userId: meId, accessToken } = useAuth();
   const { isGroupSeen } = useStorySeen(meId);
   const targetId = Number(route.params.userId);
@@ -565,8 +571,7 @@ export function UserProfileScreen({ navigation, route }: Props) {
         translucent
       />
 
-      <View style={styles.flex}>
-        <Header
+      <Header
           title={
             isSelf ? t('user_profile.preview_title') : t('user_profile.title')
           }
@@ -585,6 +590,7 @@ export function UserProfileScreen({ navigation, route }: Props) {
           }
         />
 
+        <View style={styles.bodySlot}>
         <ScrollView
           style={styles.flex}
           showsVerticalScrollIndicator={false}
@@ -699,9 +705,18 @@ export function UserProfileScreen({ navigation, route }: Props) {
             ) : null}
           </View>
         </ScrollView>
+        </View>
 
         {!isSelf ? (
-          <BottomActionDock>
+          <View
+            style={[
+              styles.footer,
+              {
+                paddingBottom: footerPad,
+                backgroundColor: theme.colors.background,
+                borderTopColor: theme.colors.border,
+              },
+            ]}>
             {blockedByMe ? (
               <FigmaButton
                 label={t('safety.unblock')}
@@ -757,9 +772,8 @@ export function UserProfileScreen({ navigation, route }: Props) {
                 />
               </>
             )}
-          </BottomActionDock>
+          </View>
         ) : null}
-      </View>
 
       {!isSelf ? (
         <>
@@ -811,11 +825,10 @@ export function UserProfileScreen({ navigation, route }: Props) {
 }
 
 const styles = StyleSheet.create({
-  /** Fills the navigator scene and clips overflow so the dock cannot be pushed off-screen. */
   viewport: {
     flex: 1,
-    overflow: 'hidden',
   },
+  bodySlot: { flex: 1, minHeight: 0 },
   flex: { flex: 1, minHeight: 0 },
   scrollContent: { paddingBottom: 20 },
   previewBanner: {
@@ -886,6 +899,15 @@ const styles = StyleSheet.create({
   favCopy: { flex: 1, minWidth: 0, gap: 0 },
   about: { gap: 10, minHeight: 94 },
   aboutBody: { lineHeight: 22 },
+  footer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexShrink: 0,
+    gap: 10,
+    paddingHorizontal: 16,
+    paddingTop: 12,
+    borderTopWidth: StyleSheet.hairlineWidth,
+  },
   dockBtn: {
     flex: 1,
     minWidth: 0,

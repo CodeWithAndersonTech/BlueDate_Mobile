@@ -10,13 +10,22 @@ alwaysApply: true
 Native stack `safeAreaInsets: { top: 0, bottom: 0 }` — ada çift pad olmasın diye. `useSafeAreaInsets()` bu yüzden 0 dönebilir. **Asla** o 0’ı dock padding sanma.
 
 - Cihaz inset: sadece `useDeviceSafeInsets()` (`tabBarLayout.ts`).
-- CTA şeridi: sadece `BottomActionDock`. Flex kolonunda ScrollView’un **kardeşi**. `position: 'absolute'` + `paddingBottom: x + 10` yasak.
-- Nested ekran (UserProfile, Chat, Notifications): tab pill gizli → dock home indicator’da. `useHideTabBar(true)` bu ekranlarda.
-- Tab-root veya pill hâlâ boyuyorsa: `forceAboveTabBar`. Hayalet pill boşluğu için nested’te force açma.
-- `+10`, `+40`, hardcoded `bottom: 34` yok. Math `useStickyDockLayout` içinde.
+- CTA şeridi (tab-root / Edit / Filter): `BottomActionDock`. Flex kolonunda ScrollView’un **kardeşi**. `position: 'absolute'` + `paddingBottom: x + 10` yasak.
+- Tab-root veya pill hâlâ boyuyorsa: `forceAboveTabBar`.
+- `+10`, `+40`, hardcoded `bottom: 34` yok. Math `useStickyDockLayout` / `useDeviceSafeInsets` içinde.
 
 Yanlış: viewport’a `useScreenBottomPad` + absolute dock + ekstra 10.  
-Doğru: Header + Scroll (flex) + `BottomActionDock`.
+Doğru (tab-root): Header + Scroll (flex) + `BottomActionDock`.
+
+### KİLİT — arkadaş profili (UserProfile) 23 Eki, kullanıcı onayladı
+
+**Bu bloğu BottomActionDock / forceAboveTabBar / overflow:hidden / home-indicator-only pad ile “düzeltme”. Bozuluyor.**
+
+- Tab pill yok (`useHideTabBar(true)`). Mesaj / İkram **tab’in durduğu yerde**.
+- Footer: yerel `styles.footer` View. `paddingBottom: pillHeight + useDeviceSafeInsets().bottom` (`useTabBarMetrics`).
+- Header + `bodySlot` (flex 1) + footer kardeş. Viewport’ta `overflow: 'hidden'` yok.
+- CustomTabBar gizli: `opacity: 0` + `translateY: 240` — pill butonun üstünü kapatmasın.
+- `I18nManager.forceRTL` ile native satır çevirme. Arapça yalnız `Typography` `writingDirection`.
 
 ## İstek hızı
 

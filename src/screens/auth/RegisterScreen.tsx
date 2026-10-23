@@ -15,12 +15,14 @@ import {
   Chip,
   ConfirmPasswordInput,
   EmailInput,
+  FigmaButton,
   FirstNameInput,
   Header,
   LanguageFlagButton,
   LastNameInput,
   PasswordInput,
   Screen,
+  SheetModal,
   Typography,
   UsernameInput,
 } from '../../components';
@@ -52,6 +54,7 @@ export function RegisterScreen({ navigation }: Props) {
   });
   const [accepted, setAccepted] = useState(false);
   const [submitted, setSubmitted] = useState(false);
+  const [missingMessage, setMissingMessage] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [gender, setGender] = useState<GenderValue | null>(null);
   const [birthParts, setBirthParts] = useState(() => defaultBirthParts(25));
@@ -89,20 +92,57 @@ export function RegisterScreen({ navigation }: Props) {
     return undefined;
   }, [emailValid, form.email, submitted, t]);
 
-  const canSubmit =
-    accepted &&
-    form.firstName.trim().length > 0 &&
-    form.lastName.trim().length > 0 &&
-    usernameValid &&
-    emailValid &&
-    ageValid &&
-    isValidGender(gender) &&
-    form.password.length >= 8 &&
-    form.password === form.confirmPassword;
+  const firstMissing = (): string | null => {
+    if (!form.firstName.trim()) {
+      return t('auth.first_name_required');
+    }
+    if (!form.lastName.trim()) {
+      return t('auth.last_name_required');
+    }
+    if (!form.username.trim()) {
+      return t('auth.username_required');
+    }
+    if (!usernameValid) {
+      return t('auth.username_length');
+    }
+    if (!form.email.trim()) {
+      return t('auth.email_required');
+    }
+    if (!emailValid) {
+      return t('auth.email_invalid');
+    }
+    if (!ageValid) {
+      return t('auth.birth_date_required');
+    }
+    if (!isValidGender(gender)) {
+      return t('auth.gender_required');
+    }
+    if (!form.password) {
+      return t('auth.password_min');
+    }
+    if (form.password.length < 8) {
+      return t('auth.password_min');
+    }
+    if (!form.confirmPassword) {
+      return t('auth.confirm_required');
+    }
+    if (form.password !== form.confirmPassword) {
+      return t('auth.password_mismatch');
+    }
+    if (!accepted) {
+      return t('auth.terms_required');
+    }
+    return null;
+  };
 
   const onRegister = async () => {
     setSubmitted(true);
-    if (!canSubmit || loading || !isValidGender(gender) || !ageValid) {
+    const missing = firstMissing();
+    if (missing) {
+      setMissingMessage(missing);
+      return;
+    }
+    if (loading || !isValidGender(gender) || !ageValid) {
       return;
     }
 
@@ -166,6 +206,11 @@ export function RegisterScreen({ navigation }: Props) {
               value={form.firstName}
               onChangeText={update('firstName')}
               onSubmitEditing={() => lastNameRef.current?.focus()}
+              error={
+                submitted && !form.firstName.trim()
+                  ? t('auth.first_name_required')
+                  : undefined
+              }
             />
             <LastNameInput
               ref={lastNameRef}
@@ -173,6 +218,11 @@ export function RegisterScreen({ navigation }: Props) {
               value={form.lastName}
               onChangeText={update('lastName')}
               onSubmitEditing={() => usernameRef.current?.focus()}
+              error={
+                submitted && !form.lastName.trim()
+                  ? t('auth.last_name_required')
+                  : undefined
+              }
             />
           </View>
 
@@ -287,7 +337,6 @@ export function RegisterScreen({ navigation }: Props) {
               label={t('auth.register')}
               size="lg"
               rightIcon="check"
-              disabled={!accepted}
               loading={loading}
               onPress={onRegister}
             />
@@ -305,6 +354,21 @@ export function RegisterScreen({ navigation }: Props) {
           </Pressable>
         </View>
       </ScrollView>
+      <SheetModal
+        visible={Boolean(missingMessage)}
+        title={t('auth.missing_title')}
+        onClose={() => setMissingMessage(null)}>
+        <Typography variant="callout" color="textMuted">
+          {missingMessage}
+        </Typography>
+        <FigmaButton
+          label={t('common.close')}
+          tone="primary"
+          size="md"
+          fullWidth
+          onPress={() => setMissingMessage(null)}
+        />
+      </SheetModal>
     </Screen>
   );
 }

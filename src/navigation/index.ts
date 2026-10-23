@@ -8,6 +8,7 @@ export * from './RootNavigator';
 export * from './useLockTabSwipe';
 export * from './useHideTabBar';
 export {
+  DeviceInsetsGate,
   FLOATING_TAB_BAR_HEIGHT,
   TAB_ROOT_SCREENS,
   useDeviceSafeInsets,
