@@ -3,12 +3,21 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Alert,
   Pressable,
+  ScrollView,
   StyleSheet,
   TextInput,
   View,
 } from 'react-native';
 import { sendEmailOtp, verifyEmailOtp } from '../../api/auth';
-import { Button, Header, Screen, Typography } from '../../components';
+import {
+  AuthFlowBar,
+  AuthFlowHero,
+  AuthInlineError,
+  AuthPrimaryButton,
+  FigmaIcon,
+  Screen,
+  Typography,
+} from '../../components';
 import { useLocale, userFacingError } from '../../i18n';
 import { useAuth } from '../../navigation/AuthContext';
 import { AuthStackParamList } from '../../navigation/types';
@@ -21,9 +30,10 @@ const RESEND_SECONDS = 60;
 
 export function EmailVerificationScreen({ navigation, route }: Props) {
   const theme = useTheme();
-  const { t } = useLocale();
+  const { t, languages, languageCode, setLanguage } = useLocale();
   const { completeEmailVerification } = useAuth();
   const { email, password, userId, purpose } = route.params;
+  const isReset = purpose === 'reset';
 
   const [digits, setDigits] = useState<string[]>(
     Array.from({ length: CODE_LENGTH }, () => ''),
@@ -43,10 +53,9 @@ export function EmailVerificationScreen({ navigation, route }: Props) {
   }, [secondsLeft]);
 
   const code = useMemo(() => digits.join(''), [digits]);
-  const canVerify = code.length === CODE_LENGTH && !submitting;
 
   const timerLabel = useMemo(() => {
-    const mm = String(Math.floor(secondsLeft / 60)).padStart(1, '0');
+    const mm = String(Math.floor(secondsLeft / 60)).padStart(2, '0');
     const ss = String(secondsLeft % 60).padStart(2, '0');
     return `${mm}:${ss}`;
   }, [secondsLeft]);
@@ -107,6 +116,10 @@ export function EmailVerificationScreen({ navigation, route }: Props) {
     if (submitting) {
       return;
     }
+    if (value.length !== CODE_LENGTH) {
+      setError(t('auth.verify_invalid_code'));
+      return;
+    }
 
     try {
       setSubmitting(true);
@@ -143,132 +156,142 @@ export function EmailVerificationScreen({ navigation, route }: Props) {
       setError(null);
       focusIndex(0);
     } catch (err) {
-      Alert.alert(
-        t('auth.verify_title'),
-        userFacingError(err, t),
-      );
+      Alert.alert(t('auth.verify_title'), userFacingError(err, t));
     }
   };
 
   return (
-    <Screen edges={['top']} padded>
-      <Header
+    <Screen padded={false} edges={['top']}>
+      <AuthFlowBar
+        title={isReset ? t('auth.reset_nav') : undefined}
         onBack={() => navigation.goBack()}
-        title={t('auth.verify_title')}
+        languages={languages}
+        languageCode={languageCode}
+        onSelectLanguage={code => {
+          setLanguage(code).catch(() => undefined);
+        }}
       />
 
-      <View style={styles.content}>
-        <View style={styles.intro}>
-          <Typography variant="h2">{t('auth.verify_heading')}</Typography>
-          <Typography variant="body" color="textMuted" style={styles.subtitle}>
-            {t('auth.verify_subtitle')}
-          </Typography>
-          <Typography variant="bodyStrong" tint={theme.colors.primary}>
-            {email}
-          </Typography>
-        </View>
+      <ScrollView
+        style={styles.flex}
+        contentContainerStyle={styles.content}
+        showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="interactive"
+        automaticallyAdjustKeyboardInsets>
+        <AuthFlowHero
+          glyph="sms"
+          large={!isReset}
+          title={
+            isReset ? t('auth.verify_heading') : t('auth.hero_verify_line1')
+          }
+          accent={isReset ? undefined : t('auth.hero_verify_accent')}
+          subtitle={
+            isReset ? t('auth.verify_code_sub') : t('auth.hero_verify_sub')
+          }
+        />
 
         <View style={styles.codeRow}>
-          {digits.map((digit, index) => {
-            const focusedBorder =
-              digit.length > 0 ? theme.colors.primary : theme.colors.border;
-            return (
-              <TextInput
-                key={`otp-${index}`}
-                ref={ref => {
-                  inputsRef.current[index] = ref;
-                }}
-                value={digit}
-                onChangeText={text => onChangeDigit(index, text)}
-                onKeyPress={({ nativeEvent }) =>
-                  onKeyPress(index, nativeEvent.key)
-                }
-                keyboardType="number-pad"
-                textContentType="oneTimeCode"
-                autoComplete="one-time-code"
-                maxLength={index === 0 ? CODE_LENGTH : 1}
-                selectTextOnFocus
-                style={[
-                  styles.box,
-                  {
-                    backgroundColor: theme.colors.surfaceAlt,
-                    borderColor: error ? theme.colors.danger : focusedBorder,
-                    color: theme.colors.text,
-                    borderRadius: 16,
-                  },
-                ]}
-              />
-            );
-          })}
+          {digits.map((digit, index) => (
+            <TextInput
+              key={`otp-${index}`}
+              ref={ref => {
+                inputsRef.current[index] = ref;
+              }}
+              value={digit}
+              onChangeText={text => onChangeDigit(index, text)}
+              onKeyPress={({ nativeEvent }) =>
+                onKeyPress(index, nativeEvent.key)
+              }
+              keyboardType="number-pad"
+              textContentType="oneTimeCode"
+              autoComplete="one-time-code"
+              maxLength={index === 0 ? CODE_LENGTH : 1}
+              selectTextOnFocus
+              style={[
+                styles.box,
+                theme.typography.variants.h3,
+                {
+                  backgroundColor: theme.colors.authField,
+                  borderColor: error
+                    ? theme.colors.danger
+                    : theme.colors.authFieldBorder,
+                  color: theme.colors.text,
+                },
+              ]}
+            />
+          ))}
         </View>
 
-        {error ? (
-          <Typography variant="caption" tint={theme.colors.danger} align="center">
-            {error}
-          </Typography>
-        ) : null}
+        {error ? <AuthInlineError message={error} /> : null}
 
-        <View style={styles.timerBlock}>
+        <Pressable
+          style={styles.timerRow}
+          hitSlop={8}
+          disabled={secondsLeft > 0}
+          onPress={() => {
+            void onResend();
+          }}>
+          <FigmaIcon
+            name="rotateRight"
+            size={18}
+            color={
+              secondsLeft > 0 ? theme.colors.textMuted : theme.colors.plusCta
+            }
+          />
           {secondsLeft > 0 ? (
-            <Typography variant="body" color="textMuted" align="center">
-              {t('auth.verify_resend_in')}{' '}
-              <Typography variant="bodyStrong" tint={theme.colors.primary}>
-                {timerLabel}
-              </Typography>
+            <Typography variant="callout" color="textMuted">
+              {timerLabel}
             </Typography>
           ) : (
-            <Pressable hitSlop={8} onPress={() => void onResend()}>
-              <Typography
-                variant="bodyStrong"
-                tint={theme.colors.primary}
-                align="center">
-                {t('auth.verify_resend')}
-              </Typography>
-            </Pressable>
+            <Typography variant="callout" weight="600" tint={theme.colors.plusCta}>
+              {t('auth.verify_resend')}
+            </Typography>
           )}
-        </View>
+        </Pressable>
 
-        <Button
+        <AuthPrimaryButton
           label={t('auth.verify_action')}
-          size="lg"
           loading={submitting}
-          disabled={!canVerify}
-          onPress={() => verify(code)}
+          onPress={() => {
+            void verify(code);
+          }}
         />
-      </View>
+      </ScrollView>
     </Screen>
   );
 }
 
 const styles = StyleSheet.create({
+  flex: { flex: 1 },
   content: {
-    flex: 1,
-    paddingTop: 16,
-    gap: 24,
-  },
-  intro: {
-    gap: 8,
-  },
-  subtitle: {
-    lineHeight: 22,
+    flexGrow: 1,
+    paddingHorizontal: 10,
+    paddingTop: 8,
+    paddingBottom: 40,
+    gap: 16,
   },
   codeRow: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    gap: 8,
+    justifyContent: 'center',
+    gap: 10,
+    paddingHorizontal: 20,
   },
   box: {
     flex: 1,
+    maxWidth: 42,
     height: 58,
-    borderWidth: 1.5,
+    borderWidth: 1,
+    borderRadius: 15,
     textAlign: 'center',
-    fontSize: 22,
-    fontWeight: '700',
     paddingVertical: 0,
   },
-  timerBlock: {
-    minHeight: 28,
+  timerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
     justifyContent: 'center',
+    gap: 6,
+    minHeight: 24,
   },
 });
 

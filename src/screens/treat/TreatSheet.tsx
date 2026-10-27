@@ -10,7 +10,7 @@ import {
   UserProfileInterest,
 } from '../../api';
 import { FigmaButton, FigmaIcon, SheetModal, Typography } from '../../components';
-import { useLocale, userFacingError } from '../../i18n';
+import { interestTypeLabel, useLocale, userFacingError } from '../../i18n';
 import {
   buyProduct,
   completePurchase,
@@ -170,7 +170,7 @@ export function TreatSheet({
                 <Typography variant="title">{emojiFor(fav.InterestTypeCode)}</Typography>
                 <View style={styles.optionTexts}>
                   <Typography variant="caption" color="textMuted" numberOfLines={1}>
-                    {fav.InterestTypeName || fav.InterestTypeCode}
+                    {interestTypeLabel(t, fav)}
                   </Typography>
                   <Typography variant="bodyStrong" numberOfLines={1}>
                     {fav.Value}

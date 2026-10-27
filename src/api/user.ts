@@ -1,6 +1,7 @@
 import { API_PATHS } from '../config/api';
 import { appStorage } from '../utils/appStorage';
 import { apiRequest, ApiEnvelope } from './client';
+import { getApiLanguageCode } from './languageHeader';
 
 export type UserProfileInterest = {
   Id: number;
@@ -326,18 +327,35 @@ export function updateUserStatus(
 
 const INTEREST_CACHE_KEY = '@meerk/interest-types';
 const INTEREST_TTL_MS = 24 * 60 * 60 * 1000;
-let interestMemory: { at: number; data: InterestTypesResponse } | null = null;
+let interestMemory: {
+  at: number;
+  lang: string;
+  data: InterestTypesResponse;
+} | null = null;
+
+function interestCacheKey(lang: string) {
+  return `${INTEREST_CACHE_KEY}:${lang}`;
+}
 
 export async function getInterestTypes(token?: string | null) {
-  if (interestMemory && Date.now() - interestMemory.at < INTEREST_TTL_MS) {
+  const lang = getApiLanguageCode();
+  if (
+    interestMemory &&
+    interestMemory.lang === lang &&
+    Date.now() - interestMemory.at < INTEREST_TTL_MS
+  ) {
     return interestMemory.data;
   }
   try {
-    const raw = await appStorage.getItem(INTEREST_CACHE_KEY);
+    const raw = await appStorage.getItem(interestCacheKey(lang));
     if (raw) {
-      const pack = JSON.parse(raw) as { at: number; data: InterestTypesResponse };
+      const pack = JSON.parse(raw) as {
+        at: number;
+        lang?: string;
+        data: InterestTypesResponse;
+      };
       if (pack?.data && Date.now() - pack.at < INTEREST_TTL_MS) {
-        interestMemory = pack;
+        interestMemory = { at: pack.at, lang, data: pack.data };
         return pack.data;
       }
     }
@@ -347,11 +365,10 @@ export async function getInterestTypes(token?: string | null) {
   const data = await apiRequest<InterestTypesResponse>(API_PATHS.interestTypes, {
     token,
   });
-  interestMemory = { at: Date.now(), data };
-  void appStorage.setItem(
-    INTEREST_CACHE_KEY,
-    JSON.stringify(interestMemory),
-  ).catch(() => undefined);
+  interestMemory = { at: Date.now(), lang, data };
+  void appStorage
+    .setItem(interestCacheKey(lang), JSON.stringify(interestMemory))
+    .catch(() => undefined);
   return data;
 }
 

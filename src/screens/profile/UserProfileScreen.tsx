@@ -33,7 +33,12 @@ import {
   isBlockedByMe,
   unblockUser,
 } from '../../api';
-import { isAccountGoneError, useLocale, userFacingError } from '../../i18n';
+import {
+  interestTypeLabel,
+  isAccountGoneError,
+  useLocale,
+  userFacingError,
+} from '../../i18n';
 import { useAuth } from '../../navigation/AuthContext';
 import { useChat } from '../../navigation/ChatContext';
 import {
@@ -92,11 +97,14 @@ function formatUsername(username: string) {
   return trimmed.startsWith('@') ? trimmed : `@${trimmed}`;
 }
 
-function mapInterest(item: UserProfileInterest) {
+function mapInterest(
+  item: UserProfileInterest,
+  t: (key: string) => string,
+) {
   const code = (item.InterestTypeCode ?? '').toLowerCase();
   return {
     key: code || String(item.Id),
-    label: item.InterestTypeName || item.InterestTypeCode || 'Interest',
+    label: interestTypeLabel(t, item),
     value: item.Value,
     emoji: INTEREST_EMOJI[code] ?? '✨',
   };
@@ -298,8 +306,8 @@ export function UserProfileScreen({ navigation, route }: Props) {
   }, [profile?.StatusText, profile?.statusText, profile?.StatusExpiresAt, profile?.statusExpiresAt]);
 
   const interests = useMemo(
-    () => (profile?.Interests ?? []).map(mapInterest),
-    [profile],
+    () => (profile?.Interests ?? []).map(item => mapInterest(item, t)),
+    [profile, t],
   );
 
   const hasStory = (stories?.Stories.length ?? 0) > 0;

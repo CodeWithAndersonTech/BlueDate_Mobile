@@ -4,7 +4,6 @@ import {
   Alert,
   Image,
   Pressable,
-  RefreshControl,
   ScrollView,
   StatusBar,
   StyleSheet,
@@ -37,9 +36,12 @@ import {
   Typography,
   useScreenTopPad,
 } from '../../components';
-import { useLocale, userFacingError } from '../../i18n';
+import { interestTypeLabel, useLocale, userFacingError } from '../../i18n';
 import { useAuth } from '../../navigation/AuthContext';
-import { useTabBarClearance } from '../../navigation/tabBarLayout';
+import {
+  useDeviceSafeInsets,
+  useTabBarClearance,
+} from '../../navigation/tabBarLayout';
 import { ProfileStackParamList } from '../../navigation/types';
 import {
   assetFromPickerResponse,
@@ -107,6 +109,7 @@ export function ProfileScreen({ navigation }: Props) {
   const { t } = useLocale();
   const { width: windowWidth, height: windowHeight } = useWindowDimensions();
   const topPad = useScreenTopPad();
+  const insets = useDeviceSafeInsets();
   const tabClearance = useTabBarClearance(24);
   // Width-scaled Figma cover (~56% of a short 852pt frame) eats a Pro Max
   // and leaves Hakkımda under the tab bar with nothing to scroll.
@@ -121,14 +124,12 @@ export function ProfileScreen({ navigation }: Props) {
   const [photos, setPhotos] = useState<ProfilePhoto[]>([]);
   const [avatarUri, setAvatarUri] = useState<string | undefined>();
   const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [verifyTipOpen, setVerifyTipOpen] = useState(false);
   const [statusModalOpen, setStatusModalOpen] = useState(false);
   const [statusSaving, setStatusSaving] = useState(false);
   const [avatarViewerOpen, setAvatarViewerOpen] = useState(false);
   const [viewerStartIndex, setViewerStartIndex] = useState(0);
-  const [moreOpen, setMoreOpen] = useState(false);
   const [coverIndex, setCoverIndex] = useState(0);
   useHideTabBar(avatarViewerOpen || statusModalOpen);
   const statusText = (() => {
@@ -161,9 +162,7 @@ export function ProfileScreen({ navigation }: Props) {
         return;
       }
       // Keep existing content on re-focus; skeleton only when we have nothing yet.
-      if (isRefresh) {
-        setRefreshing(true);
-      } else if (!profileRef.current) {
+      if (!isRefresh && !profileRef.current) {
         setLoading(true);
       }
       setError(null);
@@ -216,7 +215,6 @@ export function ProfileScreen({ navigation }: Props) {
         }
       } finally {
         setLoading(false);
-        setRefreshing(false);
       }
     },
     [userId, accessToken],
@@ -381,7 +379,6 @@ export function ProfileScreen({ navigation }: Props) {
         }
       }
       void Image.prefetch(list[start]?.uri ?? startUri ?? '').catch(() => undefined);
-      setMoreOpen(false);
       setViewerStartIndex(start);
       afterUiSettled(() => setAvatarViewerOpen(true));
     },
@@ -400,16 +397,7 @@ export function ProfileScreen({ navigation }: Props) {
     openPhotoViewer(coverPhoto?.uri);
   };
 
-  const goPreview = () => {
-    setMoreOpen(false);
-    if (!userId) return;
-    afterUiSettled(() => {
-      navigation.navigate('UserProfile', { userId: String(userId) });
-    });
-  };
-
   const goSettings = () => {
-    setMoreOpen(false);
     afterUiSettled(() => navigation.navigate('Settings'));
   };
 
@@ -417,7 +405,6 @@ export function ProfileScreen({ navigation }: Props) {
     focus?: 'bio' | 'interests';
     interestTypeId?: number;
   }) => {
-    setMoreOpen(false);
     afterUiSettled(() => {
       if (params) {
         navigation.navigate('EditProfile', params);
@@ -469,38 +456,6 @@ export function ProfileScreen({ navigation }: Props) {
           />
         </React.Suspense>
       ) : null}
-      {moreOpen ? (
-        <View pointerEvents="box-none" style={styles.moreHost}>
-          <Pressable
-            style={StyleSheet.absoluteFill}
-            onPress={() => setMoreOpen(false)}
-            accessibilityRole="button"
-            accessibilityLabel={t('common.close')}
-          />
-          <View
-            style={[
-              styles.moreMenu,
-              {
-                top: topPad + 44,
-                backgroundColor: theme.colors.card,
-                borderColor: theme.colors.border,
-              },
-            ]}>
-            <Pressable
-              onPress={goPreview}
-              style={styles.moreRow}
-              accessibilityRole="button">
-              <Typography variant="callout">{t('profile.preview')}</Typography>
-            </Pressable>
-            <Pressable
-              onPress={goSettings}
-              style={styles.moreRow}
-              accessibilityRole="button">
-              <Typography variant="callout">{t('settings.title')}</Typography>
-            </Pressable>
-          </View>
-        </View>
-      ) : null}
     </View>
   );
 
@@ -551,7 +506,7 @@ export function ProfileScreen({ navigation }: Props) {
           const value = existing?.Value?.trim() ?? '';
           return {
             key: String(type.Id),
-            label: type.Name,
+            label: interestTypeLabel(t, type),
             value,
             emoji: interestEmoji(type),
             typeId: type.Id,
@@ -559,7 +514,7 @@ export function ProfileScreen({ navigation }: Props) {
         })
       : interests.map(item => ({
           key: String(item.Id),
-          label: item.InterestTypeName || t('profile.interests'),
+          label: interestTypeLabel(t, item) || t('profile.interests'),
           value: item.Value?.trim() ?? '',
           emoji: '✨',
           typeId:
@@ -571,18 +526,19 @@ export function ProfileScreen({ navigation }: Props) {
       <TabScreenScrollView
         bottomSpacing={32}
         alwaysBounceVertical
+        contentInsetAdjustmentBehavior="never"
+        automaticallyAdjustContentInsets={false}
+        automaticallyAdjustsScrollIndicatorInsets={false}
         onScrollBeginDrag={closeVerifyTip}
         scrollEventThrottle={16}
         keyboardShouldPersistTaps="handled"
-        contentContainerStyle={styles.scrollContent}
-        refreshControl={
-          <RefreshControl
-            refreshing={refreshing}
-            onRefresh={() => loadProfile(true)}
-            tintColor={theme.colors.plusCta}
-          />
-        }>
-        <View style={[styles.coverWrap, { height: coverH }]}>
+        style={{ backgroundColor: theme.colors.background }}
+        contentContainerStyle={styles.scrollContent}>
+        <View
+          style={[
+            styles.coverWrap,
+            { height: coverH, backgroundColor: theme.colors.background },
+          ]}>
           {coverPhoto ? (
             <Pressable
               onPress={openViewer}
@@ -606,17 +562,10 @@ export function ProfileScreen({ navigation }: Props) {
             />
           )}
           <View style={[styles.coverShade, { height: avatarSize }]} />
-          <View style={[styles.coverBar, { paddingTop: topPad }]}>
+          <View style={[styles.coverBar, { paddingTop: insets.top }]}>
             <View style={styles.coverBarSide} />
-            {coverPhotos.length > 1 ? (
-              <View
-                style={[styles.pager, { backgroundColor: theme.colors.white }]}
-              />
-            ) : (
-              <View style={styles.coverBarSide} />
-            )}
             <Pressable
-              onPress={() => setMoreOpen(open => !open)}
+              onPress={goSettings}
               hitSlop={10}
               accessibilityRole="button"
               accessibilityLabel={t('settings.title')}
@@ -831,9 +780,11 @@ const styles = StyleSheet.create({
   coverWrap: {
     width: '100%',
     overflow: 'hidden',
-    backgroundColor: '#1c1c1e',
   },
-  cover: { width: '100%', height: '100%' },
+  cover: {
+    width: '100%',
+    height: '100%',
+  },
   coverShade: {
     position: 'absolute',
     left: 0,
@@ -857,12 +808,6 @@ const styles = StyleSheet.create({
     height: 36,
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  pager: {
-    width: 48,
-    height: 6,
-    borderRadius: 3,
-    opacity: 0.85,
   },
   coverArrow: {
     position: 'absolute',
@@ -928,23 +873,6 @@ const styles = StyleSheet.create({
   favCopy: { flex: 1, minWidth: 0, gap: 0 },
   about: { gap: 10, paddingHorizontal: 0, minHeight: 94 },
   aboutBody: { lineHeight: 22 },
-  moreHost: {
-    ...StyleSheet.absoluteFill,
-    zIndex: 30,
-  },
-  moreMenu: {
-    position: 'absolute',
-    right: 12,
-    minWidth: 180,
-    borderRadius: 14,
-    borderWidth: StyleSheet.hairlineWidth,
-    paddingVertical: 6,
-    overflow: 'hidden',
-  },
-  moreRow: {
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-  },
 });
 
 

@@ -46,6 +46,9 @@ export interface ThemeColors {
   plusCta: string;
   plusSoft: string;
   plusIconSoft: string;
+  /** Figma login/register field fill (#FDF8F4 light). */
+  authField: string;
+  authFieldBorder: string;
   overlay: string;
   backdrop: string;
   skeleton: string;
@@ -168,6 +171,8 @@ export function buildTheme(mode: ColorMode, accentKey: AccentKey): Theme {
     plusCta: premium.cta,
     plusSoft: premium.plusSoft,
     plusIconSoft: premium.plusIconSoft,
+    authField: mode === 'light' ? '#FDF8F4' : n.surfaceAlt,
+    authFieldBorder: mode === 'light' ? '#F4EEE5' : n.border,
     tabIndicator: premium.tabIndicator,
     white: common.white,
     black: common.black,

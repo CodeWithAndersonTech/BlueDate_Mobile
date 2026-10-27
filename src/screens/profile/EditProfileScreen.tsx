@@ -55,7 +55,7 @@ import {
   useScreenTopPad,
 } from '../../components';
 import { useKeyboardHeight } from '../../hooks';
-import { useLocale, userFacingError } from '../../i18n';
+import { interestTypeLabel, useLocale, userFacingError } from '../../i18n';
 import { useAuth } from '../../navigation/AuthContext';
 import { useLockTabSwipe } from '../../navigation/useLockTabSwipe';
 import { ProfileStackParamList } from '../../navigation/types';
@@ -1129,7 +1129,7 @@ export function EditProfileScreen({ navigation, route }: Props) {
                     <FavoriteRow
                       key={type.Id}
                       emoji={interestEmoji(type)}
-                      title={type.Name || type.Code}
+                      title={interestTypeLabel(t, type)}
                       value={value}
                       addLabel={t('edit.add_interest')}
                       changeLabel={t('edit.change')}
@@ -1229,7 +1229,7 @@ export function EditProfileScreen({ navigation, route }: Props) {
       <InterestSheet
         visible={sheetType != null}
         emoji={sheetType ? interestEmoji(sheetType) : '✨'}
-        title={sheetType?.Name || sheetType?.Code || ''}
+        title={sheetType ? interestTypeLabel(t, sheetType) : ''}
         value={sheetValue}
         onChange={setSheetValue}
         onClose={closeInterestSheet}

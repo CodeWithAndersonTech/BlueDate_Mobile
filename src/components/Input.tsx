@@ -21,6 +21,8 @@ export interface InputProps extends Omit<TextInputProps, 'style'> {
   error?: string;
   hint?: string;
   containerStyle?: StyleProp<ViewStyle>;
+  /** Figma login/register cream pill (no floating label). */
+  pill?: boolean;
 }
 
 export const Input = forwardRef<TextInput, InputProps>(function Input(
@@ -31,6 +33,7 @@ export const Input = forwardRef<TextInput, InputProps>(function Input(
     error,
     hint,
     containerStyle,
+    pill = false,
     onFocus,
     onBlur,
     blurOnSubmit,
@@ -47,7 +50,9 @@ export const Input = forwardRef<TextInput, InputProps>(function Input(
     ? theme.colors.danger
     : focused
     ? theme.colors.plusCta
-    : theme.colors.border;
+    : pill
+      ? theme.colors.authFieldBorder
+      : theme.colors.border;
 
   const handleFocus = useCallback(
     (e: Parameters<NonNullable<TextInputProps['onFocus']>>[0]) => {
@@ -67,7 +72,7 @@ export const Input = forwardRef<TextInput, InputProps>(function Input(
 
   return (
     <View style={[styles.wrapper, containerStyle]}>
-      {label ? (
+      {label && !pill ? (
         <Typography
           variant="caption"
           color="textSecondary"
@@ -79,11 +84,13 @@ export const Input = forwardRef<TextInput, InputProps>(function Input(
         style={[
           styles.field,
           {
-            backgroundColor: theme.colors.surfaceAlt,
+            backgroundColor: pill
+              ? theme.colors.authField
+              : theme.colors.surfaceAlt,
             borderColor,
-            borderRadius: recipe.radius,
+            borderRadius: pill ? 15 : recipe.radius,
             paddingHorizontal: recipe.paddingH,
-            height: recipe.height,
+            height: pill ? 53 : recipe.height,
             borderWidth: recipe.borderWidth,
           },
         ]}>

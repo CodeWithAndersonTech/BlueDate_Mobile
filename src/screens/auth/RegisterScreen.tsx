@@ -9,15 +9,15 @@ import {
   View,
 } from 'react-native';
 import {
+  AuthHero,
+  AuthPrimaryButton,
   BirthDatePicker,
-  Button,
   Checkbox,
   Chip,
   ConfirmPasswordInput,
   EmailInput,
   FigmaButton,
   FirstNameInput,
-  Header,
   LanguageFlagButton,
   LastNameInput,
   PasswordInput,
@@ -172,11 +172,8 @@ export function RegisterScreen({ navigation }: Props) {
   };
 
   return (
-    <Screen edges={['top']}>
-      <View style={styles.topBar}>
-        <View style={styles.headerWrap}>
-          <Header title={t('auth.register')} />
-        </View>
+    <Screen padded={false} edges={['top']}>
+      <View pointerEvents="box-none" style={styles.flagAnchor}>
         <LanguageFlagButton
           languages={languages}
           selectedCode={languageCode}
@@ -192,16 +189,61 @@ export function RegisterScreen({ navigation }: Props) {
         keyboardShouldPersistTaps="handled"
         keyboardDismissMode="interactive"
         automaticallyAdjustKeyboardInsets>
-        <View style={styles.intro}>
-          <Typography variant="h1">{t('auth.register_title')}</Typography>
-          <Typography variant="body" color="textMuted">
-            {t('auth.register_subtitle')}
-          </Typography>
-        </View>
+        <AuthHero
+          line1={t('auth.hero_register_line1')}
+          line2={t('auth.hero_register_line2')}
+          accent={t('auth.hero_register_accent')}
+          subtitle={t('auth.hero_register_sub')}
+        />
 
         <View style={styles.form}>
+          <EmailInput
+            ref={emailRef}
+            pill
+            label=""
+            placeholder={t('auth.email')}
+            value={form.email}
+            onChangeText={text => update('email')(text.trim())}
+            onSubmitEditing={() => passwordRef.current?.focus()}
+            error={emailError}
+          />
+          <PasswordInput
+            ref={passwordRef}
+            pill
+            label=""
+            placeholder={t('auth.password')}
+            value={form.password}
+            onChangeText={update('password')}
+            onSubmitEditing={() => confirmRef.current?.focus()}
+            error={
+              submitted && form.password.length > 0 && form.password.length < 8
+                ? t('auth.password_min')
+                : undefined
+            }
+          />
+          <ConfirmPasswordInput
+            ref={confirmRef}
+            pill
+            label=""
+            placeholder={t('auth.password')}
+            value={form.confirmPassword}
+            onChangeText={update('confirmPassword')}
+            error={
+              passwordMismatch
+                ? t('auth.password_mismatch')
+                : submitted && form.confirmPassword.length === 0
+                ? t('auth.confirm_required')
+                : undefined
+            }
+          />
+          <Typography variant="caption" color="textMuted">
+            {t('auth.password_rules')}
+          </Typography>
+
           <View style={styles.nameRow}>
             <FirstNameInput
+              pill
+              label=""
               containerStyle={styles.nameField}
               value={form.firstName}
               onChangeText={update('firstName')}
@@ -214,6 +256,8 @@ export function RegisterScreen({ navigation }: Props) {
             />
             <LastNameInput
               ref={lastNameRef}
+              pill
+              label=""
               containerStyle={styles.nameField}
               value={form.lastName}
               onChangeText={update('lastName')}
@@ -228,24 +272,17 @@ export function RegisterScreen({ navigation }: Props) {
 
           <UsernameInput
             ref={usernameRef}
+            pill
+            label=""
             value={form.username}
             onChangeText={text =>
               update('username')(text.replace(/\s/g, '').toLowerCase())
             }
-            onSubmitEditing={() => emailRef.current?.focus()}
             error={
               submitted && !usernameValid
                 ? t('auth.username_required')
                 : undefined
             }
-          />
-
-          <EmailInput
-            ref={emailRef}
-            value={form.email}
-            onChangeText={text => update('email')(text.trim())}
-            onSubmitEditing={() => passwordRef.current?.focus()}
-            error={emailError}
           />
 
           <BirthDatePicker
@@ -280,75 +317,41 @@ export function RegisterScreen({ navigation }: Props) {
             )}
           </View>
 
-          <PasswordInput
-            ref={passwordRef}
-            value={form.password}
-            onChangeText={update('password')}
-            onSubmitEditing={() => confirmRef.current?.focus()}
-            error={
-              submitted && form.password.length > 0 && form.password.length < 8
-                ? t('auth.password_min')
-                : undefined
-            }
-          />
-
-          <ConfirmPasswordInput
-            ref={confirmRef}
-            value={form.confirmPassword}
-            onChangeText={update('confirmPassword')}
-            blurOnSubmit
-            onSubmitEditing={onRegister}
-            error={
-              passwordMismatch
-                ? t('auth.password_mismatch')
-                : submitted && form.confirmPassword.length === 0
-                ? t('auth.confirm_required')
-                : undefined
-            }
-          />
-
           <Pressable style={styles.terms} onPress={() => setAccepted(a => !a)}>
             <Checkbox checked={accepted} onChange={setAccepted} />
             <Typography
               variant="caption"
               color="textSecondary"
               style={styles.termsText}>
-              <Typography variant="caption" color="textSecondary">
-                {t('auth.terms_prefix')}{' '}
-              </Typography>
-              <Typography variant="caption" tint={theme.colors.primary}>
+              <Typography variant="caption" tint={theme.colors.plusCta}>
                 {t('auth.terms_of_use')}
               </Typography>
               <Typography variant="caption" color="textSecondary">
                 {' '}
                 {t('auth.and')}{' '}
               </Typography>
-              <Typography variant="caption" tint={theme.colors.primary}>
+              <Typography variant="caption" tint={theme.colors.plusCta}>
                 {t('auth.privacy_policy')}
               </Typography>
               <Typography variant="caption" color="textSecondary">
-                {t('auth.terms_suffix')}
+                {t('auth.terms_suffix_kvkk')}
               </Typography>
             </Typography>
           </Pressable>
 
-          <View style={styles.cta}>
-            <Button
-              label={t('auth.register')}
-              size="lg"
-              rightIcon="check"
-              loading={loading}
-              onPress={onRegister}
-            />
-          </View>
+          <AuthPrimaryButton
+            label={t('auth.register')}
+            loading={loading}
+            onPress={onRegister}
+          />
         </View>
 
         <View style={styles.footer}>
-          <Typography variant="body" color="textMuted">
-            {t('auth.already_have_account')}{' '}
+          <Typography variant="caption" weight="500" color="textMuted">
+            {t('auth.already_have_account')}
           </Typography>
           <Pressable hitSlop={8} onPress={() => navigation.navigate('Login')}>
-            <Typography variant="bodyStrong" tint={theme.colors.primary}>
+            <Typography variant="caption" weight="700" tint={theme.colors.plusCta}>
               {t('auth.login')}
             </Typography>
           </Pressable>
@@ -363,7 +366,7 @@ export function RegisterScreen({ navigation }: Props) {
         </Typography>
         <FigmaButton
           label={t('common.close')}
-          tone="primary"
+          tone="solid"
           size="md"
           fullWidth
           onPress={() => setMissingMessage(null)}
@@ -375,20 +378,21 @@ export function RegisterScreen({ navigation }: Props) {
 
 const styles = StyleSheet.create({
   flex: { flex: 1 },
-  topBar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingRight: 16,
+  flagAnchor: {
+    position: 'absolute',
+    top: 8,
+    right: 16,
+    zIndex: 20,
+    elevation: 20,
   },
-  headerWrap: { flex: 1 },
   content: {
     flexGrow: 1,
-    paddingHorizontal: 20,
+    paddingHorizontal: 10,
+    paddingTop: 8,
     paddingBottom: 40,
-    gap: 20,
+    gap: 10,
   },
-  intro: { gap: 6, marginTop: 8 },
-  form: { gap: 14 },
+  form: { gap: 10 },
   nameRow: { flexDirection: 'row', gap: 12 },
   nameField: { flex: 1 },
   genderBlock: { gap: 8 },

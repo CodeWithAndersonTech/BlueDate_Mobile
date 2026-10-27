@@ -34,6 +34,7 @@ export interface PremiumPlan {
   periodKey: string;
   perMonthKey?: string;
   highlightKey?: string;
+  blurbKey?: string;
   popular?: boolean;
   taglineKey?: string;
   perkIds: string[];
@@ -61,15 +62,17 @@ export const premiumPlans: PremiumPlan[] = [
     periodKey: 'premium.plan.period',
     taglineKey: 'premium.plan.standard.tagline',
     highlightKey: 'premium.plan.standard.highlight',
+    blurbKey: 'premium.plan.standard.blurb',
     perkIds: ['visitors', 'treats', 'featured'],
   },
   {
     id: 'plus',
     nameKey: 'premium.plan.plus.name',
-    price: '₺249',
+    price: '₺349',
     periodKey: 'premium.plan.period',
     perMonthKey: 'premium.plan.plus.per_month',
     taglineKey: 'premium.plan.plus.tagline',
+    blurbKey: 'premium.plan.plus.blurb',
     popular: true,
     highlightKey: 'premium.plan.plus.highlight',
     perkIds: ['visitors', 'treats', 'featured', 'ghost'],

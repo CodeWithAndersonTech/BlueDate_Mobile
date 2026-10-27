@@ -1,31 +1,15 @@
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import {
-  Alert,
-  Pressable,
-  StatusBar,
-  StyleSheet,
-  Text,
-  View,
-} from 'react-native';
-import LinearGradient from 'react-native-linear-gradient';
-import Animated, {
-  Easing,
-  useAnimatedStyle,
-  useSharedValue,
-  withSpring,
-  withTiming,
-} from 'react-native-reanimated';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import React, { useCallback, useEffect, useState } from 'react';
+import { Alert, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { purchasePremium } from '../../api';
 import {
+  BottomActionDock,
   FigmaButton,
   FigmaIcon,
-  Icon,
-  IconName,
-  TabScreenScrollView,
-  useScreenTopPad,
+  Screen,
+  Typography,
 } from '../../components';
+import { FigmaSvgName } from '../../assets/figma/svgXml';
 import { publishPremium, usePremium } from '../../hooks/usePremium';
 import { useLocale, userFacingError } from '../../i18n';
 import { useAuth } from '../../navigation/AuthContext';
@@ -40,66 +24,75 @@ import {
   IapUnavailableError,
 } from '../../services/iap';
 import { useTheme } from '../../theme';
-import { premiumPerks, premiumPlans } from '../../utils';
-import { PremiumSkeleton } from './PremiumSkeleton';
-
-const LOAD_MS = 650;
-// Approximate rendered height of the sticky footer card, used to pad the
-// scroll content so the last perk clears the footer.
-const FOOTER_HEIGHT = 160;
-const FOOTER_GAP = 12;
+import { premiumPlans } from '../../utils';
 
 const PRODUCT_FOR_PLAN: Record<string, string> = {
   standard: IAP_PRODUCTS.standard,
   plus: IAP_PRODUCTS.plus,
 };
 
+const TABLE_ROWS: {
+  id: string;
+  icon: FigmaSvgName;
+  titleKey: string;
+  shortKey: string;
+  inPlus: boolean;
+}[] = [
+  {
+    id: 'visitors',
+    icon: 'people',
+    titleKey: 'premium.perk.visitors.title',
+    shortKey: 'premium.perk.visitors.short',
+    inPlus: true,
+  },
+  {
+    id: 'treats',
+    icon: 'gift',
+    titleKey: 'premium.perk.treats.title',
+    shortKey: 'premium.perk.treats.short',
+    inPlus: true,
+  },
+  {
+    id: 'featured',
+    icon: 'heart',
+    titleKey: 'premium.perk.featured.title',
+    shortKey: 'premium.perk.featured.short',
+    inPlus: true,
+  },
+  {
+    id: 'ghost',
+    icon: 'eyeSlash',
+    titleKey: 'premium.perk.ghost.title',
+    shortKey: 'premium.perk.ghost.short',
+    inPlus: false,
+  },
+];
+
 type Props = NativeStackScreenProps<AppStackParamList, 'Premium'>;
 
 export function PremiumScreen({ navigation }: Props) {
   const theme = useTheme();
-  const gold = theme.gradients.premium;
-  const onGold = theme.colors.onPremium;
   const { t } = useLocale();
-  const insets = useSafeAreaInsets();
-  const topPad = useScreenTopPad();
-  const tabBarOffset = Math.max(insets.bottom, 12) + FOOTER_GAP;
   const { userId } = useAuth();
   const { premium, isPremium, planCode } = usePremium();
   const [prices, setPrices] = useState<Record<string, string>>({});
   const [buying, setBuying] = useState(false);
   const [restoring, setRestoring] = useState(false);
-  const [loading, setLoading] = useState(true);
   const [plan, setPlan] = useState(
     premiumPlans.find(p => p.popular)?.id ?? premiumPlans[0].id,
   );
   const active = premiumPlans.find(p => p.id === plan) ?? premiumPlans[0];
-  const contentOpacity = useSharedValue(0);
-
-  const scale = useSharedValue(1);
-  const ctaStyle = useAnimatedStyle(() => ({
-    transform: [{ scale: scale.value }],
-  }));
-  const contentFadeStyle = useAnimatedStyle(() => ({
-    opacity: contentOpacity.value,
-  }));
-
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      setLoading(false);
-      contentOpacity.value = withTiming(1, {
-        duration: 280,
-        easing: Easing.out(Easing.quad),
-      });
-    }, LOAD_MS);
-    return () => clearTimeout(timer);
-  }, [contentOpacity]);
+  const highlightPlus = plan === 'plus';
 
   useEffect(() => {
     let cancelled = false;
-    getDisplayPrices([IAP_PRODUCTS.standard, IAP_PRODUCTS.plus], 'subs').then(map => {
-      if (!cancelled) setPrices(map);
-    });
+    getDisplayPrices([IAP_PRODUCTS.standard, IAP_PRODUCTS.plus], 'subs').then(
+      map => {
+        if (!cancelled) {
+          setPrices(map);
+        }
+      },
+    );
     return () => {
       cancelled = true;
     };
@@ -108,14 +101,23 @@ export function PremiumScreen({ navigation }: Props) {
   const priceFor = (planId: string, fallback: string) =>
     prices[PRODUCT_FOR_PLAN[planId]] ?? fallback;
 
-  const currentPlan = isPremium ? (planCode ?? 'standard').toLowerCase() : null;
-  const ownsActive = currentPlan === active.id || (currentPlan === 'plus' && active.id === 'standard');
+  const currentPlan = isPremium
+    ? (planCode ?? 'standard').toLowerCase()
+    : null;
+  const ownsActive =
+    currentPlan === active.id ||
+    (currentPlan === 'plus' && active.id === 'standard');
 
   const onBuy = useCallback(async () => {
-    if (!userId || buying) return;
+    if (!userId || buying) {
+      return;
+    }
     setBuying(true);
     try {
-      const { payment, purchase } = await buyProduct(PRODUCT_FOR_PLAN[active.id], 'subs');
+      const { payment, purchase } = await buyProduct(
+        PRODUCT_FOR_PLAN[active.id],
+        'subs',
+      );
       const next = await purchasePremium(userId, payment);
       await completePurchase(purchase, false);
       publishPremium(next);
@@ -123,7 +125,9 @@ export function PremiumScreen({ navigation }: Props) {
         { text: t('common.ok'), onPress: () => navigation.goBack() },
       ]);
     } catch (error) {
-      if (error instanceof IapCancelledError) return;
+      if (error instanceof IapCancelledError) {
+        return;
+      }
       Alert.alert(
         t('premium.title'),
         error instanceof IapUnavailableError
@@ -136,12 +140,19 @@ export function PremiumScreen({ navigation }: Props) {
   }, [userId, buying, active.id, navigation, t]);
 
   const onRestore = useCallback(async () => {
-    if (!userId || restoring) return;
+    if (!userId || restoring) {
+      return;
+    }
     setRestoring(true);
     try {
       const owned = await getOwnedSubscriptions();
-      // Plus first so a stacked Standard receipt never downgrades.
-      owned.sort((a, b) => (a.ProductId === IAP_PRODUCTS.plus ? -1 : b.ProductId === IAP_PRODUCTS.plus ? 1 : 0));
+      owned.sort((a, b) =>
+        a.ProductId === IAP_PRODUCTS.plus
+          ? -1
+          : b.ProductId === IAP_PRODUCTS.plus
+            ? 1
+            : 0,
+      );
       let restored = false;
       for (const payment of owned) {
         try {
@@ -152,46 +163,21 @@ export function PremiumScreen({ navigation }: Props) {
           /* try the next receipt */
         }
       }
-      Alert.alert(t('premium.title'), restored ? t('premium.restored') : t('premium.restore_none'));
+      Alert.alert(
+        t('premium.title'),
+        restored ? t('premium.restored') : t('premium.restore_none'),
+      );
     } finally {
       setRestoring(false);
     }
   }, [userId, restoring, t]);
 
-  const visiblePerks = useMemo(() => {
-    const ids = new Set(active.perkIds);
-    return premiumPerks.filter(perk => ids.has(perk.id));
-  }, [active.perkIds]);
-
-  if (loading) {
-    return (
-      <View
-        style={[
-          styles.root,
-          { backgroundColor: theme.colors.background, paddingTop: topPad },
-        ]}>
-        <StatusBar
-          barStyle={theme.isDark ? 'light-content' : 'dark-content'}
-          backgroundColor="transparent"
-          translucent
-        />
-        <PremiumSkeleton />
-      </View>
-    );
-  }
+  const openLegal = (titleKey: string, bodyKey: string) => {
+    Alert.alert(t(titleKey), t(bodyKey));
+  };
 
   return (
-    <View
-      style={[
-        styles.root,
-        { backgroundColor: theme.colors.background, paddingTop: topPad },
-      ]}>
-      <StatusBar
-        barStyle={theme.isDark ? 'light-content' : 'dark-content'}
-        backgroundColor="transparent"
-        translucent
-      />
-
+    <Screen padded={false} edges={['top']}>
       <View style={styles.topBar}>
         <Pressable
           onPress={() => navigation.goBack()}
@@ -203,320 +189,276 @@ export function PremiumScreen({ navigation }: Props) {
           </View>
         </Pressable>
         <View style={styles.topBarSpacer} />
-        <Pressable
-          hitSlop={8}
-          accessibilityRole="button"
-          accessibilityLabel={t('premium.title')}>
+        <View style={styles.dots}>
           <FigmaIcon name="moreDots" size={20} color={theme.colors.text} />
-        </Pressable>
+        </View>
       </View>
-      <Animated.View style={[styles.flex, contentFadeStyle]}>
-        <TabScreenScrollView
-          style={styles.flex}
-          bottomSpacing={FOOTER_HEIGHT + FOOTER_GAP + 12}
-          contentContainerStyle={styles.content}>
-          <View style={[styles.hero, theme.shadows.md]}>
-            <LinearGradient colors={gold} style={StyleSheet.absoluteFill} />
-            <View style={styles.heroInner}>
-              <View style={styles.crownWrap}>
-                <FigmaIcon name="crown" size={28} color={onGold} />
-              </View>
-              <Text style={[styles.heroTitle, { color: onGold }]}>
-                {t('premium.hero_title')}
-              </Text>
-              <Text style={[styles.heroTitle, { color: onGold }]}>
-                {t('premium.hero_subtitle')}
-              </Text>
-              <Text style={styles.heroDesc}>{t('premium.subtitle')}</Text>
-              {premium?.isPremium ? (
-                <View style={styles.trialPill}>
-                  <FigmaIcon name="tickCircle" size={12} color={onGold} />
-                  <Text style={[styles.trialText, { color: onGold }]}>
-                    {(currentPlan === 'plus'
-                      ? t('premium.current_plus')
-                      : t('premium.current_standard')
-                    ).replace('{days}', String(premium.daysRemaining ?? 0))}
-                  </Text>
-                </View>
-              ) : null}
-            </View>
-          </View>
 
-          <View style={styles.section}>
-            <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>
-              {t('premium.choose_plan')}
-            </Text>
-            <View style={styles.plans}>
-              {premiumPlans.map(p => {
-                const selected = p.id === plan;
-                return (
-                  <Pressable
-                    key={p.id}
-                    onPress={() => setPlan(p.id)}
-                    accessibilityRole="button"
-                    accessibilityState={{ selected }}
-                    style={[
-                      styles.plan,
-                      {
-                        backgroundColor: theme.colors.card,
-                        borderColor: selected
-                          ? theme.colors.plusCta
-                          : theme.colors.border,
-                        borderWidth: selected ? 2 : StyleSheet.hairlineWidth,
-                      },
-                      selected ? theme.shadows.sm : null,
-                    ]}>
-                    <View style={styles.planLeft}>
-                      <View
-                        style={[
-                          styles.radio,
-                          {
-                            borderColor: selected
-                              ? theme.colors.plusCta
-                              : theme.colors.borderStrong,
-                            backgroundColor: selected
-                              ? theme.colors.plusCta
-                              : 'transparent',
-                          },
-                        ]}>
-                        {selected ? (
-                          <Icon
-                            name="check"
-                            size={12}
-                            color={theme.colors.onPrimary}
-                            strokeWidth={3}
-                          />
-                        ) : null}
-                      </View>
-                      <View style={styles.planCopy}>
-                        <View style={styles.planNameRow}>
-                          <Text
-                            style={[
-                              styles.planName,
-                              { color: theme.colors.text },
-                            ]}>
-                            {t(p.nameKey)}
-                          </Text>
-                          {p.taglineKey ? (
-                            <View
-                              style={[
-                                styles.tag,
-                                {
-                                  backgroundColor: selected
-                                    ? theme.colors.plusSoft
-                                    : theme.colors.surfaceAlt,
-                                },
-                              ]}>
-                              <Text
-                                style={[
-                                  styles.tagText,
-                                  {
-                                    color: selected
-                                      ? theme.colors.plusCta
-                                      : theme.colors.textMuted,
-                                  },
-                                ]}>
-                                {t(p.taglineKey)}
-                              </Text>
-                            </View>
-                          ) : null}
-                          {p.popular ? (
-                            <View
-                              style={[
-                                styles.pop,
-                                { backgroundColor: theme.colors.plusSoft },
-                              ]}>
-                              <Text
-                                style={[
-                                  styles.popText,
-                                  { color: theme.colors.plusCta },
-                                ]}>
-                                {t('premium.popular')}
-                              </Text>
-                            </View>
-                          ) : null}
-                        </View>
-                        <Text
-                          style={[
-                            styles.planMeta,
-                            { color: theme.colors.textMuted },
-                          ]}>
-                          {p.perMonthKey
-                            ? t(p.perMonthKey)
-                            : p.highlightKey
-                              ? t(p.highlightKey)
-                              : t('premium.renews')}
-                        </Text>
-                      </View>
-                    </View>
-                    <View style={styles.planRight}>
-                      <Text
-                        style={[styles.planPrice, { color: theme.colors.text }]}>
-                        {priceFor(p.id, p.price)}
-                      </Text>
-                      <Text
-                        style={[
-                          styles.planPeriod,
-                          { color: theme.colors.textMuted },
-                        ]}>
-                        {t(p.periodKey)}
-                      </Text>
-                    </View>
-                  </Pressable>
-                );
-              })}
-            </View>
-          </View>
-
-          <View style={styles.section}>
-            <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>
-              {active.id === 'plus'
-                ? t('premium.features_plus')
-                : t('premium.features_standard')}
-            </Text>
-            <View style={styles.perks}>
-              {visiblePerks.map(perk => (
-                <View
-                  key={perk.id}
-                  style={[
-                    styles.perk,
-                    {
-                      backgroundColor: theme.colors.card,
-                      borderColor: theme.colors.border,
-                    },
-                    theme.shadows.sm,
-                  ]}>
-                  <View
-                    style={[
-                      styles.perkIcon,
-                      {
-                        backgroundColor: perk.plusOnly
-                          ? theme.colors.premiumSoft
-                          : theme.colors.plusSoft,
-                      },
-                    ]}>
-                    <Icon
-                      name={perk.icon as IconName}
-                      size={18}
-                      color={perk.plusOnly ? onGold : theme.colors.plusCta}
-                    />
-                  </View>
-                  <View style={styles.perkBody}>
-                    <View style={styles.perkTitleRow}>
-                      <Text
-                        style={[
-                          styles.perkTitle,
-                          { color: theme.colors.text },
-                        ]}>
-                        {t(perk.titleKey)}
-                      </Text>
-                      {perk.plusOnly ? (
-                        <View
-                          style={[
-                            styles.plusBadge,
-                            { backgroundColor: theme.colors.premiumSoft },
-                          ]}>
-                          <Text
-                            style={[
-                              styles.plusBadgeText,
-                              { color: onGold },
-                            ]}>
-                            {t('premium.plus_badge')}
-                          </Text>
-                        </View>
-                      ) : null}
-                    </View>
-                    <Text
-                      style={[
-                        styles.perkDesc,
-                        { color: theme.colors.textMuted },
-                      ]}>
-                      {t(perk.descriptionKey)}
-                    </Text>
-                  </View>
-                </View>
-              ))}
-            </View>
-          </View>
-        </TabScreenScrollView>
-
-        <View
-          pointerEvents="box-none"
-          style={[
-            styles.footerDock,
-            {
-              bottom: tabBarOffset,
-            },
-          ]}>
+      <ScrollView
+        style={styles.flex}
+        contentContainerStyle={styles.content}
+        showsVerticalScrollIndicator={false}>
+        <View style={styles.heroArt}>
           <View
-            style={[
-              styles.footer,
-              theme.shadows.md,
-              {
-                backgroundColor: theme.colors.card,
-                borderColor: theme.colors.border,
-              },
-            ]}>
-            <View style={styles.footerSummary}>
-              <Text
-                style={[styles.footerLabel, { color: theme.colors.textMuted }]}>
-                {t(active.nameKey)}
-                {active.taglineKey ? ` · ${t(active.taglineKey)}` : ''}
-              </Text>
-              <Text style={[styles.footerPrice, { color: theme.colors.text }]}>
-                {priceFor(active.id, active.price)}
-                <Text
-                  style={[
-                    styles.footerPeriod,
-                    { color: theme.colors.textMuted },
-                  ]}>
-                  {' '}
-                  {t(active.periodKey)}
-                </Text>
-              </Text>
-            </View>
-            <FigmaButton
-              label={
-                ownsActive
-                  ? t('premium.cta_owned')
-                  : active.id === 'plus'
-                    ? t('premium.cta_plus')
-                    : t('premium.cta')
-              }
-              size="md"
-              fullWidth
-              loading={buying}
-              disabled={ownsActive}
-              onPress={() => {
-                void onBuy();
-              }}
-            />
-            <FigmaButton
-              label={restoring ? t('premium.restoring') : t('premium.restore')}
-              tone="muted"
-              fullWidth
-              disabled={restoring}
-              onPress={() => {
-                void onRestore();
-              }}
-            />
+            style={[styles.blob, { backgroundColor: theme.colors.plusSoft }]}>
+            <FigmaIcon name="crown" size={72} color={theme.colors.plusCta} />
+          </View>
+          <View style={[styles.star, styles.starTL]}>
+            <FigmaIcon name="star" size={16} color={theme.colors.plusCta} />
+          </View>
+          <View style={[styles.star, styles.starTR]}>
+            <FigmaIcon name="star" size={16} color={theme.colors.plusCta} />
+          </View>
+          <View style={[styles.star, styles.starBR]}>
+            <FigmaIcon name="star" size={16} color={theme.colors.plusCta} />
           </View>
         </View>
-      </Animated.View>
-    </View>
+
+        <View style={styles.titles}>
+          <Typography variant="h2" align="center" weight="600">
+            {t('premium.hero_title')}
+          </Typography>
+          <Typography
+            variant="h2"
+            align="center"
+            weight="600"
+            tint={theme.colors.plusCta}>
+            {t('premium.hero_subtitle')}
+          </Typography>
+          <Typography variant="callout" align="center" color="textMuted">
+            {t('premium.hero_body')}
+          </Typography>
+          {premium?.isPremium ? (
+            <Typography variant="caption" align="center" tint={theme.colors.plusCta}>
+              {(currentPlan === 'plus'
+                ? t('premium.current_plus')
+                : t('premium.current_standard')
+              ).replace('{days}', String(premium.daysRemaining ?? 0))}
+            </Typography>
+          ) : null}
+        </View>
+
+        <View
+          style={[
+            styles.table,
+            {
+              backgroundColor: theme.colors.card,
+              borderColor: theme.colors.border,
+            },
+          ]}>
+          <View style={styles.tableHead}>
+            <View style={styles.featCol}>
+              <Typography variant="caption" color="textMuted">
+                {t('premium.features')}
+              </Typography>
+            </View>
+            <View style={styles.checkCol}>
+              <Typography
+                variant="caption"
+                weight="600"
+                align="center"
+                color={highlightPlus ? 'textMuted' : undefined}
+                tint={highlightPlus ? undefined : theme.colors.plusCta}>
+                {t('premium.col_plus')}
+              </Typography>
+            </View>
+            <View style={styles.checkCol}>
+              <Typography
+                variant="caption"
+                weight="600"
+                align="center"
+                tint={highlightPlus ? theme.colors.plusCta : undefined}
+                color={highlightPlus ? undefined : 'textMuted'}>
+                {t('premium.col_premium')}
+              </Typography>
+            </View>
+          </View>
+
+          {TABLE_ROWS.map((row, index) => (
+            <View
+              key={row.id}
+              style={[
+                styles.tableRow,
+                index < TABLE_ROWS.length - 1
+                  ? { borderBottomColor: theme.colors.border, borderBottomWidth: StyleSheet.hairlineWidth }
+                  : null,
+              ]}>
+              <View style={[styles.featCol, styles.featRow]}>
+                <FigmaIcon
+                  name={row.icon}
+                  size={18}
+                  color={theme.colors.plusCta}
+                />
+                <View style={styles.featCopy}>
+                  <Typography variant="caption" weight="600">
+                    {t(row.titleKey)}
+                  </Typography>
+                  <Typography variant="caption" color="textMuted">
+                    {t(row.shortKey)}
+                  </Typography>
+                </View>
+              </View>
+              <View style={styles.checkCol}>
+                {row.inPlus ? (
+                  <FigmaIcon
+                    name="tickCircle"
+                    size={22}
+                    color={theme.colors.plusCta}
+                  />
+                ) : (
+                  <View
+                    style={[
+                      styles.dash,
+                      { backgroundColor: theme.colors.borderStrong },
+                    ]}
+                  />
+                )}
+              </View>
+              <View
+                style={[
+                  styles.checkCol,
+                  highlightPlus
+                    ? { backgroundColor: theme.colors.plusSoft }
+                    : null,
+                ]}>
+                <FigmaIcon
+                  name="tickCircle"
+                  size={22}
+                  color={theme.colors.plusCta}
+                />
+              </View>
+            </View>
+          ))}
+        </View>
+
+        <View style={styles.planRow}>
+          {premiumPlans.map(p => {
+            const selected = p.id === plan;
+            return (
+              <Pressable
+                key={p.id}
+                onPress={() => setPlan(p.id)}
+                accessibilityRole="button"
+                accessibilityState={{ selected }}
+                style={[
+                  styles.planCard,
+                  {
+                    backgroundColor: theme.colors.card,
+                    borderColor: selected
+                      ? theme.colors.plusCta
+                      : theme.colors.border,
+                  },
+                ]}>
+                {p.popular ? (
+                  <View
+                    style={[
+                      styles.popular,
+                      { backgroundColor: theme.colors.plusCta },
+                    ]}>
+                    <Typography
+                      variant="caption"
+                      weight="700"
+                      tint={theme.colors.white}
+                      align="center">
+                      {t('premium.popular_short')}
+                    </Typography>
+                  </View>
+                ) : null}
+                <View
+                  style={[
+                    styles.planRadio,
+                    {
+                      borderColor: selected
+                        ? theme.colors.plusCta
+                        : theme.colors.borderStrong,
+                      backgroundColor: selected
+                        ? theme.colors.plusCta
+                        : 'transparent',
+                    },
+                  ]}
+                />
+                <Typography variant="title" align="center" weight="600">
+                  {t(p.nameKey)}
+                </Typography>
+                {p.taglineKey ? (
+                  <Typography variant="caption" align="center" color="textMuted">
+                    {t(p.taglineKey)}
+                  </Typography>
+                ) : null}
+                <Typography variant="h2" align="center" weight="700">
+                  {priceFor(p.id, p.price)}
+                </Typography>
+                <Typography variant="caption" align="center" color="textMuted">
+                  {t(p.periodKey)}
+                </Typography>
+                {p.blurbKey ? (
+                  <Typography variant="caption" align="center" color="textMuted">
+                    {t(p.blurbKey)}
+                  </Typography>
+                ) : null}
+              </Pressable>
+            );
+          })}
+        </View>
+      </ScrollView>
+
+      <BottomActionDock direction="column">
+        <FigmaButton
+          label={
+            ownsActive
+              ? t('premium.cta_owned')
+              : active.id === 'plus'
+                ? t('premium.cta_plus')
+                : t('premium.cta')
+          }
+          size="cta"
+          tone="solid"
+          fullWidth
+          loading={buying}
+          disabled={ownsActive}
+          onPress={() => {
+            void onBuy();
+          }}
+        />
+        <View style={styles.policy}>
+          <Pressable
+            hitSlop={6}
+            disabled={restoring}
+            onPress={() => {
+              void onRestore();
+            }}>
+            <Typography variant="caption" color="textMuted">
+              {restoring ? t('premium.restoring') : t('premium.restore')}
+            </Typography>
+          </Pressable>
+          <Pressable
+            hitSlop={6}
+            onPress={() => openLegal('premium.legal_kvkk', 'privacy.intro')}>
+            <Typography variant="caption" color="textMuted">
+              {t('premium.legal_kvkk')}
+            </Typography>
+          </Pressable>
+          <Pressable
+            hitSlop={6}
+            onPress={() => openLegal('auth.privacy_policy', 'privacy.intro')}>
+            <Typography variant="caption" color="textMuted">
+              {t('auth.privacy_policy')}
+            </Typography>
+          </Pressable>
+        </View>
+      </BottomActionDock>
+    </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1 },
   flex: { flex: 1 },
   topBar: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 10,
-    paddingTop: 0,
-    paddingBottom: 8,
     minHeight: 30,
+    paddingBottom: 8,
   },
   topBarSpacer: { flex: 1 },
   backIcon: {
@@ -526,155 +468,85 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  dots: { width: 24, height: 24, alignItems: 'center', justifyContent: 'center' },
   content: {
-    paddingHorizontal: 20,
-    paddingTop: 8,
-    gap: 28,
+    paddingHorizontal: 10,
+    paddingTop: 4,
+    paddingBottom: 20,
+    gap: 16,
   },
-  hero: { borderRadius: 24, overflow: 'hidden' },
-  heroInner: { padding: 24, gap: 10 },
-  crownWrap: {
-    width: 52,
-    height: 52,
-    borderRadius: 16,
-    backgroundColor: 'rgba(255,255,255,0.4)',
+  heroArt: {
+    alignSelf: 'center',
+    width: 200,
+    height: 166,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  blob: {
+    width: 130,
+    height: 130,
+    borderRadius: 65,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  star: { position: 'absolute' },
+  starTL: { top: 18, left: 28 },
+  starTR: { top: 8, right: 18 },
+  starBR: { bottom: 18, right: 28 },
+  titles: { alignItems: 'center', gap: 4, paddingHorizontal: 8 },
+  table: {
+    borderRadius: 16,
+    borderWidth: StyleSheet.hairlineWidth,
+    overflow: 'hidden',
+    paddingVertical: 8,
+  },
+  tableHead: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 10, paddingBottom: 8 },
+  tableRow: { flexDirection: 'row', alignItems: 'center', minHeight: 44 },
+  featCol: { flex: 1.5, paddingHorizontal: 10 },
+  featRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  featCopy: { flex: 1, gap: 1 },
+  checkCol: {
+    width: 72,
+    alignItems: 'center',
+    justifyContent: 'center',
+    alignSelf: 'stretch',
+    paddingVertical: 8,
+  },
+  dash: { width: 16, height: 2, borderRadius: 1 },
+  planRow: { flexDirection: 'row', gap: 10 },
+  planCard: {
+    flex: 1,
+    borderRadius: 16,
+    borderWidth: 1.5,
+    paddingHorizontal: 10,
+    paddingTop: 18,
+    paddingBottom: 12,
+    gap: 4,
+    alignItems: 'center',
+    overflow: 'visible',
+  },
+  planRadio: {
+    width: 14,
+    height: 14,
+    borderRadius: 7,
+    borderWidth: 1.5,
     marginBottom: 4,
   },
-  heroTitle: {
-    fontSize: 28,
-    fontWeight: '800',
-    letterSpacing: -0.5,
-  },
-  heroDesc: {
-    fontSize: 14,
-    lineHeight: 20,
-    fontWeight: '500',
-    color: 'rgba(44,33,0,0.72)',
-  },
-  trialPill: {
-    alignSelf: 'flex-start',
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    marginTop: 6,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 999,
-    backgroundColor: 'rgba(255,255,255,0.45)',
-  },
-  trialText: { fontSize: 12, fontWeight: '700' },
-  section: { gap: 14 },
-  sectionTitle: { fontSize: 18, fontWeight: '700', letterSpacing: -0.2 },
-  plans: { gap: 10 },
-  plan: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    padding: 16,
-    borderRadius: 18,
-    gap: 12,
-  },
-  planLeft: { flexDirection: 'row', alignItems: 'center', gap: 12, flex: 1 },
-  radio: {
-    width: 22,
-    height: 22,
-    borderRadius: 11,
-    borderWidth: 2,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  planCopy: { flex: 1, gap: 4 },
-  planNameRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flexWrap: 'wrap',
-    gap: 6,
-  },
-  planName: { fontSize: 15, fontWeight: '700' },
-  tag: {
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 999,
-  },
-  tagText: { fontSize: 10, fontWeight: '700', letterSpacing: 0.3 },
-  pop: {
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 999,
-  },
-  popText: { fontSize: 10, fontWeight: '700', letterSpacing: 0.3 },
-  planMeta: { fontSize: 12, fontWeight: '500' },
-  planRight: { alignItems: 'flex-end', gap: 2 },
-  planPrice: { fontSize: 20, fontWeight: '700' },
-  planPeriod: { fontSize: 12, fontWeight: '500' },
-  perks: { gap: 10 },
-  perk: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: 12,
-    borderRadius: 16,
-    borderWidth: StyleSheet.hairlineWidth,
-    padding: 14,
-  },
-  perkIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  perkBody: { flex: 1, gap: 4 },
-  perkTitleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flexWrap: 'wrap',
-    gap: 8,
-  },
-  perkTitle: { fontSize: 14, fontWeight: '700', flexShrink: 1 },
-  plusBadge: {
-    paddingHorizontal: 7,
-    paddingVertical: 2,
-    borderRadius: 999,
-    backgroundColor: 'transparent',
-  },
-  plusBadgeText: {
-    fontSize: 10,
-    fontWeight: '800',
-    letterSpacing: 0.3,
-  },
-  perkDesc: { fontSize: 12, lineHeight: 17, fontWeight: '500' },
-  footerDock: {
+  popular: {
     position: 'absolute',
-    left: 20,
-    right: 20,
-    zIndex: 20,
-    elevation: 20,
+    top: -8,
+    right: -4,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+    zIndex: 2,
   },
-  footer: {
-    paddingHorizontal: 18,
-    paddingTop: 12,
-    paddingBottom: 12,
-    borderRadius: 24,
-    borderWidth: StyleSheet.hairlineWidth,
+  policy: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    flexWrap: 'wrap',
     gap: 10,
   },
-  footerSummary: { gap: 2 },
-  footerLabel: { fontSize: 12, fontWeight: '500' },
-  footerPrice: { fontSize: 18, fontWeight: '700' },
-  footerPeriod: { fontSize: 12, fontWeight: '500' },
-  cta: {
-    height: 54,
-    borderRadius: 999,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-  },
-  ctaLabel: { fontSize: 16, fontWeight: '700' },
-  ctaOwned: { opacity: 0.6 },
-  restore: { alignSelf: 'center', paddingVertical: 2 },
 });
 
 export default PremiumScreen;

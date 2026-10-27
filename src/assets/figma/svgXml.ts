@@ -357,6 +357,51 @@ export const figmaSvg = {
 <path d="M22 15V9C22 4 20 2 15 2H9C4 2 2 4 2 9V15C2 20 4 22 9 22H15C20 22 22 20 22 15Z" stroke="#FAB93C" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
 <path d="M9.75 12V10.03C9.75 8.41 11.09 7.75 12.48 8.56L14.18 9.55L15.88 10.54C17.27 11.35 17.27 12.67 15.88 13.48L14.18 14.47L12.48 15.46C11.09 16.27 9.75 15.61 9.75 13.99V12Z" stroke="#FAB93C" stroke-width="1.5" stroke-miterlimit="10" stroke-linecap="round" stroke-linejoin="round"/>
 </svg>`,
+  colorfilter: `<svg preserveAspectRatio="xMidYMid meet" overflow="visible" width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+<path d="M14 16c0 1.77-.77 3.37-2 4.46A5.93 5.93 0 018 22c-3.31 0-6-2.69-6-6 0-2.76 1.88-5.1 4.42-5.79a6.019 6.019 0 004 3.58c.5.14 1.03.21 1.58.21s1.08-.07 1.58-.21c.27.68.42 1.43.42 2.21z" stroke="#FAB93C" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M18 8a5.993 5.993 0 01-4.42 5.79c-.5.14-1.03.21-1.58.21s-1.08-.07-1.58-.21A5.993 5.993 0 016 8c0-3.31 2.69-6 6-6s6 2.69 6 6z" stroke="#FAB93C" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M22 16c0 3.31-2.69 6-6 6a5.93 5.93 0 01-4-1.54c1.23-1.09 2-2.69 2-4.46 0-.78-.15-1.53-.42-2.21 1.83-.5 3.31-1.84 4-3.58C20.12 10.9 22 13.24 22 16z" stroke="#FAB93C" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>`,
+  filter: `<svg preserveAspectRatio="xMidYMid meet" overflow="visible" width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+<path d="M5.4 2.1h13.2c1.1 0 2 .9 2 2v2.2c0 .8-.5 1.8-1 2.3l-4.3 3.8c-.6.5-1 1.5-1 2.3V19c0 .6-.4 1.4-.9 1.7l-1.4.9c-1.3.8-3.1-.1-3.1-1.7v-5.3c0-.7-.4-1.6-.8-2.1l-3.8-4c-.5-.5-.9-1.4-.9-2V4.2c0-1.2.9-2.1 2-2.1Z" stroke="#FAB93C" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>`,
+  global: `<svg preserveAspectRatio="xMidYMid meet" overflow="visible" width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+<path d="M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10Z" stroke="#FAB93C" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M8 3h1a28.424 28.424 0 0 0 0 18H8M15 3a28.424 28.424 0 0 1 0 18" stroke="#FAB93C" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M3 16v-1a28.424 28.424 0 0 0 18 0v1M3 9a28.424 28.424 0 0 1 18 0" stroke="#FAB93C" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>`,
+  sort: `<svg preserveAspectRatio="xMidYMid meet" overflow="visible" width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+<path d="M3 7h18M6 12h12M10 17h4" stroke="#FAB93C" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>`,
+  profile2user: `<svg preserveAspectRatio="xMidYMid meet" overflow="visible" width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+<path d="M9.16 10.87c-.1-.01-.22-.01-.33 0a4.42 4.42 0 0 1-4.27-4.43C4.56 3.99 6.54 2 9 2a4.435 4.435 0 0 1 .16 8.87ZM16.41 4c1.94 0 3.5 1.57 3.5 3.5 0 1.89-1.5 3.43-3.37 3.5a1.13 1.13 0 0 0-.26 0" stroke="#FAB93C" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M4.16 14.56c-2.42 1.62-2.42 4.26 0 5.87 2.75 1.84 7.26 1.84 10.01 0 2.42-1.62 2.42-4.26 0-5.87-2.74-1.83-7.25-1.83-10.01 0ZM18.34 20c.72-.15 1.4-.44 1.96-.87 1.56-1.17 1.56-3.1 0-4.27-.55-.42-1.22-.7-1.93-.86" stroke="#FAB93C" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>`,
+  messageNotif: `<svg preserveAspectRatio="xMidYMid meet" overflow="visible" width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+<path d="M22 10v3c0 4-2 6-6 6h-.5c-.31 0-.61.15-.8.4l-1.5 2c-.66.88-1.74.88-2.4 0l-1.5-2c-.16-.22-.53-.4-.8-.4H8c-4 0-6-1-6-6V8c0-4 2-6 6-6h6" stroke="#FAB93C" stroke-width="1.5" stroke-miterlimit="10" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M19.5 7a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5Z" stroke="#FAB93C" stroke-width="1.5" stroke-miterlimit="10" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M15.996 11h.01M11.995 11h.01M7.995 11h.008" stroke="#FAB93C" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>`,
+  medalStar: `<svg preserveAspectRatio="xMidYMid meet" overflow="visible" width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+<path d="M19 9c0 1.45-.43 2.78-1.17 3.89a6.985 6.985 0 0 1-4.78 3.02c-.34.06-.69.09-1.05.09-.36 0-.71-.03-1.05-.09a6.985 6.985 0 0 1-4.78-3.02A6.968 6.968 0 0 1 5 9c0-3.87 3.13-7 7-7s7 3.13 7 7Z" stroke="#FAB93C" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="m21.25 18.47-1.65.39c-.37.09-.66.37-.74.74l-.35 1.47a1 1 0 0 1-1.74.41L12 16l-4.77 5.49a1 1 0 0 1-1.74-.41l-.35-1.47a.996.996 0 0 0-.74-.74l-1.65-.39a1.003 1.003 0 0 1-.48-1.68l3.9-3.9a6.985 6.985 0 0 0 4.78 3.02c.34.06.69.09 1.05.09.36 0 .71-.03 1.05-.09 1.99-.29 3.7-1.42 4.78-3.02l3.9 3.9c.55.54.28 1.49-.48 1.67Z" stroke="#FAB93C" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M12.58 5.98l.59 1.18c.08.16.29.32.48.35l1.07.18c.68.11.84.61.35 1.1l-.83.83c-.14.14-.22.41-.17.61l.24 1.03c.19.81-.24 1.13-.96.7l-1-.59a.701.701 0 0 0-.66 0l-1 .59c-.72.42-1.15.11-.96-.7l.24-1.03c.04-.19-.03-.47-.17-.61l-.83-.83c-.49-.49-.33-.98.35-1.1l1.07-.18c.18-.03.39-.19.47-.35l.59-1.18c.29-.64.81-.64 1.13 0Z" stroke="#FAB93C" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>`,
+  ghost: `<svg preserveAspectRatio="xMidYMid meet" overflow="visible" width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+<path d="M22 20.07v-7.89C22 6.58 17.5 2 12 2S2 6.58 2 12.18v7.89c0 1.26.75 1.6 1.67.76l1-.91c.37-.34.97-.34 1.34 0l2 1.83c.37.34.97.34 1.34 0l2-1.83c.37-.34.97-.34 1.34 0l2 1.83c.37.34.97.34 1.34 0l2-1.83c.37-.34.97-.34 1.34 0l1 .91c.88.84 1.63.5 1.63-.76Z" stroke="#FAB93C" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M8 14a6.66 6.66 0 0 0 8 0M12 11a2 2 0 1 0 0-4 2 2 0 0 0 0 4Z" stroke="#FAB93C" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>`,
+  helpCircle: `<svg preserveAspectRatio="xMidYMid meet" overflow="visible" width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+<path d="M12 22c5.5 0 10-4.5 10-10S17.5 2 12 2 2 6.5 2 12s4.5 10 10 10Z" stroke="#FAB93C" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M12 17h.01" stroke="#FAB93C" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3" stroke="#FAB93C" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>`,
+  man: `<svg preserveAspectRatio="xMidYMid meet" overflow="visible" width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+<path d="M10.25 21.5a7.75 7.75 0 1 0 0-15.5 7.75 7.75 0 0 0 0 15.5ZM21.5 2.5 16 8M15 2.5h6.5V9" stroke="#FAB93C" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>`,
+  woman: `<svg preserveAspectRatio="xMidYMid meet" overflow="visible" width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+<path d="M12 16a7 7 0 1 0 0-14 7 7 0 0 0 0 14ZM12 16v6M15 19H9" stroke="#FAB93C" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>`,
 } as const;
 
 export type FigmaSvgName = keyof typeof figmaSvg;

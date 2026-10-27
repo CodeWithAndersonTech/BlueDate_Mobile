@@ -6,7 +6,10 @@ import { ChangePasswordScreen } from '../screens/settings/ChangePasswordScreen';
 import { FilterScreen } from '../screens/settings/FilterScreen';
 import { HelpScreen } from '../screens/settings/HelpScreen';
 import { PrivacyScreen } from '../screens/settings/PrivacyScreen';
+import { SettingsLanguageScreen } from '../screens/settings/SettingsLanguageScreen';
+import { SettingsNotificationsScreen } from '../screens/settings/SettingsNotificationsScreen';
 import { SettingsScreen } from '../screens/settings/SettingsScreen';
+import { SettingsThemeScreen } from '../screens/settings/SettingsThemeScreen';
 import { BlockedUsersScreen } from '../screens/settings/BlockedUsersScreen';
 import { HomeStackParamList } from './types';
 
@@ -31,6 +34,21 @@ export function HomeStack() {
       <Stack.Screen
         name="Settings"
         component={SettingsScreen}
+        options={nestedOptions}
+      />
+      <Stack.Screen
+        name="SettingsTheme"
+        component={SettingsThemeScreen}
+        options={nestedOptions}
+      />
+      <Stack.Screen
+        name="SettingsLanguage"
+        component={SettingsLanguageScreen}
+        options={nestedOptions}
+      />
+      <Stack.Screen
+        name="SettingsNotifications"
+        component={SettingsNotificationsScreen}
         options={nestedOptions}
       />
       <Stack.Screen

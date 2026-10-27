@@ -1,5 +1,5 @@
-import { useRoute } from '@react-navigation/native';
-import { useEffect, useState } from 'react';
+import { NavigationRouteContext } from '@react-navigation/native';
+import { useContext, useEffect, useState } from 'react';
 import { Platform, useWindowDimensions } from 'react-native';
 import {
   initialWindowMetrics,
@@ -201,7 +201,10 @@ export function useScreenBottomPad(extra = 24) {
 
 /** True when the focused route is a tab root (pill tab bar is visible). */
 export function useIsTabRootScreen(): boolean {
-  const route = useRoute();
+  const route = useContext(NavigationRouteContext);
+  if (!route?.name) {
+    return false;
+  }
   return TAB_ROOT_SCREENS.has(route.name);
 }
 

@@ -1,30 +1,27 @@
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import React, { useMemo, useState } from 'react';
-import { Alert, ScrollView, StyleSheet, View } from 'react-native';
-import LinearGradient from 'react-native-linear-gradient';
-import {
-  Button,
-  EmailInput,
-  Header,
-  Icon,
-  LanguageFlagButton,
-  Screen,
-  Typography,
-} from '../../components';
-import { useLocale, userFacingError } from '../../i18n';
-import { AuthStackParamList } from '../../navigation/types';
-import { useTheme } from '../../theme';
+import { ScrollView, StyleSheet } from 'react-native';
 import { sendEmailOtp } from '../../api/auth';
+import {
+  AuthFlowBar,
+  AuthFlowHero,
+  AuthInlineError,
+  AuthPrimaryButton,
+  EmailInput,
+  Screen,
+} from '../../components';
+import { isAccountGoneError, useLocale, userFacingError } from '../../i18n';
+import { AuthStackParamList } from '../../navigation/types';
 import { isValidEmail } from '../../utils/validation';
 
 type Props = NativeStackScreenProps<AuthStackParamList, 'ForgotPassword'>;
 
 export function ForgotPasswordScreen({ navigation }: Props) {
-  const theme = useTheme();
   const { t, languages, languageCode, setLanguage } = useLocale();
   const [email, setEmail] = useState('');
   const [submitted, setSubmitted] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [formError, setFormError] = useState<string | null>(null);
 
   const emailValid = isValidEmail(email);
 
@@ -43,6 +40,7 @@ export function ForgotPasswordScreen({ navigation }: Props) {
 
   const onSubmit = async () => {
     setSubmitted(true);
+    setFormError(null);
     if (!emailValid || loading) {
       return;
     }
@@ -55,9 +53,10 @@ export function ForgotPasswordScreen({ navigation }: Props) {
         purpose: 'reset',
       });
     } catch (error) {
-      Alert.alert(
-        t('auth.forgot_password'),
-        userFacingError(error, t),
+      setFormError(
+        isAccountGoneError(error)
+          ? t('auth.forgot_not_found')
+          : userFacingError(error, t),
       );
     } finally {
       setLoading(false);
@@ -65,22 +64,16 @@ export function ForgotPasswordScreen({ navigation }: Props) {
   };
 
   return (
-    <Screen edges={['top']}>
-      <View style={styles.topBar}>
-        <View style={styles.headerWrap}>
-          <Header
-            onBack={() => navigation.goBack()}
-            title={t('auth.forgot_password')}
-          />
-        </View>
-        <LanguageFlagButton
-          languages={languages}
-          selectedCode={languageCode}
-          onSelect={code => {
-            setLanguage(code).catch(() => undefined);
-          }}
-        />
-      </View>
+    <Screen padded={false} edges={['top']}>
+      <AuthFlowBar
+        title={t('auth.reset_nav')}
+        onBack={() => navigation.goBack()}
+        languages={languages}
+        languageCode={languageCode}
+        onSelectLanguage={code => {
+          setLanguage(code).catch(() => undefined);
+        }}
+      />
 
       <ScrollView
         style={styles.flex}
@@ -89,42 +82,37 @@ export function ForgotPasswordScreen({ navigation }: Props) {
         keyboardShouldPersistTaps="handled"
         keyboardDismissMode="interactive"
         automaticallyAdjustKeyboardInsets>
-        <View style={styles.hero}>
-          <LinearGradient
-            colors={theme.gradients.primary}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-            style={[styles.badge, theme.shadows.md]}>
-            <Icon
-              name="lock"
-              size={28}
-              color={theme.colors.onPrimary}
-            />
-          </LinearGradient>
-          <Typography variant="h1" align="center">
-            {t('auth.forgot_title')}
-          </Typography>
-          <Typography variant="body" color="textMuted" align="center">
-            {t('auth.forgot_subtitle')}
-          </Typography>
-        </View>
+        <AuthFlowHero
+          glyph="lock"
+          title={t('auth.forgot_title')}
+          subtitle={t('auth.forgot_subtitle')}
+        />
 
-        <View style={styles.form}>
-          <EmailInput
-            value={email}
-            onChangeText={text => setEmail(text.trim())}
-            onSubmitEditing={onSubmit}
-            returnKeyType="send"
-            blurOnSubmit
-            error={emailError}
-          />
-          <Button
-            label={t('auth.forgot_send')}
-            size="lg"
-            loading={loading}
-            onPress={onSubmit}
-          />
-        </View>
+        <EmailInput
+          pill
+          label=""
+          placeholder={t('auth.email')}
+          value={email}
+          onChangeText={text => {
+            setEmail(text.trim());
+            setFormError(null);
+          }}
+          onSubmitEditing={() => {
+            void onSubmit();
+          }}
+          returnKeyType="send"
+          blurOnSubmit
+          error={emailError}
+        />
+        {formError ? <AuthInlineError message={formError} /> : null}
+
+        <AuthPrimaryButton
+          label={t('auth.forgot_send')}
+          loading={loading}
+          onPress={() => {
+            void onSubmit();
+          }}
+        />
       </ScrollView>
     </Screen>
   );
@@ -132,28 +120,13 @@ export function ForgotPasswordScreen({ navigation }: Props) {
 
 const styles = StyleSheet.create({
   flex: { flex: 1 },
-  topBar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingRight: 16,
-  },
-  headerWrap: { flex: 1 },
   content: {
     flexGrow: 1,
-    paddingHorizontal: 20,
+    paddingHorizontal: 10,
+    paddingTop: 8,
     paddingBottom: 40,
-    gap: 28,
+    gap: 14,
   },
-  hero: { alignItems: 'center', gap: 10, marginTop: 24 },
-  badge: {
-    width: 64,
-    height: 64,
-    borderRadius: 20,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 6,
-  },
-  form: { gap: 14 },
 });
 
 export default ForgotPasswordScreen;

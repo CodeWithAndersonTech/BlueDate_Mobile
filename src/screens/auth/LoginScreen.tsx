@@ -1,19 +1,10 @@
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import React, { useMemo, useState } from 'react';
+import { Alert, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import {
-  Alert,
-  Image,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  View,
-} from 'react-native';
-import { images } from '../../assets';
-import {
-  Button,
-  Divider,
-  Icon,
-  IconName,
+  AuthHero,
+  AuthPrimaryButton,
+  AuthSocialButton,
   Input,
   LanguageFlagButton,
   Screen,
@@ -35,15 +26,6 @@ export function LoginScreen({ navigation }: Props) {
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [submitted, setSubmitted] = useState(false);
-
-  const socials = useMemo(
-    () =>
-      [
-        { icon: 'globe' as IconName, label: t('common.google') },
-        { icon: 'mail' as IconName, label: t('common.apple') },
-      ] as const,
-    [t],
-  );
 
   const identifierError = useMemo(() => {
     if (!submitted) {
@@ -83,8 +65,12 @@ export function LoginScreen({ navigation }: Props) {
     }
   };
 
+  const socialSoon = () => {
+    Alert.alert(t('auth.login'), t('auth.social_soon'));
+  };
+
   return (
-    <Screen padded edges={['top']} style={styles.screen}>
+    <Screen padded={false} edges={['top']} style={styles.screen}>
       <View pointerEvents="box-none" style={styles.flagAnchor}>
         <LanguageFlagButton
           languages={languages}
@@ -102,80 +88,68 @@ export function LoginScreen({ navigation }: Props) {
         keyboardShouldPersistTaps="handled"
         keyboardDismissMode="interactive"
         automaticallyAdjustKeyboardInsets>
-        <View style={styles.header}>
-          <Image source={images.appLogo} style={[styles.logo, theme.shadows.glow]} />
-          <Typography variant="h1">{t('auth.login_title')}</Typography>
-          <Typography variant="body" color="textMuted">
-            {t('auth.login_subtitle')}
+        <AuthHero
+          line1={t('auth.hero_login_line1')}
+          line2={t('auth.hero_login_line2')}
+          accent={t('auth.hero_login_accent')}
+          subtitle={t('auth.hero_login_sub')}
+        />
+
+        <Input
+          pill
+          leftIcon="mail"
+          placeholder={t('auth.email')}
+          autoCapitalize="none"
+          autoCorrect={false}
+          keyboardType="email-address"
+          value={identifier}
+          onChangeText={setIdentifier}
+          error={identifierError}
+        />
+        <Input
+          pill
+          leftIcon="lock"
+          password
+          placeholder={t('auth.password')}
+          value={password}
+          onChangeText={setPassword}
+        />
+        <Pressable
+          style={styles.forgot}
+          hitSlop={8}
+          onPress={() => navigation.navigate('ForgotPassword')}>
+          <Typography variant="caption" weight="500" tint={theme.colors.plusCta}>
+            {t('auth.forgot_password')}
           </Typography>
-        </View>
+        </Pressable>
 
-        <View style={styles.form}>
-          <Input
-            label={t('auth.email_or_phone')}
-            placeholder={t('auth.email_placeholder')}
-            leftIcon="mail"
-            autoCapitalize="none"
-            autoCorrect={false}
-            keyboardType="email-address"
-            value={identifier}
-            onChangeText={setIdentifier}
-            error={identifierError}
-          />
-          <Input
-            label={t('auth.password')}
-            placeholder="••••••••"
-            leftIcon="lock"
-            password
-            value={password}
-            onChangeText={setPassword}
-          />
-          <Pressable
-            style={styles.forgot}
-            hitSlop={8}
-            onPress={() => navigation.navigate('ForgotPassword')}>
-            <Typography variant="callout" tint={theme.colors.primary}>
-              {t('auth.forgot_password')}
-            </Typography>
-          </Pressable>
+        <AuthPrimaryButton
+          label={t('auth.login')}
+          loading={loading}
+          onPress={onLogin}
+        />
 
-          <Button
-            label={t('auth.login')}
-            rightIcon="chevron-right"
-            loading={loading}
-            onPress={onLogin}
-          />
-        </View>
+        <Typography variant="caption" weight="500" align="center">
+          {t('auth.or')}
+        </Typography>
 
-        <Divider label={t('auth.or_continue')} spacing={24} />
-
-        <View style={styles.socials}>
-          {socials.map(s => (
-            <Pressable
-              key={s.label}
-              onPress={onLogin}
-              style={[
-                styles.social,
-                {
-                  backgroundColor: theme.colors.surface,
-                  borderColor: theme.colors.border,
-                  borderRadius: 20,
-                },
-              ]}>
-              <Icon name={s.icon} size={22} color={theme.colors.text} />
-              <Typography variant="caption" color="textMuted">
-                {s.label}
-              </Typography>
-            </Pressable>
-          ))}
-        </View>
+        <AuthSocialButton
+          provider="google"
+          label={t('auth.google_sign_in')}
+          onPress={socialSoon}
+        />
+        <AuthSocialButton
+          provider="apple"
+          label={t('auth.apple_sign_in')}
+          onPress={socialSoon}
+        />
 
         <View style={styles.footer}>
-          <Typography variant="body" color="textMuted">
-            {t('auth.no_account')}{' '}
+          <Typography variant="caption" weight="500" color="textMuted">
+            {t('auth.no_account')}
           </Typography>
           <Pressable hitSlop={8} onPress={() => navigation.navigate('Register')}>
-            <Typography variant="bodyStrong" tint={theme.colors.primary}>
+            <Typography variant="caption" weight="700" tint={theme.colors.plusCta}>
               {t('auth.register')}
             </Typography>
           </Pressable>
@@ -195,31 +169,20 @@ const styles = StyleSheet.create({
     zIndex: 20,
     elevation: 20,
   },
-  content: { flexGrow: 1, paddingTop: 12, paddingBottom: 24, gap: 16 },
-  header: { alignItems: 'center', gap: 8, marginBottom: 8, marginTop: 28 },
-  logo: {
-    width: 72,
-    height: 72,
-    borderRadius: 20,
-    marginBottom: 8,
+  content: {
+    flexGrow: 1,
+    paddingHorizontal: 10,
+    paddingTop: 8,
+    paddingBottom: 28,
+    gap: 10,
   },
-  form: { gap: 16 },
-  forgot: { alignSelf: 'flex-end', marginTop: -4 },
-  socials: { flexDirection: 'row', gap: 12 },
-  social: {
-    flex: 1,
-    height: 64,
-    borderWidth: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 4,
-  },
+  forgot: { alignSelf: 'flex-end' },
   footer: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    marginTop: 'auto',
-    paddingTop: 24,
+    gap: 5,
+    paddingVertical: 10,
   },
 });
 

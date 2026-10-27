@@ -1,5 +1,6 @@
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import React from 'react';
+import { useTheme } from '../theme';
 import { EditProfileScreen } from '../screens/profile/EditProfileScreen';
 import { FriendsListScreen } from '../screens/profile/FriendsListScreen';
 import { ProfileScreen } from '../screens/profile/ProfileScreen';
@@ -8,7 +9,10 @@ import { ChangePasswordScreen } from '../screens/settings/ChangePasswordScreen';
 import { FilterScreen } from '../screens/settings/FilterScreen';
 import { HelpScreen } from '../screens/settings/HelpScreen';
 import { PrivacyScreen } from '../screens/settings/PrivacyScreen';
+import { SettingsLanguageScreen } from '../screens/settings/SettingsLanguageScreen';
+import { SettingsNotificationsScreen } from '../screens/settings/SettingsNotificationsScreen';
 import { SettingsScreen } from '../screens/settings/SettingsScreen';
+import { SettingsThemeScreen } from '../screens/settings/SettingsThemeScreen';
 import { BlockedUsersScreen } from '../screens/settings/BlockedUsersScreen';
 import { ProfileStackParamList } from './types';
 
@@ -23,11 +27,14 @@ const nestedOptions = {
 };
 
 export function ProfileStack() {
+  const theme = useTheme();
   return (
     <Stack.Navigator
       screenOptions={{
         headerShown: false,
+        headerShadowVisible: false,
         safeAreaInsets: { top: 0, bottom: 0 },
+        contentStyle: { backgroundColor: theme.colors.background },
       }}>
       <Stack.Screen name="ProfileMain" component={ProfileScreen} />
       <Stack.Screen
@@ -38,6 +45,21 @@ export function ProfileStack() {
       <Stack.Screen
         name="Settings"
         component={SettingsScreen}
+        options={nestedOptions}
+      />
+      <Stack.Screen
+        name="SettingsTheme"
+        component={SettingsThemeScreen}
+        options={nestedOptions}
+      />
+      <Stack.Screen
+        name="SettingsLanguage"
+        component={SettingsLanguageScreen}
+        options={nestedOptions}
+      />
+      <Stack.Screen
+        name="SettingsNotifications"
+        component={SettingsNotificationsScreen}
         options={nestedOptions}
       />
       <Stack.Screen

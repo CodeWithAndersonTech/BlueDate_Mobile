@@ -20,6 +20,9 @@ export type AuthStackParamList = {
 export type HomeStackParamList = {
   HomeFeed: undefined;
   Settings: undefined;
+  SettingsTheme: undefined;
+  SettingsLanguage: undefined;
+  SettingsNotifications: undefined;
   Filter: undefined;
   ChangePassword: undefined;
   Privacy: undefined;
@@ -35,6 +38,9 @@ export type ProfileStackParamList = {
     interestTypeId?: number;
   };
   Settings: undefined;
+  SettingsTheme: undefined;
+  SettingsLanguage: undefined;
+  SettingsNotifications: undefined;
   FriendsList: undefined;
   Filter: undefined;
   ChangePassword: undefined;

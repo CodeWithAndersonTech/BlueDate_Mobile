@@ -1,19 +1,17 @@
 import { useNavigation } from '@react-navigation/native';
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Alert, StyleSheet, View } from 'react-native';
+import React, { useCallback, useEffect, useState } from 'react';
+import { Alert, Pressable, StyleSheet, View } from 'react-native';
 import { ScrollView } from 'react-native-gesture-handler';
 import { fetchFilterPrefs, saveFilterPrefs } from '../../api/filterPrefs';
 import {
+  AuthPrimaryButton,
   BottomActionDock,
-  Card,
-  Chip,
-  FigmaButton,
+  FigmaIcon,
   FigmaSpinner,
+  FigmaSvgName,
   Header,
-  IconName,
   RangeSlider,
   Screen,
-  SectionHeader,
   Typography,
 } from '../../components';
 import { useLocale, userFacingError } from '../../i18n';
@@ -32,13 +30,24 @@ import {
 import { useTheme } from '../../theme';
 import { GenderValue } from '../../utils/gender';
 
-type VisibilityOption = { key: string; labelKey: string; icon: IconName };
+type FilterChip = {
+  key: string;
+  labelKey: string;
+  icon?: FigmaSvgName;
+};
 
-const VISIBILITY_OPTIONS: VisibilityOption[] = [
-  { key: 'women', labelKey: 'filter.option.women', icon: 'user' },
-  { key: 'men', labelKey: 'filter.option.men', icon: 'user' },
-  { key: 'lgbt', labelKey: 'filter.option.lgbt', icon: 'heart' },
-  { key: 'everyone', labelKey: 'filter.option.everyone', icon: 'globe' },
+const SHOW_ME_CHIPS: FilterChip[] = [
+  { key: 'men', labelKey: 'filter.option.men', icon: 'man' },
+  { key: 'lgbt', labelKey: 'filter.option.lgbt' },
+  { key: 'everyone', labelKey: 'filter.option.everyone', icon: 'people' },
+  { key: 'women', labelKey: 'filter.option.women', icon: 'woman' },
+];
+
+const VISIBLE_TO_CHIPS: FilterChip[] = [
+  { key: 'men', labelKey: 'filter.option.men', icon: 'man' },
+  { key: 'everyone', labelKey: 'filter.option.everyone', icon: 'people' },
+  { key: 'lgbt', labelKey: 'filter.option.lgbt' },
+  { key: 'women', labelKey: 'filter.option.women', icon: 'woman' },
 ];
 
 export function FilterScreen() {
@@ -93,7 +102,6 @@ export function FilterScreen() {
           await saveLocalFilterPrefs(userId, remote);
         }
       } catch {
-        // Keep local/defaults if API is unreachable.
         if (!cancelled) {
           setLoading(false);
         }
@@ -110,15 +118,6 @@ export function FilterScreen() {
     };
   }, [userId, accessToken, applyPrefs]);
 
-  const options = useMemo(
-    () =>
-      VISIBILITY_OPTIONS.map(o => ({
-        ...o,
-        label: t(o.labelKey),
-      })),
-    [t],
-  );
-
   const currentPrefs = useCallback(
     (): FilterPrefs => ({
       ageLow: age.low,
@@ -128,18 +127,6 @@ export function FilterScreen() {
     }),
     [age.high, age.low, showMe, visibleTo],
   );
-
-  const toggle = (
-    list: GenderValue[],
-    setList: (next: GenderValue[]) => void,
-    key: string,
-  ) => {
-    setList(toggleFilterChip(list, key));
-  };
-
-  const resetAll = () => {
-    applyPrefs(DEFAULT_FILTER_PREFS);
-  };
 
   const onApply = async () => {
     if (!userId || saving) {
@@ -153,31 +140,30 @@ export function FilterScreen() {
       await saveFilterPrefs(userId, prefs, accessToken);
       navigation.goBack();
     } catch (error) {
-      const message =
-        userFacingError(error, t, 'filter.save_failed');
-      Alert.alert(t('filter.title'), message);
+      Alert.alert(
+        t('filter.title'),
+        userFacingError(error, t, 'filter.save_failed'),
+      );
     } finally {
       setSaving(false);
     }
   };
 
+  const ageLabel =
+    age.high === FILTER_AGE_MAX
+      ? `${age.low}-${FILTER_AGE_MAX}+`
+      : `${age.low}-${age.high}`;
+
   return (
-    <Screen edges={['top']}>
+    <Screen padded={false} edges={['top']}>
       <Header
         title={t('filter.title')}
         onBack={() => navigation.goBack()}
         backAccessibilityLabel={t('common.back')}
-        actions={[
-          {
-            icon: 'sliders',
-            onPress: resetAll,
-            accessibilityLabel: t('filter.reset'),
-          },
-        ]}
       />
       {loading ? (
         <View style={styles.loading}>
-          <FigmaSpinner />
+          <FigmaSpinner color={theme.colors.plusCta} />
         </View>
       ) : (
         <View style={styles.body}>
@@ -186,28 +172,28 @@ export function FilterScreen() {
             scrollEnabled={scrollEnabled}
             showsVerticalScrollIndicator={false}
             keyboardShouldPersistTaps="handled"
-            contentContainerStyle={[
-              styles.content,
-              { paddingBottom: 24 },
-            ]}>
+            contentContainerStyle={styles.content}>
             <View style={styles.section}>
-              <SectionHeader title={t('filter.age_section')} />
-              <Card variant="surface">
+              <Typography variant="caption" color="textMuted">
+                {t('filter.age_section')}
+              </Typography>
+              <View
+                style={[
+                  styles.ageCard,
+                  {
+                    backgroundColor: theme.colors.authField,
+                    borderColor: theme.colors.authFieldBorder,
+                  },
+                ]}>
                 <View style={styles.rowBetween}>
-                  <Typography variant="bodyStrong">
-                    {t('filter.age_label')}
+                  <Typography variant="callout" weight="500">
+                    {t('filter.selected_range')}
                   </Typography>
-                  <Typography variant="bodyStrong" tint={theme.colors.plusCta}>
-                    {age.low} -{' '}
-                    {age.high === FILTER_AGE_MAX
-                      ? `${FILTER_AGE_MAX}+`
-                      : age.high}
+                  <Typography variant="caption" color="textMuted">
+                    {ageLabel}
                   </Typography>
                 </View>
-                <Typography
-                  variant="caption"
-                  color="textMuted"
-                  style={styles.hint}>
+                <Typography variant="caption" color="textMuted">
                   {t('filter.age_hint')}
                 </Typography>
                 <RangeSlider
@@ -218,78 +204,39 @@ export function FilterScreen() {
                   onChange={(low, high) => setAge({ low, high })}
                   onSlidingStart={() => setScrollEnabled(false)}
                   onSlidingComplete={() => setScrollEnabled(true)}
-                  style={styles.slider}
                 />
                 <View style={styles.rowBetween}>
                   <Typography variant="caption" color="textMuted">
                     {FILTER_AGE_MIN}
                   </Typography>
                   <Typography variant="caption" color="textMuted">
-                    {FILTER_AGE_MAX}+
+                    +{FILTER_AGE_MAX}
                   </Typography>
                 </View>
-              </Card>
+              </View>
             </View>
 
-            <View style={styles.section}>
-              <SectionHeader title={t('filter.show_me_section')} />
-              <Card variant="surface">
-                <Typography
-                  variant="caption"
-                  color="textMuted"
-                  style={styles.hint}>
-                  {t('filter.show_me_hint')}
-                </Typography>
-                <View style={styles.chips}>
-                  {options.map(o => (
-                    <Chip
-                      key={o.key}
-                      label={o.label}
-                      icon={o.icon}
-                      tone="status"
-                      selected={chipSelected(showMe, o.key)}
-                      onPress={() => toggle(showMe, setShowMe, o.key)}
-                    />
-                  ))}
-                </View>
-              </Card>
-            </View>
-
-            <View style={styles.section}>
-              <SectionHeader title={t('filter.visible_to_section')} />
-              <Card variant="surface">
-                <Typography
-                  variant="caption"
-                  color="textMuted"
-                  style={styles.hint}>
-                  {t('filter.visible_to_hint')}
-                </Typography>
-                <View style={styles.chips}>
-                  {options.map(o => (
-                    <Chip
-                      key={o.key}
-                      label={o.label}
-                      icon={o.icon}
-                      tone="status"
-                      selected={chipSelected(visibleTo, o.key)}
-                      onPress={() => toggle(visibleTo, setVisibleTo, o.key)}
-                    />
-                  ))}
-                </View>
-              </Card>
-            </View>
+            <ChipBlock
+              title={t('filter.show_me_section')}
+              chips={SHOW_ME_CHIPS}
+              selected={showMe}
+              onToggle={key => setShowMe(toggleFilterChip(showMe, key))}
+            />
+            <ChipBlock
+              title={t('filter.visible_to_section')}
+              chips={VISIBLE_TO_CHIPS}
+              selected={visibleTo}
+              onToggle={key => setVisibleTo(toggleFilterChip(visibleTo, key))}
+            />
           </ScrollView>
 
-          <BottomActionDock forceAboveTabBar>
-            <FigmaButton
+          <BottomActionDock forceAboveTabBar direction="column">
+            <AuthPrimaryButton
               label={saving ? t('filter.saving') : t('filter.apply')}
-              size="md"
-              fullWidth
-              trailing="arrow"
               loading={saving}
-              disabled={saving || !userId}
-              onPress={onApply}
-              style={styles.applyBtn}
+              onPress={() => {
+                void onApply();
+              }}
             />
           </BottomActionDock>
         </View>
@@ -298,41 +245,120 @@ export function FilterScreen() {
   );
 }
 
+function ChipBlock({
+  title,
+  chips,
+  selected,
+  onToggle,
+}: {
+  title: string;
+  chips: FilterChip[];
+  selected: GenderValue[];
+  onToggle: (key: string) => void;
+}) {
+  const { t } = useLocale();
+  return (
+    <View style={styles.section}>
+      <Typography variant="caption" color="textMuted">
+        {title}
+      </Typography>
+      <View style={styles.chips}>
+        {chips.map(chip => (
+          <FilterTag
+            key={chip.key}
+            icon={chip.icon}
+            label={t(chip.labelKey)}
+            selected={chipSelected(selected, chip.key)}
+            onPress={() => onToggle(chip.key)}
+          />
+        ))}
+      </View>
+    </View>
+  );
+}
+
+function FilterTag({
+  icon,
+  label,
+  selected,
+  onPress,
+}: {
+  icon?: FigmaSvgName;
+  label: string;
+  selected: boolean;
+  onPress: () => void;
+}) {
+  const theme = useTheme();
+  return (
+    <Pressable
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityState={{ selected }}
+      style={[
+        styles.tag,
+        {
+          backgroundColor: selected
+            ? theme.colors.plusSoft
+            : theme.colors.authField,
+          borderColor: selected
+            ? theme.colors.plusCta
+            : theme.colors.authFieldBorder,
+        },
+      ]}>
+      {icon ? (
+        <FigmaIcon
+          name={icon}
+          size={20}
+          color={selected ? theme.colors.plusCta : theme.colors.text}
+        />
+      ) : null}
+      <Typography variant="callout" weight="500">
+        {label}
+      </Typography>
+      {selected ? (
+        <FigmaIcon
+          name="closeCircle"
+          size={16}
+          color={theme.colors.textMuted}
+        />
+      ) : null}
+    </Pressable>
+  );
+}
+
 const styles = StyleSheet.create({
   body: { flex: 1 },
   flex: { flex: 1 },
   content: {
-    paddingHorizontal: 20,
-    gap: 18,
+    paddingHorizontal: 10,
     paddingTop: 8,
+    paddingBottom: 20,
+    gap: 7,
   },
-  loading: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
+  loading: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+  section: { gap: 5 },
+  ageCard: {
+    borderRadius: 15,
+    borderWidth: 1,
+    paddingHorizontal: 11,
+    paddingVertical: 11,
+    gap: 8,
   },
-  section: { gap: 12 },
   rowBetween: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
   },
-  hint: { marginTop: 6, marginBottom: 4, lineHeight: 18 },
-  slider: { marginTop: 18, marginBottom: 10 },
-  chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginTop: 12 },
-  stickyDock: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    bottom: 0,
+  chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
+  tag: {
+    height: 40,
+    borderRadius: 15,
+    borderWidth: 1,
+    paddingHorizontal: 11,
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingTop: 12,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    zIndex: 20,
+    gap: 10,
   },
-  applyBtn: { flex: 1 },
 });
 
 export default FilterScreen;

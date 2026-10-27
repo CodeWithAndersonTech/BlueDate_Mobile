@@ -9,14 +9,24 @@ Mobil: bu repo. Backend: `~/RiderProjects/AD_BlueDateApp`. Ürün adı Meerk.
 
 Ayrıntı yedek (kapatınca kaybolmasın): kullanıcı store `bluedate-session-2026-10-20.md`.
 
-## Son durak (23 Eki 2026 öğleden sonra) — buradan devam
+## Son durak (27 Eki 2026 öğle) — buradan devam
+
+- **Sürüm 1.0.9** — iOS (22) App Store Connect, Android (10) AAB. Backend 1.1.9 duruyor; yeniden publish yok.
+- **Cloudflare NS canlı:** `harleigh` / `tanner`. `api.meerk.com.tr` CF anycast, health `cf-ray`. **MX yok** — Cloudflare DNS’e `mx-01`/`mx-02.kurumsaleposta.com` ekle. SSL/WS script henüz basılmadı. Token yazma.
+- Figma giriş/kayıt/OTP/reset/premium/profil-tamamla/ayarlar/filtreler. Ayrıntı `docs/figma-auth-and-cloudflare.md`.
+- Profil favori etiketleri dile bağlı. Preview profile yok. Filtre Kaydet `forceAboveTabBar`.
+- Metro + cihaz: `run-ios --udid 00008140-000A61513C28801C`, `USE_PRODUCTION = true`.
+
+Ayrıntı: kullanıcı store `bluedate-session-2026-10-20.md`.
+
+## Önceki durak (23 Eki sürüm) — aynı
 
 - Fiziksel iPhone: 16 Pro Max, UDID `00008140-000A61513C28801C`, team `XSRRXVWD3X`, bundle `com.andersontech.bluedate`. Android `applicationId` `com.bluedate`.
 - `USE_PRODUCTION = true` — cihaz prod API/DB. Metro kapalı olabilir; tekrar: `npx react-native start` sonra `npx react-native run-ios --udid 00008140-000A61513C28801C`.
 - **Backend 1.1.9 VPS’te.** Health `1.1.9+45a49c4…`. Yeni backend kodu yok; yeniden publish etme. Production json dokunulmadı (Jwt 10y).
-- **iOS 1.0.8 (21)** App Store Connect’e yüklendi (23 Eki 12:05). **Manage** kullanıcı işi.
-- **Android 1.0.8 (9)** — Play AAB yok. **Manage** kullanıcı işi.
-- Mobil commit **`048537d`** (temiz). Remote’a push yok (`main` origin’den ahead). Backend commit `39ef1c0`. Backend dirty yalnız: `appsettings*.json`, `.DS_Store`, local `wwwroot/uploads` — **commit etme**.
+- **iOS 1.0.9 (22)** App Store Connect. **Manage** kullanıcı.
+- **Android 1.0.9 (10)** AAB. Play **Manage** kullanıcı.
+- Backend commit `39ef1c0`. Dirty yalnız: `appsettings*.json`, `.DS_Store`, local `wwwroot/uploads` — **commit etme**.
 - SSH Windows OpenSSH 8.1: `IPQoS=none` + `Ciphers=aes128-ctr` + `MACs=hmac-sha2-256`; SERVICE_ACCEPT reset olursa 20s+ bekle.
 - Login/register Figma’da hâlâ yok (MCP kota / doğrulanmadı), uydurma. Secret / Production json / google-services / plist / SMTP git’e ve sohbete koyma.
 - Prod: `id=1 system` (login yok). Yavuz `ckm.yvz` id=10. Seed arkadaş **Leyla Demir** `leyla.demir` id=11 (dolu profil + 2 foto, accepted friendship).
@@ -51,13 +61,13 @@ Kod hazır, kapalı. Config yok. Kullanıcı getirecek (git’e/sohbete yapışt
 - SSH: `Administrator@185.22.185.73` key `~/.ssh/id_ed25519`. **MySQL’i internete açma.**
 - MySQL80: `127.0.0.1:3307` DB `bluedate`. Tunnel + `/tmp/bd-prod.cnf` — sohbete koyma.
 - Mail: `info@meerk.com.tr` — SMTP `mail.kurumsaleposta.com:465`. E-posta OTP (SMS yok).
+- **Natro DNS (ticket #32429455, 10 Eki):** NS Natro değilse panel kayıt kabul etmez. NS Natro olduktan sonra: Hosting Yönetimi → Mail Hosting Hesapları → Yönet → alan adı → İşlemler → DNS Yönetimi. Registrar NS: Webim ticket (Gürkan, 7 Eki `ns1/ns2.natrohost.com`). Cloudflare NS’e geçilirse bu menü kullanılmaz; DNS + MX Cloudflare’da.
 
 ## Duran (kullanıcı)
 
-- App Store / Play **Manage**.
-- Cloudflare turuncu: zone hazır deyince `deploy/cloudflare/apply-api-proxy.sh`. Token sohbete koyma.
+- App Store / Play **Manage** (binary yüklü / AAB hazır).
+- Cloudflare MX hâlâ boş. Token sohbete koyma. Script: `deploy/cloudflare/apply-api-proxy.sh`.
 - Firebase dosyaları.
-- Git remote push yok.
 - Commit yalnız istenince.
 
 ## Mimari

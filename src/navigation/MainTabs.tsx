@@ -9,6 +9,7 @@ import { HomeStack } from './HomeStack';
 import { MessagesStack } from './MessagesStack';
 import { NearbyStack } from './NearbyStack';
 import { ProfileStack } from './ProfileStack';
+import { useTheme } from '../theme';
 import { MainTabParamList } from './types';
 
 const Tab = createMaterialTopTabNavigator<MainTabParamList>();
@@ -18,6 +19,7 @@ function renderTabBar(props: MaterialTopTabBarProps) {
 }
 
 export function MainTabs() {
+  const theme = useTheme();
   return (
     <Tab.Navigator
       initialRouteName="Home"
@@ -31,7 +33,7 @@ export function MainTabs() {
         swipeEnabled: false,
         animationEnabled: false,
         lazy: false,
-        sceneStyle: { flex: 1 },
+        sceneStyle: { flex: 1, backgroundColor: theme.colors.background },
       }}>
       <Tab.Screen name="Home" component={HomeStack} />
       <Tab.Screen name="Friends" component={FriendsStack} />

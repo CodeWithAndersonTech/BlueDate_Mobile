@@ -3,24 +3,25 @@ import {
   Alert,
   Image,
   KeyboardAvoidingView,
-  Modal,
   Platform,
   Pressable,
   ScrollView,
   StyleSheet,
-  Text,
-  TextInput,
   View,
 } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { InterestTypeItem, resolveMediaUrl, saveUserInterest, updateUserBasics } from '../../api';
 import {
-  InterestTypeItem,
-  resolveMediaUrl,
-  saveUserInterest,
-} from '../../api';
-import { FigmaButton, FigmaSpinner, Screen, Typography } from '../../components';
-import { useKeyboardHeight } from '../../hooks';
-import { useLocale, userFacingError } from '../../i18n';
+  AuthPrimaryButton,
+  BirthDatePicker,
+  BottomActionDock,
+  FigmaIcon,
+  FigmaSpinner,
+  Input,
+  Screen,
+  SheetModal,
+  Typography,
+} from '../../components';
+import { interestTypeLabel, useLocale, userFacingError } from '../../i18n';
 import { useAuth } from '../../navigation/AuthContext';
 import {
   assetFromPickerResponse,
@@ -29,31 +30,53 @@ import {
 import { pickAndSetAvatar } from '../../services/photos/photoStore';
 import { loadProfileCompleteness } from '../../services/onboarding/profileCompleteness';
 import { useTheme } from '../../theme';
-
-const INTEREST_EMOJI: { match: RegExp; emoji: string }[] = [
-  { match: /food|yemek|yeme/i, emoji: '🍽' },
-  { match: /dessert|tatlı|tatl/i, emoji: '🍰' },
-  { match: /coffee|kahve/i, emoji: '☕' },
-  { match: /drink|beverage|alcohol|alkol|içecek|icecek/i, emoji: '🥤' },
-];
-
-function interestEmoji(type: InterestTypeItem): string {
-  const hay = `${type.Code ?? ''} ${type.Name ?? ''} ${type.KeyName ?? ''}`;
-  for (const item of INTEREST_EMOJI) {
-    if (item.match.test(hay)) return item.emoji;
-  }
-  return '✨';
-}
+import {
+  BirthParts,
+  defaultBirthParts,
+  formatBirthDateIso,
+  isValidRegisterAge,
+} from '../../utils/birthDate';
+import {
+  GENDER_OPTIONS,
+  GenderValue,
+  isValidGender,
+} from '../../utils/gender';
+import { zodiacFromMonthDay } from '../../utils/zodiac';
 
 type Props = {
   onCompleted: () => void;
 };
 
+function partsFromIso(iso?: string | null): BirthParts {
+  if (!iso) {
+    return defaultBirthParts(25);
+  }
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) {
+    return defaultBirthParts(25);
+  }
+  return {
+    year: d.getUTCFullYear(),
+    month: d.getUTCMonth() + 1,
+    day: d.getUTCDate(),
+  };
+}
+
+function splitFullName(value: string): { first: string; last: string } {
+  const trimmed = value.trim().replace(/\s+/g, ' ');
+  const space = trimmed.indexOf(' ');
+  if (space < 0) {
+    return { first: trimmed, last: '' };
+  }
+  return {
+    first: trimmed.slice(0, space),
+    last: trimmed.slice(space + 1).trim(),
+  };
+}
+
 export function OnboardingSetupScreen({ onCompleted }: Props) {
   const theme = useTheme();
-  const insets = useSafeAreaInsets();
-  const keyboardHeight = useKeyboardHeight();
-  const { t } = useLocale();
+  const { t, languageCode } = useLocale();
   const { userId, accessToken } = useAuth();
 
   const [loading, setLoading] = useState(true);
@@ -62,11 +85,20 @@ export function OnboardingSetupScreen({ onCompleted }: Props) {
   const [interestTypes, setInterestTypes] = useState<InterestTypeItem[]>([]);
   const [answers, setAnswers] = useState<Record<number, string>>({});
   const [avatarUri, setAvatarUri] = useState<string | undefined>();
+  const [username, setUsername] = useState('');
+  const [fullName, setFullName] = useState('');
+  const [birthParts, setBirthParts] = useState(() => defaultBirthParts(25));
+  const [gender, setGender] = useState<GenderValue | null>(null);
   const [sheetType, setSheetType] = useState<InterestTypeItem | null>(null);
   const [sheetValue, setSheetValue] = useState('');
+  const [birthOpen, setBirthOpen] = useState(false);
+  const [genderOpen, setGenderOpen] = useState(false);
+  const [formError, setFormError] = useState<string | null>(null);
 
   const hydrate = useCallback(async () => {
-    if (!userId) return;
+    if (!userId) {
+      return;
+    }
     setLoading(true);
     try {
       const data = await loadProfileCompleteness(userId, accessToken);
@@ -76,6 +108,16 @@ export function OnboardingSetupScreen({ onCompleted }: Props) {
         ? ((await resolveMediaUrl(data.avatarUri)) ?? data.avatarUri)
         : undefined;
       setAvatarUri(resolved);
+      if (data.profile) {
+        setUsername(data.profile.Username ?? '');
+        setFullName(
+          `${data.profile.FirstName ?? ''} ${data.profile.LastName ?? ''}`.trim(),
+        );
+        setBirthParts(partsFromIso(data.profile.BirthDate));
+        setGender(
+          isValidGender(data.profile.Gender) ? data.profile.Gender : null,
+        );
+      }
       if (data.isComplete) {
         onCompleted();
       }
@@ -97,7 +139,31 @@ export function OnboardingSetupScreen({ onCompleted }: Props) {
     [answers, interestTypes],
   );
   const hasPhoto = Boolean(avatarUri);
-  const canContinue = interestsComplete && hasPhoto && !saving;
+  const { first, last } = splitFullName(fullName);
+  const usernameValid = username.trim().length >= 3;
+  const nameValid = first.length > 0 && last.length > 0;
+  const ageValid = isValidRegisterAge(birthParts);
+  const birthLabel = useMemo(() => {
+    const locale =
+      languageCode === 'tr'
+        ? 'tr-TR'
+        : languageCode === 'ar'
+          ? 'ar'
+          : languageCode === 'ru'
+            ? 'ru-RU'
+            : 'en-US';
+    return new Date(
+      birthParts.year,
+      birthParts.month - 1,
+      birthParts.day,
+    ).toLocaleDateString(locale, {
+      day: 'numeric',
+      month: 'long',
+      year: 'numeric',
+    });
+  }, [birthParts, languageCode]);
+
+  const zodiac = zodiacFromMonthDay(birthParts.month, birthParts.day);
 
   const openSheet = (type: InterestTypeItem) => {
     setSheetType(type);
@@ -105,7 +171,9 @@ export function OnboardingSetupScreen({ onCompleted }: Props) {
   };
 
   const applySheet = () => {
-    if (!sheetType) return;
+    if (!sheetType) {
+      return;
+    }
     setAnswers(prev => ({
       ...prev,
       [sheetType.Id]: sheetValue.trim(),
@@ -114,13 +182,17 @@ export function OnboardingSetupScreen({ onCompleted }: Props) {
   };
 
   const onPickPhoto = async () => {
-    if (!userId || photoBusy) return;
+    if (!userId || photoBusy) {
+      return;
+    }
     const result = await pickPhotoFromLibrary({
       mediaType: 'photo',
       selectionLimit: 1,
       quality: 0.8,
     });
-    if (result.didCancel) return;
+    if (result.didCancel) {
+      return;
+    }
     if (result.errorCode === 'permission') {
       Alert.alert(t('onboarding.photo_title'), t('profile.photo_permission'));
       return;
@@ -148,10 +220,51 @@ export function OnboardingSetupScreen({ onCompleted }: Props) {
     }
   };
 
+  const firstMissing = (): string | null => {
+    if (!hasPhoto) {
+      return t('onboarding.photo_required');
+    }
+    if (!usernameValid) {
+      return t('auth.username_length');
+    }
+    if (!nameValid) {
+      return t('auth.last_name_required');
+    }
+    if (!ageValid) {
+      return t('auth.birth_date_required');
+    }
+    if (!isValidGender(gender)) {
+      return t('auth.gender_required');
+    }
+    if (!interestsComplete) {
+      return t('onboarding.interests_required');
+    }
+    return null;
+  };
+
   const onContinue = async () => {
-    if (!userId || !canContinue) return;
+    const missing = firstMissing();
+    if (missing) {
+      setFormError(missing);
+      return;
+    }
+    if (!userId || !isValidGender(gender)) {
+      return;
+    }
     setSaving(true);
+    setFormError(null);
     try {
+      await updateUserBasics(
+        {
+          UserId: userId,
+          FirstName: first,
+          LastName: last,
+          Username: username.trim().toLowerCase(),
+          BirthDate: `${formatBirthDateIso(birthParts)}T00:00:00.000Z`,
+          Gender: gender,
+        },
+        accessToken,
+      );
       await Promise.all(
         interestTypes.map(type => {
           const value = (answers[type.Id] ?? '').trim();
@@ -178,7 +291,7 @@ export function OnboardingSetupScreen({ onCompleted }: Props) {
 
   if (loading) {
     return (
-      <Screen edges={['top', 'bottom']}>
+      <Screen edges={['top']}>
         <View style={styles.center}>
           <FigmaSpinner color={theme.colors.plusCta} />
         </View>
@@ -187,32 +300,151 @@ export function OnboardingSetupScreen({ onCompleted }: Props) {
   }
 
   return (
-    <Screen edges={['top']}>
+    <Screen padded={false} edges={['top']}>
       <KeyboardAvoidingView
         style={styles.flex}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <ScrollView
           style={styles.flex}
-          contentContainerStyle={[
-            styles.content,
-            { paddingBottom: Math.max(insets.bottom, 16) + 88 },
-          ]}
+          contentContainerStyle={styles.content}
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}>
-          <Typography variant="h1">{t('onboarding.title')}</Typography>
-          <Typography variant="body" color="textMuted" style={styles.lead}>
-            {t('onboarding.subtitle')}
-          </Typography>
-
-          <View style={styles.section}>
-            <Typography variant="title">{t('onboarding.interests_title')}</Typography>
-            <Typography
-              variant="caption"
-              color="textMuted"
-              style={styles.sectionHint}>
-              {t('onboarding.interests_hint')}
+          <View style={styles.titles}>
+            <Typography variant="h1" align="center" weight="600">
+              {t('onboarding.hero_line1')}{' '}
+              <Typography variant="h1" weight="600" tint={theme.colors.plusCta}>
+                {t('onboarding.hero_accent')}
+              </Typography>
             </Typography>
-            <View style={styles.tiles}>
+            <Typography variant="callout" align="center" color="textMuted">
+              {t('onboarding.hero_sub')}
+            </Typography>
+          </View>
+
+          <Pressable
+            onPress={() => {
+              void onPickPhoto();
+            }}
+            disabled={photoBusy}
+            style={styles.photoBlock}>
+            <View
+              style={[
+                styles.avatar,
+                { backgroundColor: theme.colors.plusSoft },
+              ]}>
+              {avatarUri ? (
+                <Image source={{ uri: avatarUri }} style={styles.avatarImg} />
+              ) : (
+                <FigmaIcon
+                  name="profileAdd"
+                  size={36}
+                  color={theme.colors.plusCta}
+                />
+              )}
+            </View>
+            <Typography variant="caption" align="center" color="textMuted">
+              {photoBusy
+                ? t('onboarding.photo_uploading')
+                : t('onboarding.photo_add')}
+            </Typography>
+          </Pressable>
+
+          <View style={styles.field}>
+            <Typography variant="caption" color="textMuted">
+              {t('auth.username')}
+            </Typography>
+            <Input
+              pill
+              leftIcon="user"
+              placeholder={t('auth.username')}
+              autoCapitalize="none"
+              autoCorrect={false}
+              value={username}
+              onChangeText={text =>
+                setUsername(text.replace(/\s/g, '').toLowerCase())
+              }
+            />
+          </View>
+
+          <View style={styles.field}>
+            <Typography variant="caption" color="textMuted">
+              {t('onboarding.full_name')}
+            </Typography>
+            <Input
+              pill
+              leftIcon="user"
+              placeholder={t('onboarding.full_name')}
+              autoCapitalize="words"
+              value={fullName}
+              onChangeText={setFullName}
+            />
+          </View>
+
+          <View style={styles.halfRow}>
+            <View style={styles.half}>
+              <Typography variant="caption" color="textMuted">
+                {t('auth.birth_date')}
+              </Typography>
+              <Pressable
+                onPress={() => setBirthOpen(true)}
+                style={[
+                  styles.pill,
+                  {
+                    backgroundColor: theme.colors.authField,
+                    borderColor: theme.colors.authFieldBorder,
+                  },
+                ]}>
+                <FigmaIcon
+                  name="sms"
+                  size={18}
+                  color={theme.colors.textMuted}
+                />
+                <Typography variant="caption" numberOfLines={1} style={styles.pillText}>
+                  {birthLabel}
+                </Typography>
+                <Typography variant="callout">{zodiac.symbol}</Typography>
+              </Pressable>
+            </View>
+            <View style={styles.half}>
+              <Typography variant="caption" color="textMuted">
+                {t('auth.gender')}
+              </Typography>
+              <Pressable
+                onPress={() => setGenderOpen(true)}
+                style={[
+                  styles.pill,
+                  {
+                    backgroundColor: theme.colors.authField,
+                    borderColor: theme.colors.authFieldBorder,
+                  },
+                ]}>
+                <FigmaIcon
+                  name="people"
+                  size={18}
+                  color={theme.colors.textMuted}
+                />
+                <Typography variant="caption" numberOfLines={1} style={styles.pillText}>
+                  {isValidGender(gender)
+                    ? t(
+                        GENDER_OPTIONS.find(o => o.value === gender)?.labelKey ??
+                          'onboarding.gender_placeholder',
+                      )
+                    : t('onboarding.gender_placeholder')}
+                </Typography>
+                <FigmaIcon
+                  name="arrowRight"
+                  size={14}
+                  color={theme.colors.textMuted}
+                />
+              </Pressable>
+            </View>
+          </View>
+
+          <View style={styles.field}>
+            <Typography variant="caption" color="textMuted">
+              {t('onboarding.interests_title')}
+            </Typography>
+            <View style={styles.favList}>
               {interestTypes.map(type => {
                 const value = (answers[type.Id] ?? '').trim();
                 const filled = value.length > 0;
@@ -221,185 +453,122 @@ export function OnboardingSetupScreen({ onCompleted }: Props) {
                     key={type.Id}
                     onPress={() => openSheet(type)}
                     style={[
-                      styles.tile,
+                      styles.favRow,
                       {
-                        backgroundColor: filled
-                          ? theme.colors.plusSoft
-                          : theme.colors.card,
-                        borderColor: filled
-                          ? theme.colors.plusCta
-                          : theme.colors.border,
+                        backgroundColor: theme.colors.authField,
+                        borderColor: theme.colors.authFieldBorder,
                       },
                     ]}>
-                    <Text style={styles.tileEmoji}>{interestEmoji(type)}</Text>
-                    <Typography variant="callout" weight="600" numberOfLines={2}>
-                      {type.Name || type.Code}
-                    </Typography>
-                    <Typography
-                      variant="caption"
-                      color={filled ? 'text' : 'textMuted'}
-                      numberOfLines={2}>
-                      {filled ? value : t('edit.add_interest')}
+                    <View
+                      style={[
+                        styles.favIcon,
+                        { backgroundColor: theme.colors.plusSoft },
+                      ]}>
+                      <FigmaIcon
+                        name="heart"
+                        size={16}
+                        color={theme.colors.plusCta}
+                      />
+                    </View>
+                    <View style={styles.favCopy}>
+                      <Typography variant="caption" color="textMuted">
+                        {t('onboarding.favorite_prefix')}{' '}
+                        {interestTypeLabel(t, type)}
+                      </Typography>
+                      <Typography variant="callout" weight="500">
+                        {filled ? value : t('onboarding.not_selected')}
+                      </Typography>
+                    </View>
+                    <Typography variant="caption" tint={theme.colors.plusCta}>
+                      {filled
+                        ? t('onboarding.change')
+                        : t('edit.add_interest')}
                     </Typography>
                   </Pressable>
                 );
               })}
             </View>
-            {!interestsComplete ? (
-              <Typography variant="caption" color="danger">
-                {t('onboarding.interests_required')}
-              </Typography>
-            ) : null}
           </View>
 
-          <View style={styles.section}>
-            <Typography variant="title">{t('onboarding.photo_title')}</Typography>
-            <Typography
-              variant="caption"
-              color="textMuted"
-              style={styles.sectionHint}>
-              {t('onboarding.photo_hint')}
+          {formError ? (
+            <Typography variant="caption" tint={theme.colors.danger} align="center">
+              {formError}
             </Typography>
-            <Pressable
-              onPress={() => {
-                void onPickPhoto();
-              }}
-              disabled={photoBusy}
-              style={[
-                styles.photoCard,
-                {
-                  backgroundColor: theme.colors.card,
-                  borderColor: hasPhoto
-                    ? theme.colors.success
-                    : theme.colors.border,
-                },
-              ]}>
-              {avatarUri ? (
-                <Image source={{ uri: avatarUri }} style={styles.photo} />
-              ) : (
-                <View
-                  style={[
-                    styles.photoPlaceholder,
-                    { backgroundColor: theme.colors.plusSoft },
-                  ]}>
-                  <Typography variant="h2" tint={theme.colors.plusCta}>
-                    +
-                  </Typography>
-                  <Typography variant="caption" color="textMuted">
-                    {photoBusy
-                      ? t('onboarding.photo_uploading')
-                      : t('onboarding.photo_add')}
-                  </Typography>
-                </View>
-              )}
-            </Pressable>
-            {!hasPhoto ? (
-              <Typography variant="caption" color="danger">
-                {t('onboarding.photo_required')}
-              </Typography>
-            ) : null}
-          </View>
+          ) : null}
         </ScrollView>
 
-        <View
-          style={[
-            styles.dock,
-            {
-              paddingBottom: Math.max(insets.bottom, 12),
-              backgroundColor: theme.colors.background,
-              borderTopColor: theme.colors.border,
-            },
-          ]}>
-          <FigmaButton
+        <BottomActionDock direction="column">
+          <AuthPrimaryButton
             label={saving ? t('onboarding.saving') : t('onboarding.continue')}
-            size="md"
-            fullWidth
+            loading={saving}
             onPress={() => {
               void onContinue();
             }}
-            disabled={!canContinue}
-            loading={saving}
           />
-        </View>
+        </BottomActionDock>
       </KeyboardAvoidingView>
 
-      <Modal
+      <SheetModal
         visible={sheetType != null}
-        transparent
-        animationType="fade"
-        presentationStyle="overFullScreen"
-        onRequestClose={() => setSheetType(null)}>
-        <View
-          style={[
-            styles.modalRoot,
-            { paddingBottom: keyboardHeight },
-          ]}>
+        title={
+          sheetType
+            ? `${t('onboarding.favorite_prefix')} ${interestTypeLabel(t, sheetType)}`
+            : undefined
+        }
+        onClose={() => setSheetType(null)}>
+        <Input
+          pill
+          placeholder={t('edit.answer_placeholder').replace(
+            '{name}',
+            sheetType ? interestTypeLabel(t, sheetType) : '',
+          )}
+          value={sheetValue}
+          onChangeText={setSheetValue}
+          autoFocus
+        />
+        <AuthPrimaryButton
+          label={t('edit.apply_interest')}
+          onPress={applySheet}
+        />
+      </SheetModal>
+
+      <SheetModal
+        visible={birthOpen}
+        title={t('auth.birth_date')}
+        onClose={() => setBirthOpen(false)}>
+        <BirthDatePicker value={birthParts} onChange={setBirthParts} />
+        <AuthPrimaryButton
+          label={t('edit.apply_interest')}
+          onPress={() => setBirthOpen(false)}
+        />
+      </SheetModal>
+
+      <SheetModal
+        visible={genderOpen}
+        title={t('auth.gender')}
+        onClose={() => setGenderOpen(false)}>
+        {GENDER_OPTIONS.map(option => (
           <Pressable
-            style={[styles.backdrop, { backgroundColor: theme.colors.backdrop }]}
-            onPress={() => setSheetType(null)}
-          />
-          <View
+            key={option.value}
+            onPress={() => {
+              setGender(option.value);
+              setGenderOpen(false);
+            }}
             style={[
-              styles.sheet,
+              styles.genderRow,
               {
-                backgroundColor: theme.colors.card,
-                paddingBottom:
-                  keyboardHeight > 0 ? 12 : Math.max(insets.bottom, 16),
-                borderBottomLeftRadius: keyboardHeight > 0 ? 0 : 24,
-                borderBottomRightRadius: keyboardHeight > 0 ? 0 : 24,
+                backgroundColor:
+                  gender === option.value
+                    ? theme.colors.plusSoft
+                    : theme.colors.authField,
               },
             ]}>
-            <Typography variant="h3">
-              {sheetType?.Name || sheetType?.Code || ''}
+            <Typography variant="callout" weight="500">
+              {t(option.labelKey)}
             </Typography>
-            <Typography variant="caption" color="textMuted">
-              {t('onboarding.interests_hint')}
-            </Typography>
-            <TextInput
-              value={sheetValue}
-              onChangeText={setSheetValue}
-              autoFocus
-              placeholder={t('edit.answer_placeholder').replace(
-                '{name}',
-                sheetType?.Name || '',
-              )}
-              placeholderTextColor={theme.colors.textMuted}
-              style={[
-                styles.sheetInput,
-                {
-                  color: theme.colors.text,
-                  backgroundColor: theme.colors.surfaceAlt,
-                  borderColor: theme.colors.border,
-                },
-              ]}
-            />
-            <View style={styles.sheetActions}>
-              <Pressable
-                onPress={() => setSheetType(null)}
-                style={[styles.sheetBtn, styles.sheetGhost]}>
-                <Text
-                  style={[styles.sheetBtnLabel, { color: theme.colors.plusCta }]}>
-                  {t('settings.cancel')}
-                </Text>
-              </Pressable>
-              <Pressable
-                onPress={applySheet}
-                style={[
-                  styles.sheetBtn,
-                  { backgroundColor: theme.colors.plusCta },
-                ]}>
-                <Text
-                  style={[
-                    styles.sheetBtnLabel,
-                    { color: theme.colors.onPrimary },
-                  ]}>
-                  {t('edit.apply_interest')}
-                </Text>
-              </Pressable>
-            </View>
-          </View>
-        </View>
-      </Modal>
+          </Pressable>
+        ))}
+      </SheetModal>
     </Screen>
   );
 }
@@ -408,77 +577,59 @@ const styles = StyleSheet.create({
   flex: { flex: 1 },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   content: {
-    paddingHorizontal: 20,
-    paddingTop: 12,
-    gap: 20,
+    paddingHorizontal: 10,
+    paddingTop: 8,
+    paddingBottom: 20,
+    gap: 14,
   },
-  lead: { marginTop: 6, lineHeight: 22 },
-  section: { gap: 10 },
-  sectionHint: { lineHeight: 18 },
-  tiles: {
+  titles: { alignItems: 'center', gap: 4 },
+  photoBlock: { alignItems: 'center', gap: 8 },
+  avatar: {
+    width: 100,
+    height: 100,
+    borderRadius: 50,
+    alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'hidden',
+  },
+  avatarImg: { width: 100, height: 100 },
+  field: { gap: 6 },
+  halfRow: { flexDirection: 'row', gap: 10 },
+  half: { flex: 1, gap: 6 },
+  pill: {
+    height: 43,
+    borderRadius: 15,
+    borderWidth: 1,
+    paddingHorizontal: 11,
     flexDirection: 'row',
-    flexWrap: 'wrap',
+    alignItems: 'center',
+    gap: 8,
+  },
+  pillText: { flex: 1 },
+  favList: { gap: 5 },
+  favRow: {
+    minHeight: 52,
+    borderRadius: 15,
+    borderWidth: 1,
+    paddingHorizontal: 11,
+    flexDirection: 'row',
+    alignItems: 'center',
     gap: 10,
   },
-  tile: {
-    width: '48%',
-    minHeight: 110,
-    borderRadius: 16,
-    borderWidth: 1.5,
-    padding: 12,
-    gap: 6,
-  },
-  tileEmoji: { fontSize: 22 },
-  photoCard: {
-    borderRadius: 20,
-    borderWidth: 1.5,
-    overflow: 'hidden',
-    alignSelf: 'center',
-  },
-  photo: { width: 160, height: 160 },
-  photoPlaceholder: {
-    width: 160,
-    height: 160,
+  favIcon: {
+    width: 30,
+    height: 30,
+    borderRadius: 8,
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 6,
   },
-  dock: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    bottom: 0,
-    paddingHorizontal: 20,
-    paddingTop: 12,
-    borderTopWidth: StyleSheet.hairlineWidth,
-  },
-  modalRoot: { flex: 1, justifyContent: 'flex-end' },
-  backdrop: { ...StyleSheet.absoluteFill },
-  sheet: {
-    width: '100%',
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    paddingHorizontal: 20,
-    paddingTop: 20,
-    gap: 12,
-  },
-  sheetInput: {
-    height: 52,
-    borderRadius: 16,
-    borderWidth: 1,
-    paddingHorizontal: 16,
-    fontSize: 16,
-  },
-  sheetActions: { flexDirection: 'row', gap: 12, marginTop: 4 },
-  sheetBtn: {
-    flex: 1,
+  favCopy: { flex: 1 },
+  genderRow: {
     height: 48,
-    borderRadius: 999,
+    borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  sheetGhost: {},
-  sheetBtnLabel: { fontSize: 15, fontWeight: '700' },
 });
 
 export default OnboardingSetupScreen;
