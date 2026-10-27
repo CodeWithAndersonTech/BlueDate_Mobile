@@ -21,6 +21,7 @@ export type ProfilePhoto = {
   sortOrder: number;
   /** True when only stored on device (upload pending / offline). */
   localOnly?: boolean;
+  kind?: number;
 };
 
 export class PhotoLimitError extends Error {
@@ -60,27 +61,26 @@ async function writeLocal(userId: number, bundle: LocalBundle) {
 export async function loadProfilePhotos(
   userId: number,
   token?: string | null,
-): Promise<{ avatarUri?: string; gallery: ProfilePhoto[] }> {
+): Promise<{ avatarUri?: string; avatar?: ProfilePhoto; gallery: ProfilePhoto[] }> {
   const local = await readLocal(userId);
   let remoteGallery: ProfilePhoto[] = [];
   let remoteAvatar: string | undefined;
+  let avatarPhoto: ProfilePhoto | undefined;
 
   try {
     const allRes = await getUserPhotos(userId, undefined, token);
     const items = allRes.Items ?? [];
     const galleryItems = items.filter(item => item.Kind !== UserPhotoKind.Avatar);
-    const avatarItem =
-      items.find(item => item.Kind === UserPhotoKind.Avatar) ??
-      (galleryItems.length === 0 ? items[0] : undefined);
+    const avatarItem = items.find(item => item.Kind === UserPhotoKind.Avatar);
 
     remoteGallery = await Promise.all(
-      (galleryItems.length > 0 ? galleryItems : items).map(item =>
-        mapRemotePhoto(item),
-      ),
+      galleryItems.map((item, index) => mapRemotePhoto(item, index)),
     );
 
     if (avatarItem) {
-      remoteAvatar = (await resolveMediaUrl(avatarItem.Url)) ?? avatarItem.Url;
+      avatarPhoto = await mapRemotePhoto(avatarItem, -1);
+      avatarPhoto.kind = UserPhotoKind.Avatar;
+      remoteAvatar = avatarPhoto.uri;
     }
 
     if (__DEV__) {
@@ -103,6 +103,7 @@ export async function loadProfilePhotos(
 
   return {
     avatarUri: preferDisplayAvatar(remoteAvatar, local.avatarUri),
+    avatar: avatarPhoto,
     gallery,
   };
 }
@@ -139,7 +140,7 @@ export function rememberAvatar(userId: number, uri?: string | null) {
  * Used for friend/other profile grids and the photo count stat.
  */
 async function mapRemotePhoto(
-  item: Pick<UserPhotoItem, 'Id' | 'Url' | 'SortOrder'>,
+  item: Pick<UserPhotoItem, 'Id' | 'Url' | 'SortOrder' | 'Kind'>,
   index = 0,
 ): Promise<ProfilePhoto> {
   return {
@@ -148,7 +149,17 @@ async function mapRemotePhoto(
     uri: (await resolveMediaUrl(item.Url)) ?? item.Url,
     sortOrder: item.SortOrder ?? index,
     localOnly: false,
+    kind: item.Kind,
   };
+}
+
+function samePhotoUri(a?: string | null, b?: string | null): boolean {
+  const left = (a ?? '').replace(/\/+$/, '');
+  const right = (b ?? '').replace(/\/+$/, '');
+  if (!left || !right) {
+    return false;
+  }
+  return left === right || left.endsWith(right) || right.endsWith(left);
 }
 
 export async function photosFromProfile(
@@ -173,29 +184,33 @@ export function mergePhotoLists(...lists: ProfilePhoto[][]): ProfilePhoto[] {
 
 export function mergeAvatarIntoDisplayPhotos(bundle: {
   avatarUri?: string;
+  avatar?: ProfilePhoto;
   gallery: ProfilePhoto[];
 }): ProfilePhoto[] {
   const gallery = bundle.gallery ?? [];
-  const avatarUri = bundle.avatarUri?.trim();
+  const avatar = bundle.avatar;
+  const avatarUri = (avatar?.uri ?? bundle.avatarUri ?? '').trim();
   if (!avatarUri) {
     return gallery;
   }
 
-  const normalizedAvatar = avatarUri.replace(/\/+$/, '');
-  const alreadyInGallery = gallery.some(p => {
-    const uri = (p.uri ?? '').replace(/\/+$/, '');
-    return uri === normalizedAvatar || uri.endsWith(normalizedAvatar) || normalizedAvatar.endsWith(uri);
-  });
+  const alreadyInGallery = gallery.some(p => samePhotoUri(p.uri, avatarUri));
   if (alreadyInGallery) {
-    return gallery;
+    return gallery.map(photo =>
+      samePhotoUri(photo.uri, avatarUri)
+        ? { ...photo, kind: photo.kind ?? UserPhotoKind.Avatar }
+        : photo,
+    );
   }
 
   return [
     {
-      id: 'avatar-display',
+      id: avatar?.id ?? `remote-${avatar?.remoteId ?? 'avatar'}`,
+      remoteId: avatar?.remoteId,
       uri: avatarUri,
       sortOrder: -1,
       localOnly: false,
+      kind: UserPhotoKind.Avatar,
     },
     ...gallery,
   ];
@@ -264,15 +279,57 @@ export async function removeGalleryPhoto(
   userId: number,
   photo: ProfilePhoto,
   token?: string | null,
-): Promise<void> {
-  if (photo.remoteId) {
+): Promise<string | undefined> {
+  let remoteId = photo.remoteId;
+  if (!remoteId) {
+    const bundle = await loadProfilePhotos(userId, token);
+    remoteId =
+      bundle.avatar && samePhotoUri(bundle.avatar.uri, photo.uri)
+        ? bundle.avatar.remoteId
+        : bundle.gallery.find(item => samePhotoUri(item.uri, photo.uri))
+            ?.remoteId;
+  }
+  if (remoteId) {
     try {
-      await deleteUserPhoto(userId, photo.remoteId, token);
+      await deleteUserPhoto(userId, remoteId, token);
     } catch {
       /* still remove locally */
     }
   }
   const local = await readLocal(userId);
-  local.gallery = local.gallery.filter(p => p.id !== photo.id);
+  local.gallery = local.gallery.filter(
+    item => item.id !== photo.id && !samePhotoUri(item.uri, photo.uri),
+  );
+  if (samePhotoUri(local.avatarUri, photo.uri)) {
+    local.avatarUri = undefined;
+  }
   await writeLocal(userId, local);
+  if (samePhotoUri(peekCachedAvatar(userId), photo.uri)) {
+    memoryAvatars.delete(userId);
+  }
+
+  const remaining = await loadProfilePhotos(userId, token).catch(() => ({
+    avatarUri: undefined as string | undefined,
+    avatar: undefined as ProfilePhoto | undefined,
+    gallery: [] as ProfilePhoto[],
+  }));
+  let nextUri = remaining.avatarUri ?? remaining.gallery[0]?.uri;
+  if (!remaining.avatar && remaining.gallery[0]) {
+    try {
+      nextUri = await pickAndSetAvatar(
+        userId,
+        { uri: remaining.gallery[0].uri },
+        token,
+      );
+    } catch {
+      /* keep gallery face locally */
+    }
+  }
+  if (nextUri) {
+    rememberAvatar(userId, nextUri);
+    const stored = await readLocal(userId);
+    stored.avatarUri = nextUri;
+    await writeLocal(userId, stored);
+  }
+  return nextUri;
 }

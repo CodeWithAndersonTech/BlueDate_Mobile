@@ -9,11 +9,12 @@ Mobil: bu repo. Backend: `~/RiderProjects/AD_BlueDateApp`. Ürün adı Meerk.
 
 Ayrıntı yedek (kapatınca kaybolmasın): kullanıcı store `bluedate-session-2026-10-20.md`.
 
-## Son durak (27 Eki 2026 14:25) — buradan devam
+## Son durak (27 Eki 2026 15:21) — buradan devam
 
-- Mobil **1.0.9** commit **`13f836a`**, `origin/main` push edildi. Repo temiz.
-- iOS **1.0.9 (22)** App Store Connect’e yüklendi (27 Eki ~13:59). **Manage** sen.
-- Android **1.0.9 (10)** AAB: `android/app/build/outputs/bundle/release/app-release.aab` (~79MB). Play API yok — **Manage** sen.
+- Mobil **1.0.10** — iOS (23) ASC, Android (11) AAB. Backend delete-photo promote henüz VPS’te değil (lokal handler).
+- Profil: ayarlar ikonu (`setting2`). Edit’te profil resmi silinince sıradaki avatar olur.
+- iOS **1.0.10 (23)** App Store Connect. **Manage** sen.
+- Android **1.0.10 (11)** AAB. Play **Manage** sen.
 - Backend **1.1.9** VPS’te. Yeni kod yok; publish etme. Dirty yalnız `appsettings*.json` + `.DS_Store` + local uploads — **commit etme**.
 - **Cloudflare NS canlı:** `harleigh` / `tanner`. `api.meerk.com.tr` CF anycast, `cf-ray`. **MX yok** — CF DNS’e `mx-01`/`mx-02.kurumsaleposta.com` ekle. SSL/WS script basılmadı. Token yazma.
 - Figma auth/OTP/reset/premium/onboarding/ayarlar/filtreler. Ayrıntı `docs/figma-auth-and-cloudflare.md`.

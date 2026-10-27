@@ -571,7 +571,7 @@ export function ProfileScreen({ navigation }: Props) {
               accessibilityLabel={t('settings.title')}
               style={styles.coverBarSide}>
               <FigmaIcon
-                name="moreDots"
+                name="setting2"
                 size={24}
                 color={coverPhoto ? theme.colors.white : theme.colors.text}
               />

@@ -20,6 +20,7 @@ import {
   PhotoLimitError,
   pickAndAddGalleryPhoto,
   ProfilePhoto,
+  rememberAvatar,
   removeGalleryPhoto,
 } from '../../services/photos/photoStore';
 import { PhotoViewerModal } from './PhotoViewerModal';
@@ -128,6 +129,9 @@ export function ProfilePhotoGrid({
             try {
               await removeGalleryPhoto(userId, photo, token);
               const next = photos.filter(p => p.id !== photo.id);
+              if (next[0]?.uri && userId) {
+                rememberAvatar(userId, next[0].uri);
+              }
               onPhotosChange(next);
               if (next.length === 0) {
                 setViewerIndex(null);

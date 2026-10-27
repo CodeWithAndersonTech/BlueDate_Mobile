@@ -72,6 +72,7 @@ import {
   photosFromProfile,
   pickAndAddGalleryPhoto,
   ProfilePhoto,
+  rememberAvatar,
   removeGalleryPhoto,
 } from '../../services/photos/photoStore';
 import { useTheme } from '../../theme';
@@ -461,6 +462,7 @@ export function EditProfileScreen({ navigation, route }: Props) {
         setPhotos(
           mergeAvatarIntoDisplayPhotos({
             avatarUri: bundle.avatarUri ?? profileAvatar,
+            avatar: bundle.avatar,
             gallery: mergePhotoLists(fromProfile, bundle.gallery),
           }),
         );
@@ -672,6 +674,9 @@ export function EditProfileScreen({ navigation, route }: Props) {
             await removeGalleryPhoto(userId, photo, accessToken);
             setPhotos(prev => {
               const next = prev.filter(item => item.id !== photo.id);
+              if (next[0]?.uri) {
+                rememberAvatar(userId, next[0].uri);
+              }
               if (next.length === 0) {
                 setViewerIndex(null);
               } else {
