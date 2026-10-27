@@ -64,11 +64,13 @@ Ayarlar `318:17605` (27 Eki, kota yok — XML): krem 50h pill satırlar, bölüm
 - Yeni şifre `318:12921`: “Yeni Şifre Oluşturma” + “Yeni şifre” / “Tekrar yeni şifre” + kural + Oluştur
 - Başarı `318:13023`: “Şifreniz Oluşturulmuştur” + “Yeni şifreniz başarıyla oluşturulmuştur.” + Giriş Yap
 
-## 27 Eki öğleden sonra — Filtreler + profil kapak çizgisi
+## 27 Eki öğleden sonra — Filtreler + profil + 1.0.9
 
-Filtreler `318:17951`: `FilterScreen` — Yaş Aralığı kartı (Seçili Aralık + 18–65+ kaydırıcı), Görmek İstediklerim / Beni Görenler chip (Erkek / LGBTQ+ / Herkes / Kadın), CTA **Kaydet**. `BottomActionDock` (`forceAboveTabBar` yok). Prefill/save aynı `filterPrefs`.
+Filtreler `318:17951`: `FilterScreen` — Yaş Aralığı kartı (Seçili Aralık + 18–65+ kaydırıcı), Görmek İstediklerim / Beni Görenler chip (Erkek / LGBTQ+ / Herkes / Kadın), CTA **Kaydet**. `BottomActionDock` **`forceAboveTabBar`** (tab gizlenince alta gömülmesin). Prefill/save aynı `filterPrefs`.
 
-Profil kapağı (kendi profil): 2–3 foto eklenince üstte **beyaz çizgi**. Kaynak: kapak pager çubuğu + iOS `RefreshControl` 1px. İkisi de kaldırıldı (pager yok, pull-to-refresh yok). Foto okları duruyor. UserProfile footer’a dokunulmadı.
+Profil kapağı: 2–3 foto eklenince üstte beyaz çizgi. Pager çubuğu + iOS `RefreshControl` kaldırıldı. Foto okları duruyor. **Preview profile yok** — üç nokta Ayarlar.
+
+Sürüm **1.0.9** (iOS 22 ASC, Android 10 AAB). Logo `app-logo.png` gerçek PNG (AAPT). UserProfile footer’a dokunulmadı.
 
 ## Yapma
 

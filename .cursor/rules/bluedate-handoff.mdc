@@ -9,29 +9,27 @@ Mobil: bu repo. Backend: `~/RiderProjects/AD_BlueDateApp`. Ürün adı Meerk.
 
 Ayrıntı yedek (kapatınca kaybolmasın): kullanıcı store `bluedate-session-2026-10-20.md`.
 
-## Son durak (27 Eki 2026 öğle) — buradan devam
+## Son durak (27 Eki 2026 14:25) — buradan devam
 
-- **Sürüm 1.0.9** — iOS (22) App Store Connect, Android (10) AAB. Backend 1.1.9 duruyor; yeniden publish yok.
-- **Cloudflare NS canlı:** `harleigh` / `tanner`. `api.meerk.com.tr` CF anycast, health `cf-ray`. **MX yok** — Cloudflare DNS’e `mx-01`/`mx-02.kurumsaleposta.com` ekle. SSL/WS script henüz basılmadı. Token yazma.
-- Figma giriş/kayıt/OTP/reset/premium/profil-tamamla/ayarlar/filtreler. Ayrıntı `docs/figma-auth-and-cloudflare.md`.
-- Profil favori etiketleri dile bağlı. Preview profile yok. Filtre Kaydet `forceAboveTabBar`.
-- Metro + cihaz: `run-ios --udid 00008140-000A61513C28801C`, `USE_PRODUCTION = true`.
+- Mobil **1.0.9** commit **`13f836a`**, `origin/main` push edildi. Repo temiz.
+- iOS **1.0.9 (22)** App Store Connect’e yüklendi (27 Eki ~13:59). **Manage** sen.
+- Android **1.0.9 (10)** AAB: `android/app/build/outputs/bundle/release/app-release.aab` (~79MB). Play API yok — **Manage** sen.
+- Backend **1.1.9** VPS’te. Yeni kod yok; publish etme. Dirty yalnız `appsettings*.json` + `.DS_Store` + local uploads — **commit etme**.
+- **Cloudflare NS canlı:** `harleigh` / `tanner`. `api.meerk.com.tr` CF anycast, `cf-ray`. **MX yok** — CF DNS’e `mx-01`/`mx-02.kurumsaleposta.com` ekle. SSL/WS script basılmadı. Token yazma.
+- Figma auth/OTP/reset/premium/onboarding/ayarlar/filtreler. Ayrıntı `docs/figma-auth-and-cloudflare.md`.
+- Preview profile yok (üç nokta → Ayarlar). Filtre Kaydet `forceAboveTabBar`. Kapak pager + pull-to-refresh yok.
+- Metro kapalı. Cihaz: `npx react-native start` sonra `npx react-native run-ios --udid 00008140-000A61513C28801C`. `USE_PRODUCTION = true`.
+- Prod kullanıcılar 27 Eki silindi. Kalan yalnız `id=1 system`. Yeniden kayıt.
 
 Ayrıntı: kullanıcı store `bluedate-session-2026-10-20.md`.
 
-## Önceki durak (23 Eki sürüm) — aynı
+## Önceki durak (23 Eki) — aynı altyapı
 
-- Fiziksel iPhone: 16 Pro Max, UDID `00008140-000A61513C28801C`, team `XSRRXVWD3X`, bundle `com.andersontech.bluedate`. Android `applicationId` `com.bluedate`.
-- `USE_PRODUCTION = true` — cihaz prod API/DB. Metro kapalı olabilir; tekrar: `npx react-native start` sonra `npx react-native run-ios --udid 00008140-000A61513C28801C`.
-- **Backend 1.1.9 VPS’te.** Health `1.1.9+45a49c4…`. Yeni backend kodu yok; yeniden publish etme. Production json dokunulmadı (Jwt 10y).
-- **iOS 1.0.9 (22)** App Store Connect. **Manage** kullanıcı.
-- **Android 1.0.9 (10)** AAB. Play **Manage** kullanıcı.
-- Backend commit `39ef1c0`. Dirty yalnız: `appsettings*.json`, `.DS_Store`, local `wwwroot/uploads` — **commit etme**.
-- SSH Windows OpenSSH 8.1: `IPQoS=none` + `Ciphers=aes128-ctr` + `MACs=hmac-sha2-256`; SERVICE_ACCEPT reset olursa 20s+ bekle.
-- Login/register Figma’da hâlâ yok (MCP kota / doğrulanmadı), uydurma. Secret / Production json / google-services / plist / SMTP git’e ve sohbete koyma.
-- Prod: `id=1 system` (login yok). Yavuz `ckm.yvz` id=10. Seed arkadaş **Leyla Demir** `leyla.demir` id=11 (dolu profil + 2 foto, accepted friendship).
+- Fiziksel iPhone 16 Pro Max, UDID `00008140-000A61513C28801C`, team `XSRRXVWD3X`, bundle `com.andersontech.bluedate`. Android `applicationId` `com.bluedate`.
+- SSH Windows OpenSSH 8.1: `IPQoS=none` + `Ciphers=aes128-ctr` + `MACs=hmac-sha2-256`; SERVICE_ACCEPT reset → 20s+ bekle.
+- Secret / Production json / google-services / plist / SMTP git’e ve sohbete koyma.
 - Index: `ix_story_user_live`, `ix_notification_user_read`, `ix_user_photo_user_kind`, `ix_language_translations_lang_live`.
-- Figma fileKey `4aA12PtSRUwMdCPiKWOX4J`. Overlay ekranlar `NavigationContainer`’ı View ile sarmasın. Hermes native `ActivityIndicator` yok; RN 0.86 `StyleSheet.absoluteFill`.
+- Figma fileKey `4aA12PtSRUwMdCPiKWOX4J`. Overlay: `NavigationContainer`’ı View ile sarma. Hermes native `ActivityIndicator` yok; RN 0.86 `StyleSheet.absoluteFill`.
 
 ## KİLİT — arkadaş profili (sakın bozma)
 
@@ -42,13 +40,16 @@ UserProfile’da tab yok. Mesaj / İkram tab’in yerinde.
 - CustomTabBar gizli: `opacity: 0` + `translateY: 240`. Göstermek için `afterUiSettled` (iOS 26 crash).
 - Dil değişince tab’e basmak: `afterUiSettled` + `I18nManager.forceRTL` yok (`rtl.ts` yalnız `currentRtl`). Ayrıntı `meerk-layout-and-speed.mdc`.
 
-## Bu turda kapanan (1.0.8 içinde)
+## Bu turda kapanan (1.0.9)
 
-- Kayıt: eksik alan SheetModal (`auth.missing_title` + ilk boş alan). CTA şartlar kapalıyken de basılır.
-- Arkadaş profili alt buton kilit (yukarıda).
-- Dil değiştir → Profil: iOS 26 appearance crash. Settings `setLanguage` ve tab `navigate` `afterUiSettled`.
-- RTL native ayna kapalı; Arapça yalnız Typography `writingDirection`.
-- `DeviceInsetsGate` kök SafeAreaProvider’da (`App.tsx`).
+- Figma giriş/kayıt/OTP/reset/premium/Kendini Tanıt/ayarlar/tema/dil/bildirim/filtre.
+- Favori etiketleri dile bağlı (`interest.type.*`).
+- Onboarding crash: `useIsTabRootScreen` `NavigationRouteContext` (useRoute yok).
+- Profil kapak beyaz çizgi: pager + RefreshControl kaldırıldı.
+- Preview profile kaldırıldı.
+- Filtre Kaydet `forceAboveTabBar`.
+- Android logo JPEG-as-PNG → gerçek PNG (`app-logo.png`).
+- 1.0.8 kapananları da içerir: kayıt missing-field sheet, arkadaş footer kilit, dil→Profil iOS 26, RTL native ayna kapalı, `DeviceInsetsGate`.
 
 ## Firebase — kullanıcı işi
 
@@ -61,11 +62,11 @@ Kod hazır, kapalı. Config yok. Kullanıcı getirecek (git’e/sohbete yapışt
 - SSH: `Administrator@185.22.185.73` key `~/.ssh/id_ed25519`. **MySQL’i internete açma.**
 - MySQL80: `127.0.0.1:3307` DB `bluedate`. Tunnel + `/tmp/bd-prod.cnf` — sohbete koyma.
 - Mail: `info@meerk.com.tr` — SMTP `mail.kurumsaleposta.com:465`. E-posta OTP (SMS yok).
-- **Natro DNS (ticket #32429455, 10 Eki):** NS Natro değilse panel kayıt kabul etmez. NS Natro olduktan sonra: Hosting Yönetimi → Mail Hosting Hesapları → Yönet → alan adı → İşlemler → DNS Yönetimi. Registrar NS: Webim ticket (Gürkan, 7 Eki `ns1/ns2.natrohost.com`). Cloudflare NS’e geçilirse bu menü kullanılmaz; DNS + MX Cloudflare’da.
+- **Natro DNS (ticket #32429455, 10 Eki):** NS Natro değilse panel kayıt kabul etmez. CF NS canlı; DNS + MX Cloudflare’da.
 
 ## Duran (kullanıcı)
 
-- App Store / Play **Manage** (binary yüklü / AAB hazır).
+- App Store / Play **Manage**.
 - Cloudflare MX hâlâ boş. Token sohbete koyma. Script: `deploy/cloudflare/apply-api-proxy.sh`.
 - Firebase dosyaları.
 - Commit yalnız istenince.
