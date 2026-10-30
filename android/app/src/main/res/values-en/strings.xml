@@ -1,0 +1,6 @@
+<resources>
+    <string name="app_name">Meerk</string>
+    <string name="ble_presence_channel">Nearby visibility</string>
+    <string name="ble_presence_title">Meerk</string>
+    <string name="ble_presence_text">Visible to people nearby</string>
+</resources>

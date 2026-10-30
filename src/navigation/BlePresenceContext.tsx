@@ -8,6 +8,7 @@ import React, {
 import { AppState, AppStateStatus } from 'react-native';
 import { useLocale } from '../i18n';
 import { useBlePresence, PresenceState } from '../hooks/useBlePresence';
+import { BleAdvertiserService } from '../services/ble/BleAdvertiserService';
 import { useAuth } from './AuthContext';
 
 type BlePresenceContextValue = {
@@ -16,6 +17,7 @@ type BlePresenceContextValue = {
   stop: () => Promise<void>;
   refresh: () => Promise<void>;
   pollNearby: () => Promise<void>;
+  onEnterBackground: () => Promise<void>;
 };
 
 const BlePresenceContext = createContext<BlePresenceContextValue | undefined>(
@@ -23,8 +25,9 @@ const BlePresenceContext = createContext<BlePresenceContextValue | undefined>(
 );
 
 /**
- * Advertises + scans for the whole signed-in session while the app is
- * foregrounded. Nearby does not have to be open for others to find you.
+ * Advertises + scans while signed in. Nearby does not have to be open.
+ * App switcher / Home (process still alive) keeps the native advertiser
+ * running so others can still see you. Force-quit does not.
  */
 export function BlePresenceProvider({ children }: { children: React.ReactNode }) {
   const { userId, accessToken, isSignedIn } = useAuth();
@@ -54,12 +57,15 @@ export function BlePresenceProvider({ children }: { children: React.ReactNode })
     const apply = (state: AppStateStatus) => {
       // Alert / sheet / photo picker only go `inactive`. Tearing BLE
       // down there races native destroy vs start and kills the process.
+      // `background` is the app switcher / Home — keep advertising.
       if (state === 'active') {
+        void BleAdvertiserService.setBackgroundKeepAlive(false);
         void presenceRef.current.start().catch(() => undefined);
         return;
       }
       if (state === 'background') {
-        void presenceRef.current.stop().catch(() => undefined);
+        void BleAdvertiserService.setBackgroundKeepAlive(true);
+        void presenceRef.current.onEnterBackground().catch(() => undefined);
       }
     };
 
@@ -93,6 +99,7 @@ const idlePresence: BlePresenceContextValue = {
   stop: async () => undefined,
   refresh: async () => undefined,
   pollNearby: async () => undefined,
+  onEnterBackground: async () => undefined,
 };
 
 export function useBlePresenceContext(): BlePresenceContextValue {

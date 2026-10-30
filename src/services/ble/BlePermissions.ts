@@ -9,6 +9,11 @@ export async function requestBlePermissions(): Promise<boolean> {
 
   try {
     if (apiLevel >= 31) {
+      if (apiLevel >= 33) {
+        await PermissionsAndroid.request(
+          PermissionsAndroid.PERMISSIONS.POST_NOTIFICATIONS,
+        );
+      }
       const result = await PermissionsAndroid.requestMultiple([
         PermissionsAndroid.PERMISSIONS.BLUETOOTH_SCAN,
         PermissionsAndroid.PERMISSIONS.BLUETOOTH_CONNECT,

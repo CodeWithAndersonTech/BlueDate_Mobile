@@ -5,6 +5,7 @@ interface BleAdvertiserNative {
   startAdvertising(serviceUuid: string, token: string): Promise<boolean>;
   stopAdvertising(): Promise<boolean>;
   isSupported(): Promise<boolean>;
+  setBackgroundKeepAlive?(enabled: boolean): Promise<boolean>;
 }
 
 const Native: BleAdvertiserNative | undefined = NativeModules.BleAdvertiser;
@@ -44,6 +45,15 @@ export const BleAdvertiserService = {
       await Native.stopAdvertising();
     } catch (e) {
       console.warn('[BleAdvertiser] stop failed', e);
+    }
+  },
+
+  async setBackgroundKeepAlive(enabled: boolean): Promise<void> {
+    if (!Native?.setBackgroundKeepAlive) return;
+    try {
+      await Native.setBackgroundKeepAlive(enabled);
+    } catch (e) {
+      console.warn('[BleAdvertiser] keep-alive', e);
     }
   },
 };

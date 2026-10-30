@@ -1,3 +1,6 @@
 <resources>
     <string name="app_name">Meerk</string>
+    <string name="ble_presence_channel">Yakında görünürlük</string>
+    <string name="ble_presence_title">Meerk</string>
+    <string name="ble_presence_text">Yakındakilere görünürsün</string>
 </resources>

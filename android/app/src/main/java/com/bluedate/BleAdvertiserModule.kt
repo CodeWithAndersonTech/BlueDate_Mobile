@@ -32,6 +32,7 @@ class BleAdvertiserModule(reactContext: ReactApplicationContext) :
     private var advertiser: BluetoothLeAdvertiser? = null
     private var legacyCallback: AdvertiseCallback? = null
     private var setCallback: AdvertisingSetCallback? = null
+    private var advertising = false
 
     override fun getName(): String = "BleAdvertiser"
 
@@ -103,6 +104,7 @@ class BleAdvertiserModule(reactContext: ReactApplicationContext) :
 
         legacyCallback = object : AdvertiseCallback() {
             override fun onStartSuccess(settingsInEffect: AdvertiseSettings?) {
+                advertising = true
                 promise.resolve(true)
             }
 
@@ -144,6 +146,7 @@ class BleAdvertiserModule(reactContext: ReactApplicationContext) :
                 status: Int
             ) {
                 if (status == ADVERTISE_SUCCESS) {
+                    advertising = true
                     promise.resolve(true)
                 } else {
                     promise.reject("ADV_FAILED", "Advertising basarisiz: $status")
@@ -157,9 +160,24 @@ class BleAdvertiserModule(reactContext: ReactApplicationContext) :
     fun stopAdvertising(promise: Promise) {
         try {
             stopInternal()
+            BlePresenceService.stop(reactApplicationContext)
             promise.resolve(true)
         } catch (e: Exception) {
             promise.reject("ADV_STOP_ERROR", e.message, e)
+        }
+    }
+
+    @ReactMethod
+    fun setBackgroundKeepAlive(enabled: Boolean, promise: Promise) {
+        try {
+            if (enabled && advertising) {
+                BlePresenceService.start(reactApplicationContext)
+            } else {
+                BlePresenceService.stop(reactApplicationContext)
+            }
+            promise.resolve(true)
+        } catch (e: Exception) {
+            promise.reject("KEEP_ALIVE", e.message, e)
         }
     }
 
@@ -177,6 +195,7 @@ class BleAdvertiserModule(reactContext: ReactApplicationContext) :
         } finally {
             setCallback = null
             legacyCallback = null
+            advertising = false
         }
     }
 

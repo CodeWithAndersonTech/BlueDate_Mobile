@@ -81,10 +81,11 @@ export class BleScannerService {
     this.scanning = true;
 
     try {
-      // Unfiltered: iOS often omits custom UUIDs from the filter match
-      // when the advertiser is another iPhone. We accept only our tokens.
+      // Filter by the 16-bit service. iOS background ads only show up when
+      // the central scans for that UUID (overflow area). Tokens still gated
+      // in handleDevice.
       this.manager.startDeviceScan(
-        null,
+        [BLE_SERVICE_UUID],
         { allowDuplicates: true },
         (error, device) => {
           if (error) {

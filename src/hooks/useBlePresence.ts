@@ -213,6 +213,12 @@ export function useBlePresence(session: BleSession | null) {
     }
   }, [flushSightings, patch, pollNearby, refreshToken, scheduleFlush]);
 
+  const onEnterBackground = useCallback(async () => {
+    if (!startedRef.current) return;
+    // Fresh token so iOS can keep advertising while JS is frozen (TTL ~120s).
+    await refreshToken();
+  }, [refreshToken]);
+
   const stop = useCallback(async () => {
     timers.current.forEach(clearInterval);
     timers.current = [];
@@ -245,5 +251,5 @@ export function useBlePresence(session: BleSession | null) {
     };
   }, []);
 
-  return { state, start, stop, refresh, pollNearby };
+  return { state, start, stop, refresh, pollNearby, onEnterBackground };
 }
